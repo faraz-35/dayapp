@@ -2,8 +2,10 @@
 // DB work (rusqlite is sync) is dispatched to a blocking thread so the UI stays fluid.
 
 mod db;
+mod notes;
 
 use db::{Db, Item, Action};
+use notes::Note;
 use std::sync::Arc;
 use tauri::{Manager, State};
 
@@ -85,6 +87,29 @@ async fn count_completions(db: State<'_, DbState>, since: String) -> Result<i64,
     with_db(db, move |db| db.count_completions(&since)).await
 }
 
+// ---- Notes commands ------------------------------------------------------
+// Separate from items. Notes are content (not activity), so no journal logging.
+
+#[tauri::command]
+async fn list_notes(db: State<'_, DbState>) -> Result<Vec<Note>, String> {
+    with_db(db, move |db| db.list_notes()).await
+}
+
+#[tauri::command]
+async fn create_note(db: State<'_, DbState>) -> Result<Note, String> {
+    with_db(db, move |db| db.create_note()).await
+}
+
+#[tauri::command]
+async fn update_note(db: State<'_, DbState>, id: String, body: String) -> Result<(), String> {
+    with_db(db, move |db| db.update_note(&id, &body)).await
+}
+
+#[tauri::command]
+async fn delete_note(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    with_db(db, move |db| db.delete_note(&id)).await
+}
+
 // ---- Setup ----------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -95,6 +120,8 @@ pub fn run() {
             let db = Db::open(&db_path(app.handle()))?;
             // Today → Backlog sweep on every launch. Idempotent — cheap if already run today.
             let _ = db.run_sweep()?;
+            // Ensure at least one empty note exists — zero-inertia landing surface.
+            let _ = db.ensure_seed_note()?;
             app.manage(DbState(Arc::new(db)));
             Ok(())
         })
@@ -102,6 +129,7 @@ pub fn run() {
             list_items, create_item, edit_item, complete_item,
             move_item, delete_item, run_sweep,
             list_actions, count_completions,
+            list_notes, create_note, update_note, delete_note,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DayApp");

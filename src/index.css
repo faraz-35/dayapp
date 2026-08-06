@@ -336,3 +336,63 @@ button {
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+/* ---- Notes ------------------------------------------------------------ */
+/* Free-form multiline text. Sits above the item sections so there's minimum
+   inertia to write or paste. Deliberately its own visual block. */
+
+.notes {
+  padding: 8px 8px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.note {
+  position: relative;
+  margin: 4px 0;
+  padding: 8px 28px 8px 10px;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  transition: border-color 0.1s ease;
+}
+.note:focus-within { border-color: var(--accent); }
+
+.note-textarea {
+  width: 100%;
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;              /* height is driven by autosize() */
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;          /* no scrollbar; grows with content */
+  min-height: 28px;
+  user-select: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.note-textarea::placeholder { color: var(--text-faint); }
+
+.note-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--text-faint);
+  opacity: 0;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.08s ease, background 0.08s ease, color 0.08s ease;
+}
+.note:hover .note-delete { opacity: 1; }
+.note-delete:hover { background: var(--bg-hover); color: var(--danger); }
+

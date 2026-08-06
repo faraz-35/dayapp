@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { api, todayStr, type Action, type Item, type Section } from "./lib";
+import Notes from "./Notes";
 
 const SECTIONS: { id: Section; label: string; hint: string }[] = [
   { id: "today", label: "Today", hint: "today's intent — falls to backlog at midnight" },
@@ -240,6 +241,10 @@ export default function App() {
       </header>
 
       {view === "list" ? (
+        <>
+        {/* Notes live above the DnD area so typing/pasting isn't a drag surface.
+            Self-contained: owns its state, API, and persistence. */}
+        <Notes />
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
@@ -275,6 +280,7 @@ export default function App() {
             ) : null}
           </DragOverlay>
         </DndContext>
+        </>
       ) : (
         <JournalView />
       )}

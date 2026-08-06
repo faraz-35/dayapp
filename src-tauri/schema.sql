@@ -38,3 +38,16 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Notes: free-form multiline text (quotes, scratch, anything). Deliberately NOT
+-- logged in `actions` — notes are content, not activity. Independent of the
+-- items/actions lifecycle.
+CREATE TABLE IF NOT EXISTS notes (
+    id         TEXT PRIMARY KEY,                       -- ULID
+    body       TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_notes_order ON notes(sort_order);

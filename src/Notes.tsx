@@ -1,0 +1,142 @@
+// Notes — self-contained component for free-form multiline text.
+// Renders at the top of the main view for minimum inertia. Each note is an
+// auto-growing textarea that autosaves (debounced) and saves on blur.
+//
+// Deliberately isolated from the items/actions feature: own state, own API,
+// own handlers. The parent just mounts <Notes />.
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { notesApi, type Note } from "./notesApi";
+
+export default function Notes() {
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [showEmpty, setShowEmpty] = useState(false);
+
+  const refresh = useCallback(async () => {
+    const list = await notesApi.list();
+    setNotes(list);
+    // Show an empty input surface even when all notes have content, so there's
+    // always a ready place to write. Tracked locally (not persisted as a note
+    // until something is typed).
+    setShowEmpty(true);
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleCreate = async () => {
+    const note = await notesApi.create();
+    setNotes((s) => [...s, note]);
+  };
+
+  const handleUpdate = useCallback(async (id: string, body: string) => {
+    // Optimistic local update; debounce is in the textarea component.
+    setNotes((s) => s.map((n) => (n.id === id ? { ...n, body } : n)));
+    await notesApi.update(id, body);
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    setNotes((s) => s.filter((n) => n.id !== id));
+    await notesApi.delete(id);
+  };
+
+  return (
+    <section className="notes">
+      <div className="section-head">
+        <span className="section-name">Notes</span>
+        <button
+          className="icon-btn"
+          onClick={handleCreate}
+          title="New note"
+          aria-label="New note"
+          style={{ width: 20, height: 20 }}
+        >+</button>
+      </div>
+
+      {notes.length === 0 && !showEmpty && (
+        <div className="empty">No notes.</div>
+      )}
+
+      {notes.map((note) => (
+        <NoteInput
+          key={note.id}
+          note={note}
+          onUpdate={handleUpdate}
+          onDelete={() => handleDelete(note.id)}
+        />
+      ))}
+    </section>
+  );
+}
+
+// ---- Single note textarea ------------------------------------------------
+
+function NoteInput({
+  note, onUpdate, onDelete,
+}: {
+  note: Note;
+  onUpdate: (id: string, body: string) => void;
+  onDelete: () => void;
+}) {
+  const [val, setVal] = useState(note.body);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestBody = useRef(note.body);
+
+  // Keep local state in sync if the note changes externally.
+  useEffect(() => {
+    if (latestBody.current !== note.body) {
+      setVal(note.body);
+      latestBody.current = note.body;
+      autosize();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.body]);
+
+  // Grow the textarea to fit content (no internal scrollbar for short notes).
+  const autosize = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(el.scrollHeight, 28)}px`;
+  };
+
+  useEffect(() => { autosize(); }, []);
+
+  const scheduleSave = (body: string) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => onUpdate(note.id, body), 600);
+  };
+
+  return (
+    <div className="note">
+      <textarea
+        ref={ref}
+        className="note-textarea"
+        value={val}
+        onChange={(e) => {
+          setVal(e.target.value);
+          autosize();
+          scheduleSave(e.target.value);
+        }}
+        onBlur={() => {
+          if (saveTimer.current) {
+            clearTimeout(saveTimer.current);
+            saveTimer.current = null;
+          }
+          // Save immediately on blur.
+          onUpdate(note.id, val);
+        }}
+        placeholder="Write or paste anything…"
+        spellCheck={false}
+      />
+      {val.trim() && (
+        <button
+          className="note-delete"
+          onClick={onDelete}
+          title="Delete note"
+          aria-label="Delete note"
+        >×</button>
+      )}
+    </div>
+  );
+}
