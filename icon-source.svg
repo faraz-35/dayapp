@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1d24"/>
+      <stop offset="100%" stop-color="#0e0f11"/>
+    </linearGradient>
+    <radialGradient id="dotbg" cx="50%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#94a3ff"/>
+      <stop offset="55%" stop-color="#7b8cff"/>
+      <stop offset="100%" stop-color="#5468e8"/>
+    </radialGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="42" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="squircle">
+      <path d="M 512 0 C 774 0 880 30 945 95 C 1010 160 1024 266 1024 512 C 1024 758 1010 864 945 929 C 880 994 774 1024 512 1024 C 250 1024 144 994 79 929 C 14 864 0 758 0 512 C 0 266 14 160 79 95 C 144 30 250 0 512 0 Z"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+
+    <!-- Glow halo behind the dot -->
+    <circle cx="512" cy="512" r="300" fill="#7b8cff" filter="url(#glow)" opacity="0.5"/>
+
+    <!-- Hero dot: bold filled accent circle, centered -->
+    <circle cx="512" cy="512" r="270" fill="url(#dotbg)"/>
+
+    <!-- Bold checkmark — the completed/done state, the app's core gesture -->
+    <path d="M 380 522 L 478 620 L 660 412"
+          fill="none"
+          stroke="#0e0f11"
+          stroke-width="58"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+  </g>
+</svg>
