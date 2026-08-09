@@ -119,17 +119,18 @@ impl Db {
     }
 
     /// Clear expired time-limited hides. (Also done inline by run_sweep on the
-    /// day boundary; this is the standalone path called on launch.)
-    pub fn unhide_expired_notes(&self) -> anyhow::Result<()> {
+    /// day boundary; this is the standalone path called on launch.) Returns the
+    /// number of rows restored.
+    pub fn unhide_expired_notes(&self) -> anyhow::Result<usize> {
         let conn = self.0.lock().unwrap();
         let now = now_iso();
         let today = crate::db::today_iso();
-        conn.execute(
+        let n = conn.execute(
             "UPDATE notes SET hidden = 0, hidden_until = NULL, updated_at = ?1
              WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?2",
             params![now, today],
         )?;
-        Ok(())
+        Ok(n)
     }
 
     /// Ensure at least one note exists. Called on startup so the user always

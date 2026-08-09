@@ -58,13 +58,17 @@ Two independent feature areas, deliberately decoupled:
 ### Items (stateful lists + the journal)
 
 ```
-items   id, text, section, status, last_completed_date, sort_order, created_at, updated_at
+items   id, text, section, status, last_completed_date, sort_order, created_at, updated_at,
+        hidden, hidden_until
 actions id, item_id, item_text, action, from_section, to_section, from_status, to_status, timestamp
 meta    key, value           — currently holds last_sweep_date
 ```
 
 - `section` ∈ `today` | `daily` | `backlog`
 - `status` ∈ `active` | `done`
+- `hidden` ∈ `0` | `1` — soft-archive; `list_*` filters `hidden = 0`. `hidden_until` is NULL
+  (forever) or an ISO date cleared by the midnight sweep. Hide/unhide is **not** logged to
+  `actions` — it's housekeeping, not activity.
 - `actions.action` ∈ `created | completed | uncompleted | moved | edited | deleted | fell_to_backlog`
 - **`actions.item_text` is snapshotted at write time.** History must survive edits and
   deletions — if it referenced the live row, renaming a task would silently rewrite the
@@ -81,6 +85,38 @@ to `actions`. Do not add notes to the journal.
 
 ---
 
+## Logging
+
+The app logs every meaningful flow internally for debugging. Logs are the first place to
+look when something misbehaves — especially the self-update flow, which spans app exit and
+a detached helper.
+
+**Where logs go:**
+- **Backend (Rust):** `tauri-plugin-log` writes to a rotating file in the app log dir
+  (`~/Library/Logs/com.farazshah.dayapp/`) and to stdout (visible in the terminal when
+  running `tauri dev`). Use the `log` crate macros (`log::info!`, `log::warn!`, etc.).
+- **Frontend (TS):** `src/log.ts` exports a `log` object (`log.info`, `log.warn`, …) that
+  prefixes lines with `[dayapp]`. `debug` is gated on `import.meta.env.DEV`, so it's silent
+  in production builds.
+
+**What to log (the convention):**
+- **Lifecycle events at INFO:** app start/ready, DB open, migrations (`migrate: adding column …`),
+  the daily sweep (`sweep: N today item(s) fell to backlog`), the unhide sweep.
+- **Every external-flow step at INFO:** the `self_update` command logs each phase (starting
+  build → build succeeded → spawning swap helper → exiting app). This is the critical path
+  to debug update failures.
+- **Errors at ERROR:** failed spawns, failed builds, failed IPC. Always include the
+  underlying error in the message.
+- **Do NOT log routine CRUD.** Per-row create/complete/move is already captured in the
+  `actions` table — that's the journal. Logging it again is noise. Log only state transitions
+  the user can't otherwise see (sweeps, migrations, the update handoff).
+
+**Reading the update log:** the detached swap helper (`scripts/update.sh --swap-only`) writes
+to `~/Library/Logs/com.farazshah.dayapp/update.log`. That's separate from the Rust app log
+because the app has already exited by the time the helper runs.
+
+---
+
 ## File map
 
 ```
@@ -88,22 +124,28 @@ dayapp/
 ├── AGENTS.md                       ← this file
 ├── README.md                       ← run/build instructions (keep in sync)
 ├── icon-source.svg                 ← icon master; regenerate others via `npx tauri icon`
+├── scripts/
+│   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
 ├── src/
-│   ├── App.tsx                     ← UI: sections, DnD, keyboard nav, journal view, mounts <Notes/>
+│   ├── App.tsx                     ← UI: sections, DnD, keyboard nav, views, ⌘P palette, update overlay
 │   ├── Notes.tsx                   ← self-contained notes component (own state + persistence)
 │   ├── notesApi.ts                 ← notes typed API wrapper
 │   ├── lib.ts                      ← items typed API wrapper + types + todayStr()
+│   ├── log.ts                      ← prefixed console logger (webview side)
+│   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
+│   ├── CommandPalette.tsx          ← ⌘P modal: filter + keyboard nav
+│   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
 │   ├── main.tsx                    ← React entry
 │   └── index.css                   ← the dark theme + all component styles
 └── src-tauri/
     ├── src/
-    │   ├── lib.rs                  ← Tauri commands + setup (runs sweep + seed on launch)
-    │   ├── db.rs                   ← DB layer: items, actions, sweep, completions + Db struct
+    │   ├── lib.rs                  ← Tauri commands + setup (sweep, seed, logging plugin) + self_update
+    │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, completions + Db struct
     │   ├── notes.rs                ← notes DB logic (methods on Db, touches only notes table)
     │   └── main.rs                 ← binary entrypoint
-    ├── schema.sql                  ← items + actions + meta + notes
+    ├── schema.sql                  ← items + actions + meta + notes (all with hidden/hidden_until)
     ├── Cargo.toml
-    ├── tauri.conf.json             ← window 480x720, identifier com.farazshah.dayapp
+    ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target
     └── capabilities/default.json
 ```
 
@@ -237,13 +279,17 @@ npm run tauri dev      # hot-reloading dev window
 npm run tauri build    # → src-tauri/target/release/bundle/macos/DayApp.app
 ```
 
-The `.dmg` step fails without Apple notarization credentials — that's expected; the `.app`
-builds fine. To run the built app, clear Gatekeeper first:
+The build targets the `.app` bundle only (no `.dmg` — `tauri.conf.json` sets
+`"targets": ["app"]`), so there's no installer/drag-to-Applications screen. To install or
+update the app from source, use one of:
 
 ```bash
-xattr -dr com.apple.quarantine path/to/DayApp.app
-open path/to/DayApp.app
+npm run update         # build + swap /Applications/DayApp.app + relaunch (CLI)
+# or, from inside the running app: ⌘P → "Update DayApp"
 ```
+
+Both call `scripts/update.sh`. See the README "Update the installed app" section for the
+mechanics (detached swap helper, LaunchServices re-registration).
 
 To regenerate icons after editing `icon-source.svg`:
 
@@ -266,5 +312,8 @@ hit `feature 'edition2024' is required`, run `rustup update stable`.
 - **Match the surrounding style** — comment density, naming, the token system.
 - **Verify before reporting done.** `npx tsc --noEmit` for the frontend, `cargo build` for
   Rust, and `npm run tauri build` for end-to-end. "It compiles" is not "done."
+- **Log new flows.** Any new lifecycle event, multi-step flow, or error path gets a log line
+  (Rust `log::` / TS `log.`) per the Logging section above. Don't log routine CRUD — that's
+  what the `actions` table is for.
 - **Keep `README.md` in sync** with anything user-facing (new commands, new keybindings).
 - **Commit on the default branch only when the work is complete and verified.**

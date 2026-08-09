@@ -20,6 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { api, todayStr, type Action, type HideDuration, type Item, type Section } from "./lib";
 import { notesApi, type Note } from "./notesApi";
+import { log } from "./log";
 import Notes from "./Notes";
 import HideMenu from "./HideMenu";
 import CommandPalette, { type Command } from "./CommandPalette";
@@ -75,11 +76,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    refresh();
+    refresh().catch((e) => log.error("initial load failed", e));
     // Re-check the day boundary while the app stays open. If local time crosses
     // midnight, run the sweep so Today items fall to Backlog without a relaunch.
     const tick = setInterval(() => {
-      api.runSweep().then(refresh).catch(() => {});
+      api.runSweep().then(refresh).catch((e) => log.warn("sweep tick failed", e));
     }, 60_000);
     return () => clearInterval(tick);
   }, [refresh]);
@@ -92,6 +93,8 @@ export default function App() {
       const { listen } = await import("@tauri-apps/api/event");
       unlisten = await listen<{ phase: string; data: string }>("update-status", (e) => {
         const { phase, data } = e.payload;
+        if (phase === "restarting") log.info("update: build done, restarting");
+        else if (phase === "error") log.error("update: build failed", data);
         setUpdateStatus((prev) => {
           if (phase === "building") {
             const lines = prev && prev.phase === "building" ? [...prev.lines, data] : [data];
@@ -111,8 +114,10 @@ export default function App() {
   }, []);
 
   const startUpdate = useCallback(() => {
+    log.info("update: starting in-app self-update");
     setUpdateStatus({ phase: "building", lines: [], message: "" });
     api.selfUpdate().catch((err) => {
+      log.error("update: invoke failed", err);
       setUpdateStatus({ phase: "error", lines: [], message: String(err) });
     });
   }, []);

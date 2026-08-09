@@ -8,6 +8,7 @@ use db::{Db, Item, Action};
 use notes::Note;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_log::{Target, TargetKind};
 
 fn db_path(app: &tauri::AppHandle) -> std::path::PathBuf {
     // ~/Library/Application Support/DayApp/dayapp.db on macOS.
@@ -174,6 +175,8 @@ async fn self_update(app: AppHandle) -> Result<(), String> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let repo_root = std::path::Path::new(manifest_dir).parent().ok_or("no parent")?;
 
+    log::info!("self_update: starting build in {}", repo_root.display());
+
     let emit = |phase: &str, data: &str| {
         let _ = app.emit("update-status", serde_json::json!({ "phase": phase, "data": data }));
     };
@@ -187,7 +190,10 @@ async fn self_update(app: AppHandle) -> Result<(), String> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("failed to start build: {e}"))?;
+        .map_err(|e| {
+            log::error!("self_update: failed to start build: {e}");
+            format!("failed to start build: {e}")
+        })?;
 
     // Merge stderr into stdout by dup'ing the pipe: read stdout line-by-line
     // on this task, and drain stderr on a spawned thread piping into the same
@@ -211,14 +217,18 @@ async fn self_update(app: AppHandle) -> Result<(), String> {
     let status = child.wait().map_err(|e| format!("failed to wait for build: {e}"))?;
 
     if !status.success() {
-        emit("error", &format!("build failed (exit {})", status.code().unwrap_or(-1)));
+        let code = status.code().unwrap_or(-1);
+        log::error!("self_update: build failed (exit {code})");
+        emit("error", &format!("build failed (exit {code})"));
         return Ok(()); // app stays alive; user dismissed via the error overlay
     }
+    log::info!("self_update: build succeeded");
 
     // Success — hand off to the detached swap helper, then exit. The helper
     // waits for us to quit, replaces the bundle, and reopens the app.
     emit("restarting", "");
     let script = repo_root.join("scripts").join("update.sh");
+    log::info!("self_update: spawning swap helper (detached): {}", script.display());
     use std::os::unix::process::CommandExt;
     let mut helper = Command::new("/bin/bash");
     helper.arg(&script)
@@ -230,10 +240,14 @@ async fn self_update(app: AppHandle) -> Result<(), String> {
         // Detach into a new session so the helper survives the app exiting.
         // Without setsid, macOS may tear the child down with the parent.
         .process_group(0);
-    let _pid = helper.spawn().map_err(|e| format!("failed to start swap helper: {e}"))?;
+    let _pid = helper.spawn().map_err(|e| {
+        log::error!("self_update: failed to start swap helper: {e}");
+        format!("failed to start swap helper: {e}")
+    })?;
 
     // Give the helper a beat to get into its wait-for-quit loop, then exit. The
     // window disappears momentarily and reappears once the new app opens.
+    log::info!("self_update: exiting app to let swap helper proceed");
     std::thread::sleep(std::time::Duration::from_millis(1200));
     app.exit(0);
     Ok(())
@@ -245,18 +259,45 @@ async fn self_update(app: AppHandle) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            // Logs to a rotating file in the app log dir AND stdout. The webview
+            // can also emit via the JS `log` plugin, but we keep it backend-only
+            // to avoid log noise in the devtools console. See AGENTS.md for the
+            // logging convention.
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                    Target::new(TargetKind::Webview),
+                ])
+                // Our own logs at Info; silence the chatty windowing/runtime crates
+                // so the log file is signal, not tao's per-frame TRACE noise.
+                .level(log::LevelFilter::Info)
+                .level_for("tao", log::LevelFilter::Warn)
+                .level_for("wry", log::LevelFilter::Warn)
+                .level_for("tauri", log::LevelFilter::Info)
+                .level_for("rustls", log::LevelFilter::Warn)
+                .level_for("hyper", log::LevelFilter::Warn)
+                .build(),
+        )
         .setup(|app| {
-            let db = Db::open(&db_path(app.handle()))?;
+            log::info!("DayApp starting (version {})", app.package_info().version);
+            let db_path = db_path(app.handle());
+            log::debug!("db path: {}", db_path.display());
+            let db = Db::open(&db_path)?;
             // Today → Backlog sweep on every launch. Idempotent — cheap if already run today.
-            let _ = db.run_sweep()?;
+            let fell = db.run_sweep()?;
+            if fell > 0 { log::info!("sweep: {fell} today item(s) fell to backlog"); }
             // Restore any items/notes whose time-limited hide expired. Runs
             // independently of run_sweep's once-per-day guard so expired hides
             // clear even if the day-boundary sweep already ran.
-            let _ = db.unhide_expired_items();
-            let _ = db.unhide_expired_notes();
+            let ih = db.unhide_expired_items()?;
+            let nh = db.unhide_expired_notes()?;
+            if ih + nh > 0 { log::info!("unhide sweep: {ih} item(s), {nh} note(s) restored"); }
             // Ensure at least one empty note exists — zero-inertia landing surface.
             let _ = db.ensure_seed_note()?;
             app.manage(DbState(Arc::new(db)));
+            log::info!("DayApp ready");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

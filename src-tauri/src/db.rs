@@ -60,6 +60,8 @@ impl Db {
         // schema.sql only creates new columns on fresh tables. For DBs created
         // before the hide feature existed, ALTER TABLE adds the columns
         // idempotently — PRAGMA table_info tells us which are missing.
+        // ensure_column logs when it actually adds something, so we can see
+        // migrations in the log without noise on steady-state launches.
         ensure_column(conn, "items", "hidden", "INTEGER NOT NULL DEFAULT 0")?;
         ensure_column(conn, "items", "hidden_until", "TEXT")?;
         ensure_column(conn, "notes", "hidden", "INTEGER NOT NULL DEFAULT 0")?;
@@ -271,17 +273,17 @@ impl Db {
 
     /// Clear the hidden flag on any item whose time-limited hide has expired.
     /// Called by the launch + 60s-tick sweep, so hides auto-restore at midnight
-    /// without a cron job. Idempotent.
-    pub fn unhide_expired_items(&self) -> anyhow::Result<()> {
+    /// without a cron job. Idempotent. Returns the number of rows restored.
+    pub fn unhide_expired_items(&self) -> anyhow::Result<usize> {
         let conn = self.0.lock().unwrap();
         let now = now_iso();
         let today = today_iso();
-        conn.execute(
+        let n = conn.execute(
             "UPDATE items SET hidden = 0, hidden_until = NULL, updated_at = ?1
              WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?2",
             params![now, today],
         )?;
-        Ok(())
+        Ok(n)
     }
 
     // ---- Sweep -----------------------------------------------------------
@@ -451,6 +453,7 @@ fn ensure_column(
         .filter_map(|r| r.ok())
         .collect();
     if !present.iter().any(|c| c == column) {
+        log::info!("migrate: adding column {table}.{column} ({decl})");
         conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"), [])?;
     }
     Ok(())
