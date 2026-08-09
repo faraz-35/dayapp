@@ -1,0 +1,270 @@
+# DayApp — Agent Guide
+
+A native macOS "live today list" with auto-journaling. Not a journal app — a focused
+daily-action tool whose **timestamped action log** *is* the journal, for free. Also
+includes free-form **Notes** (the notepad-replacement surface).
+
+Before touching code, read this whole file. The UI/UX section is **load-bearing** — every
+decision in it exists for a reason and must be followed, not relitigated.
+
+---
+
+## Product philosophy
+
+The whole app is built on one insight: **three behaviours that sound like features are
+just queries over timestamped state.** No cron, no background jobs.
+
+| Behaviour | How it actually works |
+|---|---|
+| Daily items reset overnight | `last_completed_date == today` comparison on render. At midnight the comparison just stops being true. |
+| Today items fall to Backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date`). Idempotent. |
+| "What I did this week" | `SELECT FROM actions WHERE action='completed'`. Every mutation logs itself. |
+
+This is the spine of the product. New features should fit this model (state + a log that
+writes itself), not fight it.
+
+---
+
+## Architecture
+
+- **Shell:** Tauri 2 (Rust backend + native macOS window). No Next (it's a server
+  framework; wrong fit for Tauri).
+- **Frontend:** React 19 + Vite + TypeScript.
+- **Store:** SQLite via `rusqlite` with the `bundled` feature (one file, no system SQLite
+  dependency, trivially snapshotted).
+- **DnD:** `@dnd-kit` (core + sortable + utilities).
+- **DB location:** `~/Library/Application Support/com.farazshah.dayapp/dayapp.db`
+  (driven by the `identifier` in `tauri.conf.json`).
+
+### Stack rules (do not break these)
+
+- **Rust commands return `Result<T, String>`, not `anyhow::Result`.** `anyhow::Error` is
+  not `Serialize`, so Tauri can't pass it across IPC. The `with_db` helper in `lib.rs`
+  stringifies errors into `Result<_, String>` for you — always go through it.
+- **All SQLite work runs on a blocking thread.** rusqlite is synchronous. The `with_db`
+  helper wraps each command in `tauri::async_runtime::spawn_blocking`. Never call `Db`
+  methods directly from a command body.
+- **One `Mutex<Connection>`.** DayApp is single-user, single-process, low-concurrency.
+  No pool dependency needed.
+- **Every write to `items` is wrapped in a transaction that also appends to `actions`.**
+  The log must never drift from the live row.
+
+---
+
+## Data model
+
+Two independent feature areas, deliberately decoupled:
+
+### Items (stateful lists + the journal)
+
+```
+items   id, text, section, status, last_completed_date, sort_order, created_at, updated_at
+actions id, item_id, item_text, action, from_section, to_section, from_status, to_status, timestamp
+meta    key, value           — currently holds last_sweep_date
+```
+
+- `section` ∈ `today` | `daily` | `backlog`
+- `status` ∈ `active` | `done`
+- `actions.action` ∈ `created | completed | uncompleted | moved | edited | deleted | fell_to_backlog`
+- **`actions.item_text` is snapshotted at write time.** History must survive edits and
+  deletions — if it referenced the live row, renaming a task would silently rewrite the
+  past.
+
+### Notes (free-form content — NOT logged)
+
+```
+notes   id, body, sort_order, created_at, updated_at
+```
+
+Notes are **content**, not **activity**. They have their own table and are never written
+to `actions`. Do not add notes to the journal.
+
+---
+
+## File map
+
+```
+dayapp/
+├── AGENTS.md                       ← this file
+├── README.md                       ← run/build instructions (keep in sync)
+├── icon-source.svg                 ← icon master; regenerate others via `npx tauri icon`
+├── src/
+│   ├── App.tsx                     ← UI: sections, DnD, keyboard nav, journal view, mounts <Notes/>
+│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence)
+│   ├── notesApi.ts                 ← notes typed API wrapper
+│   ├── lib.ts                      ← items typed API wrapper + types + todayStr()
+│   ├── main.tsx                    ← React entry
+│   └── index.css                   ← the dark theme + all component styles
+└── src-tauri/
+    ├── src/
+    │   ├── lib.rs                  ← Tauri commands + setup (runs sweep + seed on launch)
+    │   ├── db.rs                   ← DB layer: items, actions, sweep, completions + Db struct
+    │   ├── notes.rs                ← notes DB logic (methods on Db, touches only notes table)
+    │   └── main.rs                 ← binary entrypoint
+    ├── schema.sql                  ← items + actions + meta + notes
+    ├── Cargo.toml
+    ├── tauri.conf.json             ← window 480x720, identifier com.farazshah.dayapp
+    └── capabilities/default.json
+```
+
+---
+
+## UI/UX guidance (read this carefully)
+
+This is the part the user cares about most. The aesthetic is **Linear-like, dark, minimal,
+keyboard-first.** Every choice below is intentional.
+
+### Design principles
+
+1. **Minimal chrome.** Few buttons, few clicks. The content is the UI. If a feature needs
+   a visible button to be discoverable, reconsider whether it needs a button or a keybinding.
+2. **Reveal actions on hover, not by default.** Icon-only buttons appear on row hover and
+   carry a `title` tooltip. Resting state shows only content. This keeps the list scannable.
+3. **Keyboard-first.** DnD exists, but `j`/`k`/`Enter`/`e`/`⌫` are the primary path. A
+   feature that's mouse-only is incomplete.
+4. **Dense rows, single-line text, ellipsis.** This is a list, not a document.
+5. **One accent colour.** `#7b8cff` means "active/selected/completed/done-today." Do not
+   introduce a second accent.
+6. **Dark, always dark.** No light theme, no `prefers-color-scheme` switching. `color-scheme: dark`.
+7. **Zero inertia for capture.** The lowest-friction surface (Notes) renders first, above
+   everything else. There is always a ready textarea.
+
+### Colour tokens (from `index.css` — use these, do not hardcode hex)
+
+| Token | Value | Use |
+|---|---|---|
+| `--bg` | `#0e0f11` | app background, window bg |
+| `--bg-elev` | `#16181c` | cards, inputs, elevated surfaces (notes, quickadd) |
+| `--bg-hover` | `#1c1f24` | row hover, button hover |
+| `--border` | `#23262d` | dividers, input borders |
+| `--text` | `#e6e7ea` | primary text |
+| `--text-dim` | `#8a8f98` | secondary text |
+| `--text-faint` | `#5c6068` | hints, empty states, disabled |
+| `--accent` | `#7b8cff` | the ONE accent: done/selected/focus/links |
+| `--done` | `#3a3f48` | greyed-out completed daily rows |
+| `--danger` | `#e5484d` | delete only |
+
+Typography: `-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif`.
+Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spacing.
+
+### Spacing & shape
+
+- Rows: `padding: 6px 8px`, `border-radius: 6px`.
+- Inner action buttons: 22×22, `border-radius: 4px`.
+- Header icon buttons: 24×24, `border-radius: 5px`.
+- Transitions: `0.08s–0.12s ease` for hover/focus. Snappy, not slow.
+- The header uses `-webkit-app-region: drag` so the title bar drags the window; buttons in
+  the header re-set `-webkit-app-region: no-drag`.
+
+### Interaction patterns (existing — match these for new features)
+
+**Item rows:**
+- Resting: only the checkbox circle + text.
+- Hover: row bg → `--bg-hover`; grip (⠿) + edit (✎) + delete (×) buttons fade in; checkbox
+  circle border → `--accent`.
+- Done (non-daily): status flips, row removed from active view, completion logged.
+- Done-today (daily): stays in place, greyed + line-through, checkbox filled accent. Resets
+  automatically when `last_completed_date != today`.
+- Edit: double-click text, or hover ✎, or select + `e`. Inline `<input>`, commits on
+  Enter/blur, cancels on Escape.
+
+**DnD:**
+- Drag via the grip handle, not the whole row (so text selection and typing aren't fights).
+- `PointerSensor` with a 4px activation distance — prevents accidental drags on click.
+- Empty sections are droppable zones (`useDroppable` per section) with a subtle highlight on hover.
+- Optimistic reorder in React; `api.moveItem` persists; backend re-indexes sort_order.
+
+**Keyboard:**
+
+| Key | Action |
+|---|---|
+| `j` / `↓` | select next |
+| `k` / `↑` | select previous |
+| `Enter` | complete selected |
+| `e` | edit selected |
+| `⌫` / `Delete` | delete selected |
+| double-click | edit |
+
+The keyboard handler **ignores events when an `<input>`/`<textarea>` is focused** so typing
+into Notes or edit fields isn't hijacked.
+
+**Notes:**
+- Auto-growing `<textarea>` (height driven by JS, `resize: none`, no internal scrollbar).
+- Debounced autosave (600ms) + save-on-blur.
+- Delete button appears on hover, only when there's content.
+- A seed empty note is created on launch so there's always a place to write.
+
+### What NOT to add (explicit non-goals)
+
+- No light theme. No `prefers-color-scheme`.
+- No second accent colour. No status colours per section.
+- No tags, projects, priorities, due dates in v1. Sections are the only organising axis.
+- No journal surface / blank-page daily note. The log IS the journal.
+- No agent writes (read-only bridge, planned Phase 3).
+- No sync/cloud. Local SQLite only.
+- Do not log Notes to `actions`.
+- Do not add multi-select / bulk edit. This is a focused single-action tool.
+
+---
+
+## How to add a feature (the Notes pattern as a template)
+
+DayApp features are built to be decoupled. When adding a feature area, mirror how Notes
+was done — that's the house style:
+
+1. **Own table in `schema.sql`** (added via `CREATE TABLE IF NOT EXISTS`, so existing DBs
+   migrate for free). Decide upfront: is this **state + logged activity** (→ add to
+   `actions`) or **content** (→ own table, not logged)?
+2. **Own Rust module** (`src/xxx.rs`) with all its SQL as methods on the shared `Db` struct,
+   touching only its own table. Keep it out of `db.rs`.
+3. **Wire commands in `lib.rs`** through the existing `with_db` helper (blocking thread +
+   `Result<_, String>`). Register them in `generate_handler!`.
+4. **Own frontend module** (`src/Xxx.tsx` + `src/xxxApi.ts`) — own state, own persistence,
+   own handlers. Do not entangle with `App.tsx`'s item state.
+5. **Mount it in `App.tsx`** with a single line. If it's a text surface, mount it **outside**
+   the `<DndContext>` so typing isn't a drag surface.
+6. **Styles in `index.css`** under a clearly named section header comment. Reuse tokens.
+
+---
+
+## Build & run
+
+```bash
+cd Programming/dayapp
+npm install            # first time only
+npm run tauri dev      # hot-reloading dev window
+
+npm run tauri build    # → src-tauri/target/release/bundle/macos/DayApp.app
+```
+
+The `.dmg` step fails without Apple notarization credentials — that's expected; the `.app`
+builds fine. To run the built app, clear Gatekeeper first:
+
+```bash
+xattr -dr com.apple.quarantine path/to/DayApp.app
+open path/to/DayApp.app
+```
+
+To regenerate icons after editing `icon-source.svg`:
+
+```bash
+# render SVG → 1024 PNG (needs sharp), then:
+npx tauri icon path/to/icon-1024.png
+npm run tauri build
+```
+
+### Toolchain note
+
+A recent Rust is required (edition 2024, pulled transitively by tauri-build deps). If you
+hit `feature 'edition2024' is required`, run `rustup update stable`.
+
+---
+
+## Working agreement
+
+- **Discover before doing.** Read the relevant module before editing it.
+- **Match the surrounding style** — comment density, naming, the token system.
+- **Verify before reporting done.** `npx tsc --noEmit` for the frontend, `cargo build` for
+  Rust, and `npm run tauri build` for end-to-end. "It compiles" is not "done."
+- **Keep `README.md` in sync** with anything user-facing (new commands, new keybindings).
+- **Commit on the default branch only when the work is complete and verified.**
