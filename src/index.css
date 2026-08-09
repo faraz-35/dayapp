@@ -350,7 +350,7 @@ button {
 .note {
   position: relative;
   margin: 4px 0;
-  padding: 8px 28px 8px 10px;
+  padding: 8px 34px 8px 10px;
   border-radius: 6px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
@@ -379,9 +379,6 @@ button {
 .note-textarea::placeholder { color: var(--text-faint); }
 
 .note-delete {
-  position: absolute;
-  top: 6px;
-  right: 6px;
   width: 18px;
   height: 18px;
   border-radius: 4px;
@@ -395,4 +392,261 @@ button {
 }
 .note:hover .note-delete { opacity: 1; }
 .note-delete:hover { background: var(--bg-hover); color: var(--danger); }
+
+/* Two stacked corner buttons (hide + delete) live in this column. */
+.note-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+/* The HideMenu trigger inherits .item-action's hover-reveal, but a note isn't an
+   .item, so reveal it on .note hover explicitly. */
+.note-actions .item-action { opacity: 0; }
+.note:hover .note-actions .item-action { opacity: 1; }
+
+/* ---- Hide menu (shared by item rows + notes) -------------------------- */
+
+.hide-menu-wrap {
+  position: relative;
+  display: flex;
+}
+
+.hide-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 168px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.hide-menu-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  text-align: left;
+  transition: background 0.08s ease;
+}
+.hide-menu-item:hover { background: var(--bg-hover); }
+.hide-menu-label { font-size: 12px; color: var(--text); }
+.hide-menu-sub { font-size: 10px; color: var(--text-faint); }
+
+/* ---- Hidden view ------------------------------------------------------ */
+
+.hidden-view {
+  padding: 8px 16px 32px;
+  height: calc(100vh - 53px);
+  overflow-y: auto;
+}
+
+.hidden-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.hidden-row:hover { background: var(--bg-hover); }
+/* Actions reveal on hover, mirroring item rows. */
+.hidden-row .item-action { opacity: 0; }
+.hidden-row:hover .item-action { opacity: 1; }
+
+.hidden-badge {
+  font-size: 10px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  width: 86px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hidden-badge.dated { color: var(--accent); }
+
+.hidden-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hidden-text.note-preview {
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.unhide-btn:hover { color: var(--accent); }
+
+/* ---- Command palette (⌘P) --------------------------------------------- */
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  -webkit-app-region: no-drag;
+}
+
+.palette {
+  width: 90%;
+  max-width: 420px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.palette-input {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 12px 14px;
+}
+.palette-input::placeholder { color: var(--text-faint); }
+
+.palette-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.palette-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--text-dim);
+  transition: background 0.06s ease, color 0.06s ease;
+}
+.palette-row.active { background: var(--bg-hover); color: var(--text); }
+.palette-label { font-size: 13px; }
+.palette-hint { font-size: 11px; color: var(--text-faint); }
+
+.palette-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* ---- Update overlay --------------------------------------------------- */
+
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+
+.overlay {
+  width: 90%;
+  max-width: 520px;
+  max-height: 70vh;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.overlay-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.overlay-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.overlay-elapsed {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.error-text { color: var(--danger); }
+
+.overlay-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 20px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.overlay-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 14px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.overlay-log-line { min-height: 1em; }
+
+.overlay-dismiss {
+  margin: 10px 14px 14px auto;
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text);
+  font-size: 12px;
+  border: 1px solid var(--border);
+}
+.overlay-dismiss:hover { border-color: var(--text-faint); }
+
+/* Spinning ring — pure CSS, used in overlay-head and overlay-message. */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+
 

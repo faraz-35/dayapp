@@ -7,7 +7,7 @@ mod notes;
 use db::{Db, Item, Action};
 use notes::Note;
 use std::sync::Arc;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 fn db_path(app: &tauri::AppHandle) -> std::path::PathBuf {
     // ~/Library/Application Support/DayApp/dayapp.db on macOS.
@@ -72,6 +72,27 @@ async fn delete_item(db: State<'_, DbState>, id: String) -> Result<(), String> {
     with_db(db, move |db| db.delete_item(&id)).await
 }
 
+// ---- Hide commands (items) -----------------------------------------------
+// Soft-archive: hidden=1 keeps the row but `list_items` excludes it. Not logged
+// to `actions` — hide is housekeeping, not meaningful activity.
+
+#[tauri::command]
+async fn hide_item(db: State<'_, DbState>, id: String, duration: String)
+    -> Result<(), String>
+{
+    with_db(db, move |db| db.hide_item(&id, &duration)).await
+}
+
+#[tauri::command]
+async fn unhide_item(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    with_db(db, move |db| db.unhide_item(&id)).await
+}
+
+#[tauri::command]
+async fn list_hidden_items(db: State<'_, DbState>) -> Result<Vec<Item>, String> {
+    with_db(db, move |db| db.list_hidden_items()).await
+}
+
 #[tauri::command]
 async fn run_sweep(db: State<'_, DbState>) -> Result<usize, String> {
     with_db(db, move |db| db.run_sweep()).await
@@ -110,6 +131,114 @@ async fn delete_note(db: State<'_, DbState>, id: String) -> Result<(), String> {
     with_db(db, move |db| db.delete_note(&id)).await
 }
 
+#[tauri::command]
+async fn hide_note(db: State<'_, DbState>, id: String, duration: String)
+    -> Result<(), String>
+{
+    with_db(db, move |db| db.hide_note(&id, &duration)).await
+}
+
+#[tauri::command]
+async fn unhide_note(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    with_db(db, move |db| db.unhide_note(&id)).await
+}
+
+#[tauri::command]
+async fn list_hidden_notes(db: State<'_, DbState>) -> Result<Vec<Note>, String> {
+    with_db(db, move |db| db.list_hidden_notes()).await
+}
+
+// ---- Self-update ---------------------------------------------------------
+//
+// In-app "rebuild and relaunch" — no Terminal, no dragging. Runs the build in
+// process so the UI can stream progress; on success, spawns the swap helper
+// detached and exits the app so the bundle can be replaced. The build path is
+// embedded at compile time (CARGO_MANIFEST_DIR), so this needs zero config.
+//
+// Emits "update-status" events to the window:
+//   { phase: "building", line }     — one per stdout/stderr line from the build
+//   { phase: "restarting" }          — build OK, about to exit
+//   { phase: "error", message }      — build failed; app stays running
+//
+// npm is invoked with stdbuf to line-buffer, and every line is emitted as it
+// arrives so the user sees live compiler output. `npm run tauri build` returns
+// non-zero on any failure, which we surface as an error event and stay alive.
+
+#[tauri::command]
+async fn self_update(app: AppHandle) -> Result<(), String> {
+    use std::process::{Command, Stdio};
+    use std::io::{BufRead, BufReader};
+
+    // CARGO_MANIFEST_DIR = .../src-tauri. The repo root (where package.json +
+    // scripts/ live) is its parent.
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let repo_root = std::path::Path::new(manifest_dir).parent().ok_or("no parent")?;
+
+    let emit = |phase: &str, data: &str| {
+        let _ = app.emit("update-status", serde_json::json!({ "phase": phase, "data": data }));
+    };
+
+    // Run `npm run tauri build`, streaming every line to the UI as it arrives.
+    // stdout+stderr are merged (piped together) so ordering matches a terminal.
+    let mut child = Command::new("npm")
+        .args(["run", "tauri", "build"])
+        .current_dir(repo_root)
+        .env("FORCE_COLOR", "0")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to start build: {e}"))?;
+
+    // Merge stderr into stdout by dup'ing the pipe: read stdout line-by-line
+    // on this task, and drain stderr on a spawned thread piping into the same
+    // channel via a shared emitter. Simpler: read both with a thread each.
+    let stdout = child.stdout.take().expect("stdout piped");
+    let stderr = child.stderr.take().expect("stderr piped");
+
+    let app2 = app.clone();
+    let stderr_handle = std::thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().flatten() {
+            let _ = app2.emit("update-status", serde_json::json!({ "phase": "building", "data": line }));
+        }
+    });
+
+    let stdout_reader = BufReader::new(stdout);
+    for line in stdout_reader.lines().flatten() {
+        emit("building", &line);
+    }
+    let _ = stderr_handle.join();
+    let status = child.wait().map_err(|e| format!("failed to wait for build: {e}"))?;
+
+    if !status.success() {
+        emit("error", &format!("build failed (exit {})", status.code().unwrap_or(-1)));
+        return Ok(()); // app stays alive; user dismissed via the error overlay
+    }
+
+    // Success — hand off to the detached swap helper, then exit. The helper
+    // waits for us to quit, replaces the bundle, and reopens the app.
+    emit("restarting", "");
+    let script = repo_root.join("scripts").join("update.sh");
+    use std::os::unix::process::CommandExt;
+    let mut helper = Command::new("/bin/bash");
+    helper.arg(&script)
+        .arg("--swap-only")
+        .current_dir(repo_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        // Detach into a new session so the helper survives the app exiting.
+        // Without setsid, macOS may tear the child down with the parent.
+        .process_group(0);
+    let _pid = helper.spawn().map_err(|e| format!("failed to start swap helper: {e}"))?;
+
+    // Give the helper a beat to get into its wait-for-quit loop, then exit. The
+    // window disappears momentarily and reappears once the new app opens.
+    std::thread::sleep(std::time::Duration::from_millis(1200));
+    app.exit(0);
+    Ok(())
+}
+
 // ---- Setup ----------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -120,6 +249,11 @@ pub fn run() {
             let db = Db::open(&db_path(app.handle()))?;
             // Today → Backlog sweep on every launch. Idempotent — cheap if already run today.
             let _ = db.run_sweep()?;
+            // Restore any items/notes whose time-limited hide expired. Runs
+            // independently of run_sweep's once-per-day guard so expired hides
+            // clear even if the day-boundary sweep already ran.
+            let _ = db.unhide_expired_items();
+            let _ = db.unhide_expired_notes();
             // Ensure at least one empty note exists — zero-inertia landing surface.
             let _ = db.ensure_seed_note()?;
             app.manage(DbState(Arc::new(db)));
@@ -128,8 +262,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_items, create_item, edit_item, complete_item,
             move_item, delete_item, run_sweep,
+            hide_item, unhide_item, list_hidden_items,
             list_actions, count_completions,
             list_notes, create_note, update_note, delete_note,
+            hide_note, unhide_note, list_hidden_notes,
+            self_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DayApp");

@@ -5,7 +5,7 @@
 // All methods hang off the shared `Db` struct but touch only the `notes` table,
 // keeping the two feature areas decoupled at the storage layer.
 
-use crate::db::{now_iso, Db};
+use crate::db::{now_iso, hidden_until_for, Db};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +17,8 @@ pub struct Note {
     pub sort_order: i64,
     pub created_at: String,
     pub updated_at: String,
+    pub hidden: bool,
+    pub hidden_until: Option<String>,
 }
 
 impl Db {
@@ -52,6 +54,8 @@ impl Db {
             sort_order,
             created_at: now.clone(),
             updated_at: now,
+            hidden: false,
+            hidden_until: None,
         })
     }
 
@@ -69,6 +73,62 @@ impl Db {
     pub fn delete_note(&self, id: &str) -> anyhow::Result<()> {
         let conn = self.0.lock().unwrap();
         conn.execute("DELETE FROM notes WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    // ---- Hide ------------------------------------------------------------
+    //
+    // Same soft-archive model as items: hidden=1 keeps the row so it can be
+    // unhidden, but `list_notes` filters it out. hidden_until NULL = forever,
+    // else an ISO date cleared by the day-boundary sweep. Not logged — notes
+    // are content, not activity (see notes.rs module header).
+
+    pub fn hide_note(&self, id: &str, duration: &str) -> anyhow::Result<()> {
+        let conn = self.0.lock().unwrap();
+        let now = now_iso();
+        let hidden_until = hidden_until_for(duration);
+        conn.execute(
+            "UPDATE notes SET hidden = 1, hidden_until = ?1, updated_at = ?2 WHERE id = ?3",
+            params![hidden_until, now, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn unhide_note(&self, id: &str) -> anyhow::Result<()> {
+        let conn = self.0.lock().unwrap();
+        let now = now_iso();
+        conn.execute(
+            "UPDATE notes SET hidden = 0, hidden_until = NULL, updated_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        Ok(())
+    }
+
+    /// All hidden notes, soonest-expiring first then forever-hides.
+    pub fn list_hidden_notes(&self) -> anyhow::Result<Vec<Note>> {
+        let conn = self.0.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, body, sort_order, created_at, updated_at, hidden, hidden_until
+             FROM notes WHERE hidden = 1
+             ORDER BY (hidden_until IS NULL), hidden_until ASC, sort_order, created_at",
+        )?;
+        let rows = stmt.query_map([], note_from_row)?;
+        let mut out = Vec::new();
+        for r in rows { out.push(r?); }
+        Ok(out)
+    }
+
+    /// Clear expired time-limited hides. (Also done inline by run_sweep on the
+    /// day boundary; this is the standalone path called on launch.)
+    pub fn unhide_expired_notes(&self) -> anyhow::Result<()> {
+        let conn = self.0.lock().unwrap();
+        let now = now_iso();
+        let today = crate::db::today_iso();
+        conn.execute(
+            "UPDATE notes SET hidden = 0, hidden_until = NULL, updated_at = ?1
+             WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?2",
+            params![now, today],
+        )?;
         Ok(())
     }
 
@@ -92,19 +152,24 @@ impl Db {
 
 fn list_notes_inner(conn: &Connection) -> anyhow::Result<Vec<Note>> {
     let mut stmt = conn.prepare(
-        "SELECT id, body, sort_order, created_at, updated_at
-         FROM notes ORDER BY sort_order, created_at",
+        "SELECT id, body, sort_order, created_at, updated_at, hidden, hidden_until
+         FROM notes WHERE hidden = 0 ORDER BY sort_order, created_at",
     )?;
-    let rows = stmt.query_map([], |r| {
-        Ok(Note {
-            id: r.get(0)?,
-            body: r.get(1)?,
-            sort_order: r.get(2)?,
-            created_at: r.get(3)?,
-            updated_at: r.get(4)?,
-        })
-    })?;
+    let rows = stmt.query_map([], note_from_row)?;
     let mut out = Vec::new();
     for r in rows { out.push(r?); }
     Ok(out)
+}
+
+// Build a Note from a 7-column SELECT row (id..hidden_until).
+fn note_from_row(r: &rusqlite::Row) -> rusqlite::Result<Note> {
+    Ok(Note {
+        id: r.get(0)?,
+        body: r.get(1)?,
+        sort_order: r.get(2)?,
+        created_at: r.get(3)?,
+        updated_at: r.get(4)?,
+        hidden: r.get::<_, i64>(5)? != 0,
+        hidden_until: r.get(6)?,
+    })
 }

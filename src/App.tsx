@@ -18,8 +18,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { api, todayStr, type Action, type Item, type Section } from "./lib";
+import { api, todayStr, type Action, type HideDuration, type Item, type Section } from "./lib";
+import { notesApi, type Note } from "./notesApi";
 import Notes from "./Notes";
+import HideMenu from "./HideMenu";
+import CommandPalette, { type Command } from "./CommandPalette";
+import UpdateOverlay from "./UpdateOverlay";
 
 const SECTIONS: { id: Section; label: string; hint: string }[] = [
   { id: "today", label: "Today", hint: "today's intent — falls to backlog at midnight" },
@@ -27,7 +31,16 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
   { id: "backlog", label: "Backlog", hint: "everything else; drag up to commit" },
 ];
 
-type View = "list" | "journal";
+type View = "list" | "journal" | "hidden";
+
+// Self-update status, accumulated from "update-status" events emitted by the
+// backend's self_update command. `lines` is the streamed build log; `message`
+// is populated only on error.
+export type UpdateStatus = {
+  phase: "building" | "restarting" | "error";
+  lines: string[];
+  message: string;
+};
 
 export default function App() {
   const [items, setItems] = useState<Record<Section, Item[]>>({
@@ -40,6 +53,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [view, setView] = useState<View>("list");
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -68,6 +83,66 @@ export default function App() {
     }, 60_000);
     return () => clearInterval(tick);
   }, [refresh]);
+
+  // ---- Self-update: accumulate "update-status" events from the backend ----
+  // Each building line appends to the log; restarting/error flip the phase.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      unlisten = await listen<{ phase: string; data: string }>("update-status", (e) => {
+        const { phase, data } = e.payload;
+        setUpdateStatus((prev) => {
+          if (phase === "building") {
+            const lines = prev && prev.phase === "building" ? [...prev.lines, data] : [data];
+            return { phase: "building", lines, message: "" };
+          }
+          if (phase === "restarting") {
+            return { phase: "restarting", lines: prev?.lines ?? [], message: "" };
+          }
+          if (phase === "error") {
+            return { phase: "error", lines: prev?.lines ?? [], message: data };
+          }
+          return prev;
+        });
+      });
+    })();
+    return () => { unlisten?.(); };
+  }, []);
+
+  const startUpdate = useCallback(() => {
+    setUpdateStatus({ phase: "building", lines: [], message: "" });
+    api.selfUpdate().catch((err) => {
+      setUpdateStatus({ phase: "error", lines: [], message: String(err) });
+    });
+  }, []);
+
+  // ---- Command palette registry -----------------------------------------
+  // The set of commands shown in the ⌘P palette. Navigation + the update
+  // command for now; trivially extensible.
+  const commands: Command[] = useMemo(() => [
+    { id: "view-today", label: "Go to Today", run: () => setView("list") },
+    { id: "view-journal", label: "View Journal", run: () => setView("journal") },
+    { id: "view-hidden", label: "View Hidden", run: () => setView("hidden") },
+    {
+      id: "update",
+      label: "Update DayApp",
+      hint: "rebuild from source",
+      run: startUpdate,
+    },
+  ], [startUpdate]);
+
+  // ⌘P / Ctrl+P toggles the palette from anywhere (unless typing in a field).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "p") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   // ---- Mutations --------------------------------------------------------
 
@@ -112,6 +187,13 @@ export default function App() {
       };
     });
     await api.editItem(id, t);
+  };
+
+  // Soft-archive a task. Optimistically removed from its section; time-limited
+  // hides auto-restore via the day-boundary sweep, so no timer needed here.
+  const handleHide = async (id: string, section: Section, duration: HideDuration) => {
+    setItems((s) => ({ ...s, [section]: s[section].filter((i) => i.id !== id) }));
+    await api.hideItem(id, duration);
   };
 
   // ---- DnD --------------------------------------------------------------
@@ -221,7 +303,9 @@ export default function App() {
   return (
     <div>
       <header className="header">
-        <span className="title">{view === "list" ? "Today" : "Journal"}</span>
+        <span className="title">
+          {view === "list" ? "Today" : view === "journal" ? "Journal" : "Hidden"}
+        </span>
         <div className="header-right">
           {view === "list" && (
             <span className="counter" title="Completions today — balls in the box">
@@ -229,6 +313,14 @@ export default function App() {
               {doneCount} today
             </span>
           )}
+          <button
+            className={`icon-btn ${view === "hidden" ? "active" : ""}`}
+            onClick={() => setView(view === "hidden" ? "list" : "hidden")}
+            title={view === "hidden" ? "Back to list" : "View hidden"}
+            aria-label="Toggle hidden"
+          >
+            {view === "hidden" ? "✕" : "◐"}
+          </button>
           <button
             className={`icon-btn ${view === "journal" ? "active" : ""}`}
             onClick={() => setView(view === "journal" ? "list" : "journal")}
@@ -267,6 +359,7 @@ export default function App() {
                 onCommitEdit={handleCommitEdit}
                 onStartEdit={setEditingId}
                 onQuickAdd={handleCreate}
+                onHide={handleHide}
               />
             ))}
           </main>
@@ -281,9 +374,21 @@ export default function App() {
           </DragOverlay>
         </DndContext>
         </>
-      ) : (
+      ) : view === "journal" ? (
         <JournalView />
+      ) : (
+        <HiddenView />
       )}
+
+      <CommandPalette
+        open={paletteOpen}
+        commands={commands}
+        onClose={() => setPaletteOpen(false)}
+      />
+      <UpdateOverlay
+        status={updateStatus}
+        onDismiss={() => setUpdateStatus(null)}
+      />
     </div>
   );
 }
@@ -292,7 +397,7 @@ export default function App() {
 
 function SectionView({
   section, label, hint, items, selectedId, editingId,
-  onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd,
+  onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide,
 }: {
   section: Section;
   label: string;
@@ -306,6 +411,7 @@ function SectionView({
   onCommitEdit: (id: string, text: string) => void;
   onStartEdit: (id: string) => void;
   onQuickAdd: (section: Section, text: string) => void;
+  onHide: (id: string, section: Section, duration: HideDuration) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -337,6 +443,7 @@ function SectionView({
             onDelete={() => onDelete(item.id, section)}
             onCommitEdit={(text) => onCommitEdit(item.id, text)}
             onStartEdit={() => onStartEdit(item.id)}
+            onHide={(duration) => onHide(item.id, section, duration)}
           />
         ))}
       </SortableContext>
@@ -372,7 +479,7 @@ function SectionView({
 
 function ItemRow({
   item, selected, editing,
-  onSelect, onComplete, onDelete, onCommitEdit, onStartEdit,
+  onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide,
 }: {
   item: Item;
   selected: boolean;
@@ -382,6 +489,7 @@ function ItemRow({
   onDelete: () => void;
   onCommitEdit: (text: string) => void;
   onStartEdit: () => void;
+  onHide: (duration: HideDuration) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id });
@@ -427,6 +535,7 @@ function ItemRow({
             title="Edit"
             aria-label="Edit"
           >✎</button>
+          <HideMenu onHide={onHide} />
           <button
             className="item-action danger"
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
@@ -538,6 +647,118 @@ function JournalView() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ---- Hidden view -------------------------------------------------------
+// Soft-archive: items and notes hidden via the ◐ menu collect here. Each row
+// can be unhidden (↺) or deleted. Time-limited hides auto-leave this view when
+// the day-boundary sweep clears their expiry, so nothing here needs a timer.
+
+const hideExpiryLabel = (until: string | null): string => {
+  if (!until) return "forever";
+  // until is ISO YYYY-MM-DD; show a friendly relative-ish label.
+  return `until ${until}`;
+};
+
+function HiddenView() {
+  const [items, setItems] = useState<Item[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+
+  const refresh = useCallback(async () => {
+    const [hiddenItems, hiddenNotes] = await Promise.all([
+      api.listHiddenItems(),
+      notesApi.listHidden(),
+    ]);
+    setItems(hiddenItems);
+    setNotes(hiddenNotes);
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleUnhideItem = async (id: string) => {
+    setItems((s) => s.filter((i) => i.id !== id));
+    await api.unhideItem(id);
+  };
+  const handleDeleteItem = async (id: string) => {
+    setItems((s) => s.filter((i) => i.id !== id));
+    await api.deleteItem(id);
+  };
+  const handleUnhideNote = async (id: string) => {
+    setNotes((s) => s.filter((n) => n.id !== id));
+    await notesApi.unhide(id);
+  };
+  const handleDeleteNote = async (id: string) => {
+    setNotes((s) => s.filter((n) => n.id !== id));
+    await notesApi.delete(id);
+  };
+
+  const empty = items.length === 0 && notes.length === 0;
+
+  return (
+    <div className="hidden-view">
+      {empty && <div className="empty">Nothing hidden.</div>}
+
+      {items.length > 0 && (
+        <>
+          <div className="section-head">
+            <span className="section-name">Tasks</span>
+            <span className="section-count">{items.length}</span>
+          </div>
+          {items.map((item) => (
+            <div key={item.id} className="hidden-row">
+              <span className={`hidden-badge ${item.hiddenUntil ? "dated" : ""}`}>
+                {hideExpiryLabel(item.hiddenUntil)}
+              </span>
+              <span className="hidden-text">{item.text}</span>
+              <button
+                className="item-action unhide-btn"
+                onClick={() => handleUnhideItem(item.id)}
+                title="Unhide"
+                aria-label="Unhide"
+              >↺</button>
+              <button
+                className="item-action danger"
+                onClick={() => handleDeleteItem(item.id)}
+                title="Delete"
+                aria-label="Delete"
+              >×</button>
+            </div>
+          ))}
+        </>
+      )}
+
+      {notes.length > 0 && (
+        <>
+          <div className="section-head">
+            <span className="section-name">Notes</span>
+            <span className="section-count">{notes.length}</span>
+          </div>
+          {notes.map((note) => (
+            <div key={note.id} className="hidden-row">
+              <span className={`hidden-badge ${note.hiddenUntil ? "dated" : ""}`}>
+                {hideExpiryLabel(note.hiddenUntil)}
+              </span>
+              <span className="hidden-text note-preview">
+                {note.body.trim() || "Empty note"}
+              </span>
+              <button
+                className="item-action unhide-btn"
+                onClick={() => handleUnhideNote(note.id)}
+                title="Unhide"
+                aria-label="Unhide"
+              >↺</button>
+              <button
+                className="item-action danger"
+                onClick={() => handleDeleteNote(note.id)}
+                title="Delete"
+                aria-label="Delete"
+              >×</button>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }

@@ -19,6 +19,8 @@ pub struct Item {
     pub sort_order: i64,
     pub created_at: String,
     pub updated_at: String,
+    pub hidden: bool,             // soft-archive; hidden=1 keeps row out of active lists
+    pub hidden_until: Option<String>,  // ISO YYYY-MM-DD when a time-limited hide expires; NULL = forever
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,37 +57,34 @@ impl Db {
     fn migrate(conn: &Connection) -> anyhow::Result<()> {
         let schema = include_str!("../schema.sql");
         conn.execute_batch(schema)?;
+        // schema.sql only creates new columns on fresh tables. For DBs created
+        // before the hide feature existed, ALTER TABLE adds the columns
+        // idempotently — PRAGMA table_info tells us which are missing.
+        ensure_column(conn, "items", "hidden", "INTEGER NOT NULL DEFAULT 0")?;
+        ensure_column(conn, "items", "hidden_until", "TEXT")?;
+        ensure_column(conn, "notes", "hidden", "INTEGER NOT NULL DEFAULT 0")?;
+        ensure_column(conn, "notes", "hidden_until", "TEXT")?;
         Ok(())
     }
 
     // ---- Reads -----------------------------------------------------------
 
     /// All items in a section, ordered by sort_order. Optionally include done items.
+    /// Hidden items are always excluded here — see `list_hidden_items` for the archive view.
     pub fn list(&self, section: &str, include_done: bool) -> anyhow::Result<Vec<Item>> {
         let conn = self.0.lock().unwrap();
         let mut stmt = if include_done {
             conn.prepare(
-                "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at
-                 FROM items WHERE section = ?1 ORDER BY sort_order, created_at"
+                "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until
+                 FROM items WHERE section = ?1 AND hidden = 0 ORDER BY sort_order, created_at"
             )?
         } else {
             conn.prepare(
-                "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at
-                 FROM items WHERE section = ?1 AND status = 'active' ORDER BY sort_order, created_at"
+                "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until
+                 FROM items WHERE section = ?1 AND status = 'active' AND hidden = 0 ORDER BY sort_order, created_at"
             )?
         };
-        let rows = stmt.query_map(params![section], |r| {
-            Ok(Item {
-                id: r.get(0)?,
-                text: r.get(1)?,
-                section: r.get(2)?,
-                status: r.get(3)?,
-                last_completed_date: r.get(4)?,
-                sort_order: r.get(5)?,
-                created_at: r.get(6)?,
-                updated_at: r.get(7)?,
-            })
-        })?;
+        let rows = stmt.query_map(params![section], item_from_row)?;
         let mut out = Vec::new();
         for row in rows { out.push(row?); }
         Ok(out)
@@ -120,6 +119,7 @@ impl Db {
             id, text: text.to_string(), section: section.to_string(),
             status: "active".into(), last_completed_date: None,
             sort_order, created_at: now.clone(), updated_at: now,
+            hidden: false, hidden_until: None,
         })
     }
 
@@ -223,6 +223,67 @@ impl Db {
         Ok(tx.commit()?)
     }
 
+    // ---- Hide -------------------------------------------------------------
+    //
+    // Soft-archive: the row stays in `items` so it can be unhidden, but
+    // `list()` filters hidden=0. `hidden_until` is NULL for "forever", else an
+    // ISO date at which `unhide_expired_items` (run by the midnight sweep) clears
+    // it. Deliberately not logged to `actions` — hide is housekeeping, not the
+    // meaningful activity the journal records.
+
+    /// Hide an item. `duration` is one of: forever | day | week | month.
+    pub fn hide_item(&self, id: &str, duration: &str) -> anyhow::Result<()> {
+        let conn = self.0.lock().unwrap();
+        let now = now_iso();
+        let hidden_until = hidden_until_for(duration);
+        conn.execute(
+            "UPDATE items SET hidden = 1, hidden_until = ?1, updated_at = ?2 WHERE id = ?3",
+            params![hidden_until, now, id],
+        )?;
+        Ok(())
+    }
+
+    /// Unhide an item — clears both the flag and the expiry.
+    pub fn unhide_item(&self, id: &str) -> anyhow::Result<()> {
+        let conn = self.0.lock().unwrap();
+        let now = now_iso();
+        conn.execute(
+            "UPDATE items SET hidden = 0, hidden_until = NULL, updated_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        Ok(())
+    }
+
+    /// All hidden items, ordered so soonest-expiring dated hides come first,
+    /// then forever-hides. Powers the Hidden view.
+    pub fn list_hidden_items(&self) -> anyhow::Result<Vec<Item>> {
+        let conn = self.0.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until
+             FROM items WHERE hidden = 1
+             ORDER BY (hidden_until IS NULL), hidden_until ASC, sort_order, created_at"
+        )?;
+        let rows = stmt.query_map([], item_from_row)?;
+        let mut out = Vec::new();
+        for row in rows { out.push(row?); }
+        Ok(out)
+    }
+
+    /// Clear the hidden flag on any item whose time-limited hide has expired.
+    /// Called by the launch + 60s-tick sweep, so hides auto-restore at midnight
+    /// without a cron job. Idempotent.
+    pub fn unhide_expired_items(&self) -> anyhow::Result<()> {
+        let conn = self.0.lock().unwrap();
+        let now = now_iso();
+        let today = today_iso();
+        conn.execute(
+            "UPDATE items SET hidden = 0, hidden_until = NULL, updated_at = ?1
+             WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?2",
+            params![now, today],
+        )?;
+        Ok(())
+    }
+
     // ---- Sweep -----------------------------------------------------------
 
     /// The core "today resets" behaviour. Called on app startup.
@@ -267,6 +328,18 @@ impl Db {
             "INSERT INTO meta(key,value) VALUES('last_sweep_date',?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![today])?;
+
+        // While we're already on the day boundary, clear any expired hides
+        // (hidden_until <= today) for both items and notes — time-limited hides
+        // auto-restore here, no separate job.
+        tx.execute(
+            "UPDATE items SET hidden = 0, hidden_until = NULL, updated_at = ?1
+             WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?2",
+            params![now, today])?;
+        tx.execute(
+            "UPDATE notes SET hidden = 0, hidden_until = NULL, updated_at = ?1
+             WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?2",
+            params![now, today])?;
 
         tx.commit()?;
         Ok(to_fall.len())
@@ -328,4 +401,57 @@ pub fn now_iso() -> String {
 pub fn today_iso() -> String {
     use chrono::Local;
     Local::now().format("%Y-%m-%d").to_string()
+}
+
+// Map a hide duration to its expiry date (ISO YYYY-MM-DD), or None for forever.
+// day/week/month land on the start of a future local date — they auto-restore
+// at the day-boundary sweep, consistent with the rest of DayApp's reset model.
+pub fn hidden_until_for(duration: &str) -> Option<String> {
+    use chrono::{Duration, Local, Months};
+    let today = Local::now().date_naive();
+    let date = match duration {
+        "day" => Some(today + Duration::days(1)),
+        "week" => Some(today + Duration::days(7)),
+        "month" => Some(today.checked_add_months(Months::new(1))?),
+        _ => None, // "forever" (or anything unknown) → never auto-restore
+    };
+    // checked_add_months can fail at the edge of the representable range; fall
+    // back to a 30-day offset so a bad input never silently hides forever.
+    let date = match (duration, date) {
+        ("month", None) => today + Duration::days(30),
+        (_, d) => d?,
+    };
+    Some(date.format("%Y-%m-%d").to_string())
+}
+
+// Build an Item from a 10-column SELECT row (id..hidden_until).
+fn item_from_row(r: &rusqlite::Row) -> rusqlite::Result<Item> {
+    Ok(Item {
+        id: r.get(0)?,
+        text: r.get(1)?,
+        section: r.get(2)?,
+        status: r.get(3)?,
+        last_completed_date: r.get(4)?,
+        sort_order: r.get(5)?,
+        created_at: r.get(6)?,
+        updated_at: r.get(7)?,
+        hidden: r.get::<_, i64>(8)? != 0,
+        hidden_until: r.get(9)?,
+    })
+}
+
+// Add a column only if it isn't already on the table. Lets schema.sql stay
+// declarative for fresh DBs while still upgrading pre-existing ones.
+fn ensure_column(
+    conn: &Connection, table: &str, column: &str, decl: &str,
+) -> anyhow::Result<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let present: Vec<String> = stmt
+        .query_map([], |r| r.get::<_, String>(1))?
+        .filter_map(|r| r.ok())
+        .collect();
+    if !present.iter().any(|c| c == column) {
+        conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"), [])?;
+    }
+    Ok(())
 }

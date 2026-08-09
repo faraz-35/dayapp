@@ -11,11 +11,21 @@ CREATE TABLE IF NOT EXISTS items (
     last_completed_date TEXT,                                    -- ISO YYYY-MM-DD; only daily uses it
     sort_order          INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL,
-    updated_at          TEXT NOT NULL
+    updated_at          TEXT NOT NULL,
+    -- Soft-archive: hidden=1 keeps the row but hides it from active lists.
+    -- hidden_until is NULL when hidden forever, else ISO YYYY-MM-DD at which
+    -- the midnight sweep clears hidden back to 0 (time-limited hide auto-restores).
+    hidden              INTEGER NOT NULL DEFAULT 0,
+    hidden_until        TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_items_section ON items(section, sort_order);
 CREATE INDEX IF NOT EXISTS idx_items_status  ON items(status);
+-- `hidden` is deliberately NOT indexed: it's a low-cardinality boolean
+-- (almost all rows are 0), so SQLite would never pick such an index, and
+-- creating it here would fail on databases that predate the column (the
+-- ensure_column migration runs after this batch). The WHERE hidden = 0
+-- filter is cheap on a personal-scale table.
 
 -- Append-only. item_text is snapshotted at write time so history survives edits/deletes.
 CREATE TABLE IF NOT EXISTS actions (
@@ -43,11 +53,14 @@ CREATE TABLE IF NOT EXISTS meta (
 -- logged in `actions` — notes are content, not activity. Independent of the
 -- items/actions lifecycle.
 CREATE TABLE IF NOT EXISTS notes (
-    id         TEXT PRIMARY KEY,                       -- ULID
-    body       TEXT NOT NULL DEFAULT '',
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    id           TEXT PRIMARY KEY,                       -- ULID
+    body         TEXT NOT NULL DEFAULT '',
+    sort_order   INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL,
+    hidden       INTEGER NOT NULL DEFAULT 0,
+    hidden_until TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_notes_order ON notes(sort_order);
+-- `hidden` intentionally unindexed on notes too; see comment on items table.

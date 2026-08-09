@@ -7,6 +7,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { notesApi, type Note } from "./notesApi";
+import { type HideDuration } from "./lib";
+import HideMenu from "./HideMenu";
 
 export default function Notes() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -39,6 +41,13 @@ export default function Notes() {
     await notesApi.delete(id);
   };
 
+  // Soft-archive a note. Optimistically removed; reappears via the Hidden view,
+  // and time-limited hides auto-restore at the day boundary.
+  const handleHide = async (id: string, duration: HideDuration) => {
+    setNotes((s) => s.filter((n) => n.id !== id));
+    await notesApi.hide(id, duration);
+  };
+
   return (
     <section className="notes">
       <div className="section-head">
@@ -62,6 +71,7 @@ export default function Notes() {
           note={note}
           onUpdate={handleUpdate}
           onDelete={() => handleDelete(note.id)}
+          onHide={(duration) => handleHide(note.id, duration)}
         />
       ))}
     </section>
@@ -71,11 +81,12 @@ export default function Notes() {
 // ---- Single note textarea ------------------------------------------------
 
 function NoteInput({
-  note, onUpdate, onDelete,
+  note, onUpdate, onDelete, onHide,
 }: {
   note: Note;
   onUpdate: (id: string, body: string) => void;
   onDelete: () => void;
+  onHide: (duration: HideDuration) => void;
 }) {
   const [val, setVal] = useState(note.body);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -129,14 +140,17 @@ function NoteInput({
         placeholder="Write or paste anything…"
         spellCheck={false}
       />
-      {val.trim() && (
-        <button
-          className="note-delete"
-          onClick={onDelete}
-          title="Delete note"
-          aria-label="Delete note"
-        >×</button>
-      )}
+      <div className="note-actions">
+        <HideMenu onHide={onHide} />
+        {val.trim() && (
+          <button
+            className="note-delete"
+            onClick={onDelete}
+            title="Delete note"
+            aria-label="Delete note"
+          >×</button>
+        )}
+      </div>
     </div>
   );
 }
