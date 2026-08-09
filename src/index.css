@@ -331,6 +331,15 @@ button {
 }
 .pill:hover { border-color: var(--text-faint); color: var(--text); }
 .pill.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+/* The date jump is a native date input styled to sit with the pills.
+   color-scheme: dark keeps the native picker chrome on-theme. */
+.date-jump {
+  font: inherit;
+  padding: 2px 6px;
+  width: 116px;
+  color-scheme: dark;
+}
+.date-jump.active { color: var(--bg); }
 
 /* Scrollbars */
 ::-webkit-scrollbar { width: 8px; }
@@ -350,7 +359,7 @@ button {
 .note {
   position: relative;
   margin: 4px 0;
-  padding: 8px 34px 8px 10px;
+  padding: 8px 48px 8px 10px;
   border-radius: 6px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
@@ -393,15 +402,15 @@ button {
 .note:hover .note-delete { opacity: 1; }
 .note-delete:hover { background: var(--bg-hover); color: var(--danger); }
 
-/* Two stacked corner buttons (hide + delete) live in this column. */
+/* Two corner buttons (hide + delete) sit side by side. */
 .note-actions {
   position: absolute;
   top: 4px;
   right: 4px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 0;
+  gap: 2px;
 }
 /* The HideMenu trigger inherits .item-action's hover-reveal, but a note isn't an
    .item, so reveal it on .note hover explicitly. */
@@ -444,6 +453,36 @@ button {
 .hide-menu-item:hover { background: var(--bg-hover); }
 .hide-menu-label { font-size: 12px; color: var(--text); }
 .hide-menu-sub { font-size: 10px; color: var(--text-faint); }
+/* Inline input + divider used by the project/reminder popovers. */
+.hide-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.menu-input {
+  font: inherit;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 8px;
+  color: var(--text);
+  outline: none;
+  color-scheme: dark;
+}
+.menu-input:focus { border-color: var(--accent); }
+.menu-input::placeholder { color: var(--text-faint); }
+/* Project filter chip row above the sections. */
+.project-bar { padding-top: 2px; }
+/* Always-visible accent chip showing a set reminder (e.g. → Aug 12). */
+.reminder-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  color: var(--accent);
+  background: rgba(123, 140, 255, 0.1);
+  border: 1px solid rgba(123, 140, 255, 0.25);
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-left: auto;
+  margin-right: 2px;
+}
 
 /* ---- Hidden view ------------------------------------------------------ */
 

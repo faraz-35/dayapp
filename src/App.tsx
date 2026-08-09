@@ -18,11 +18,13 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { api, todayStr, type Action, type HideDuration, type Item, type Section } from "./lib";
+import { api, localDateStr, localDateStrOffset, projectsApi, todayStr, type Action, type HideDuration, type Item, type Project, type Section } from "./lib";
 import { notesApi, type Note } from "./notesApi";
 import { log } from "./log";
 import Notes from "./Notes";
 import HideMenu from "./HideMenu";
+import ProjectMenu from "./ProjectMenu";
+import ReminderMenu from "./ReminderMenu";
 import CommandPalette, { type Command } from "./CommandPalette";
 import UpdateOverlay from "./UpdateOverlay";
 
@@ -31,6 +33,13 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
   { id: "daily", label: "Daily", hint: "resets every morning" },
   { id: "backlog", label: "Backlog", hint: "everything else; drag up to commit" },
 ];
+
+// Format an ISO YYYY-MM-DD reminder as a short, scannable chip (→ Aug 12).
+function formatReminder(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 type View = "list" | "journal" | "hidden";
 
@@ -56,6 +65,8 @@ export default function App() {
   const [view, setView] = useState<View>("list");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProject, setActiveProject] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -65,15 +76,21 @@ export default function App() {
   // ---- Load -------------------------------------------------------------
 
   const refresh = useCallback(async () => {
-    const [today, daily, backlog, count] = await Promise.all([
+    const [today, daily, backlog, count, projs] = await Promise.all([
       api.listItems("today", false),
       api.listItems("daily", false),
       api.listItems("backlog", false),
       api.countCompletions(todayStr()),
+      projectsApi.list(),
     ]);
     setItems({ today, daily, backlog });
     setDoneCount(count);
-  }, []);
+    setProjects(projs);
+    // If the active project was deleted, fall back to All.
+    if (activeProject && !projs.some((p) => p.id === activeProject)) {
+      setActiveProject(null);
+    }
+  }, [activeProject]);
 
   useEffect(() => {
     refresh().catch((e) => log.error("initial load failed", e));
@@ -199,6 +216,24 @@ export default function App() {
   const handleHide = async (id: string, section: Section, duration: HideDuration) => {
     setItems((s) => ({ ...s, [section]: s[section].filter((i) => i.id !== id) }));
     await api.hideItem(id, duration);
+  };
+
+  // Assign (or clear) an item's project. Housekeeping — not journal activity.
+  const updateItemField = (id: string, patch: Partial<Item>) => {
+    setItems((s) => {
+      const upd = (list: Item[]) => list.map((i) => (i.id === id ? { ...i, ...patch } : i));
+      return { today: upd(s.today), daily: upd(s.daily), backlog: upd(s.backlog) };
+    });
+  };
+
+  const handleSetProject = async (id: string, projectId: string | null) => {
+    updateItemField(id, { projectId });
+    await api.setItemProject(id, projectId);
+  };
+
+  const handleSetReminder = async (id: string, remindAt: string | null) => {
+    updateItemField(id, { remindAt });
+    await api.setReminder(id, remindAt);
   };
 
   // ---- DnD --------------------------------------------------------------
@@ -342,6 +377,23 @@ export default function App() {
         {/* Notes live above the DnD area so typing/pasting isn't a drag surface.
             Self-contained: owns its state, API, and persistence. */}
         <Notes />
+        {/* Project filter chips — only when at least one project exists. Clicking
+            narrows all three sections to that project; All clears it. */}
+        {projects.length > 0 && (
+          <div className="filter-bar project-bar">
+            <button
+              className={`pill${activeProject === null ? " active" : ""}`}
+              onClick={() => setActiveProject(null)}
+            >All</button>
+            {projects.map((p) => (
+              <button
+                key={p.id}
+                className={`pill${activeProject === p.id ? " active" : ""}`}
+                onClick={() => setActiveProject(p.id)}
+              >{p.name}</button>
+            ))}
+          </div>
+        )}
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
@@ -365,6 +417,8 @@ export default function App() {
                 onStartEdit={setEditingId}
                 onQuickAdd={handleCreate}
                 onHide={handleHide}
+                onSetProject={handleSetProject}
+                onSetReminder={handleSetReminder}
               />
             ))}
           </main>
@@ -403,6 +457,7 @@ export default function App() {
 function SectionView({
   section, label, hint, items, selectedId, editingId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide,
+  onSetProject, onSetReminder,
 }: {
   section: Section;
   label: string;
@@ -417,6 +472,8 @@ function SectionView({
   onStartEdit: (id: string) => void;
   onQuickAdd: (section: Section, text: string) => void;
   onHide: (id: string, section: Section, duration: HideDuration) => void;
+  onSetProject: (id: string, projectId: string | null) => void;
+  onSetReminder: (id: string, remindAt: string | null) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -449,6 +506,8 @@ function SectionView({
             onCommitEdit={(text) => onCommitEdit(item.id, text)}
             onStartEdit={() => onStartEdit(item.id)}
             onHide={(duration) => onHide(item.id, section, duration)}
+            onSetProject={(projectId) => onSetProject(item.id, projectId)}
+            onSetReminder={(remindAt) => onSetReminder(item.id, remindAt)}
           />
         ))}
       </SortableContext>
@@ -485,6 +544,7 @@ function SectionView({
 function ItemRow({
   item, selected, editing,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide,
+  onSetProject, onSetReminder,
 }: {
   item: Item;
   selected: boolean;
@@ -495,6 +555,8 @@ function ItemRow({
   onCommitEdit: (text: string) => void;
   onStartEdit: () => void;
   onHide: (duration: HideDuration) => void;
+  onSetProject: (projectId: string | null) => void;
+  onSetReminder: (remindAt: string | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id });
@@ -532,6 +594,14 @@ function ItemRow({
         </span>
       )}
 
+      {/* A set reminder shows as an always-visible accent chip so upcoming
+          promotions are visible without hovering. Format: → Aug 12. */}
+      {!editing && item.remindAt && (
+        <span className="reminder-chip" title={`Reminds on ${item.remindAt}`}>
+          → {formatReminder(item.remindAt)}
+        </span>
+      )}
+
       {!editing && (
         <>
           <button
@@ -540,6 +610,8 @@ function ItemRow({
             title="Edit"
             aria-label="Edit"
           >✎</button>
+          <ProjectMenu projectId={item.projectId} onAssign={onSetProject} />
+          <ReminderMenu remindAt={item.remindAt} onSet={onSetReminder} />
           <HideMenu onHide={onHide} />
           <button
             className="item-action danger"
@@ -593,13 +665,35 @@ const VERB: Record<string, string> = {
   fell_to_backlog: "fell to backlog",
 };
 
+type JournalRange = "today" | "week" | "month" | "all";
+
 function JournalView() {
   const [actions, setActions] = useState<Action[]>([]);
   const [filter, setFilter] = useState<string>("all");
+  const [range, setRange] = useState<JournalRange>("today");
+  // When set, overrides the range pills with a single specific day.
+  const [dayPick, setDayPick] = useState<string | null>(null);
+
+  // Resolve the half-open [since, until) window from the active range/pick.
+  // `until` is the day *after* the target so a day boundary is inclusive.
+  const bounds = useMemo(() => {
+    const addDays = (iso: string, days: number) => {
+      const d = new Date(iso + "T00:00:00");
+      d.setDate(d.getDate() + days);
+      return localDateStr(d);
+    };
+    if (dayPick) return { since: dayPick, until: addDays(dayPick, 1) };
+    switch (range) {
+      case "today": return { since: localDateStr(), until: localDateStrOffset(1) };
+      case "week":  return { since: localDateStrOffset(-6), until: localDateStrOffset(1) };
+      case "month": return { since: localDateStrOffset(-29), until: localDateStrOffset(1) };
+      case "all":   return { since: undefined, until: undefined };
+    }
+  }, [range, dayPick]);
 
   useEffect(() => {
-    api.listActions(500).then(setActions);
-  }, []);
+    api.listActions({ since: bounds.since, until: bounds.until }).then(setActions);
+  }, [bounds]);
 
   const filtered = useMemo(() => {
     if (filter === "all") return actions;
@@ -626,8 +720,34 @@ function JournalView() {
     { id: "deleted", label: "Deleted" },
   ];
 
+  const ranges: { id: JournalRange; label: string }[] = [
+    { id: "today", label: "Today" },
+    { id: "week", label: "Week" },
+    { id: "month", label: "Month" },
+    { id: "all", label: "All" },
+  ];
+
   return (
     <div>
+      {/* Range row: Today/Week/Month/All pills + a date jump. Picking a date
+          overrides the pills until cleared or a pill is clicked. */}
+      <div className="filter-bar">
+        {ranges.map((r) => (
+          <button
+            key={r.id}
+            className={`pill${!dayPick && range === r.id ? " active" : ""}`}
+            onClick={() => { setRange(r.id); setDayPick(null); }}
+          >{r.label}</button>
+        ))}
+        <input
+          type="date"
+          className={`pill date-jump${dayPick ? " active" : ""}`}
+          value={dayPick ?? localDateStr()}
+          onChange={(e) => setDayPick(e.target.value || null)}
+          title="Jump to a specific day"
+        />
+      </div>
+      {/* Secondary row: action-type filter applied on the fetched range. */}
       <div className="filter-bar">
         {filters.map((f) => (
           <button

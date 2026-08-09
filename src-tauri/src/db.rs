@@ -21,6 +21,8 @@ pub struct Item {
     pub updated_at: String,
     pub hidden: bool,             // soft-archive; hidden=1 keeps row out of active lists
     pub hidden_until: Option<String>,  // ISO YYYY-MM-DD when a time-limited hide expires; NULL = forever
+    pub project_id: Option<String>,    // assigned project (housekeeping — not logged to actions)
+    pub remind_at: Option<String>,     // ISO YYYY-MM-DD when a backlog item auto-promotes to today
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +66,8 @@ impl Db {
         // migrations in the log without noise on steady-state launches.
         ensure_column(conn, "items", "hidden", "INTEGER NOT NULL DEFAULT 0")?;
         ensure_column(conn, "items", "hidden_until", "TEXT")?;
+        ensure_column(conn, "items", "project_id", "TEXT")?;
+        ensure_column(conn, "items", "remind_at", "TEXT")?;
         ensure_column(conn, "notes", "hidden", "INTEGER NOT NULL DEFAULT 0")?;
         ensure_column(conn, "notes", "hidden_until", "TEXT")?;
         Ok(())
@@ -77,12 +81,12 @@ impl Db {
         let conn = self.0.lock().unwrap();
         let mut stmt = if include_done {
             conn.prepare(
-                "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until
+                "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until,project_id,remind_at
                  FROM items WHERE section = ?1 AND hidden = 0 ORDER BY sort_order, created_at"
             )?
         } else {
             conn.prepare(
-                "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until
+                "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until,project_id,remind_at
                  FROM items WHERE section = ?1 AND status = 'active' AND hidden = 0 ORDER BY sort_order, created_at"
             )?
         };
@@ -122,6 +126,7 @@ impl Db {
             status: "active".into(), last_completed_date: None,
             sort_order, created_at: now.clone(), updated_at: now,
             hidden: false, hidden_until: None,
+            project_id: None, remind_at: None,
         })
     }
 
@@ -261,7 +266,7 @@ impl Db {
     pub fn list_hidden_items(&self) -> anyhow::Result<Vec<Item>> {
         let conn = self.0.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until
+            "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until,project_id,remind_at
              FROM items WHERE hidden = 1
              ORDER BY (hidden_until IS NULL), hidden_until ASC, sort_order, created_at"
         )?;
@@ -284,6 +289,58 @@ impl Db {
             params![now, today],
         )?;
         Ok(n)
+    }
+
+    /// Set (or clear) an item's reminder. `remind_at` is an ISO YYYY-MM-DD on
+    /// which a backlog item auto-promotes to Today, or None to clear.
+    /// Housekeeping — not logged to actions.
+    pub fn set_reminder(&self, id: &str, remind_at: Option<&str>) -> anyhow::Result<()> {
+        let conn = self.0.lock().unwrap();
+        let now = now_iso();
+        conn.execute(
+            "UPDATE items SET remind_at = ?1, updated_at = ?2 WHERE id = ?3",
+            params![remind_at, now, id],
+        )?;
+        Ok(())
+    }
+
+    /// Promote any backlog item whose reminder has come due (remind_at <= today)
+    /// to Today, clearing remind_at so it fires once. Logged as a `moved`
+    /// action — no new action enum, so the existing CHECK constraint is untouched.
+    /// Idempotent (clearing remind_at prevents re-promotion). Called un-gated on
+    /// launch and inside run_sweep (harmless to call twice).
+    pub fn promote_due_reminders(&self) -> anyhow::Result<usize> {
+        let conn = self.0.lock().unwrap();
+        let now = now_iso();
+        let today = today_iso();
+
+        let due: Vec<(String, String)> = {
+            let mut stmt = conn.prepare(
+                "SELECT id, text FROM items
+                 WHERE section = 'backlog' AND status = 'active'
+                   AND remind_at IS NOT NULL AND remind_at <= ?1")?;
+            let rows = stmt.query_map(params![today], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            })?;
+            let mut v = Vec::new();
+            for r in rows { v.push(r?); }
+            v
+        };
+
+        if due.is_empty() {
+            return Ok(0);
+        }
+
+        let tx = conn.unchecked_transaction()?;
+        for (id, text) in &due {
+            tx.execute(
+                "UPDATE items SET section = 'today', remind_at = NULL, updated_at = ?1 WHERE id = ?2",
+                params![now, id])?;
+            log_action(&tx, id, text, "moved",
+                       Some("backlog"), Some("today"), None, None, &now)?;
+        }
+        tx.commit()?;
+        Ok(due.len())
     }
 
     // ---- Sweep -----------------------------------------------------------
@@ -350,13 +407,30 @@ impl Db {
     // ---- Log queries -----------------------------------------------------
 
     /// All actions in reverse-chronological order. This is the "journal".
-    pub fn list_actions(&self, limit: Option<i64>) -> anyhow::Result<Vec<Action>> {
+    /// `since`/`until` are optional ISO date-prefix bounds (YYYY-MM-DD), compared
+    /// lexicographically against timestamp (YYYY-MM-DDTHH:MM:SS) — so passing the
+    /// *start* day as `since` and the *day after* the target as `until` yields a
+    /// half-open [since, until) day/week/month range. NULL bounds are unbounded.
+    pub fn list_actions(
+        &self, limit: Option<i64>, since: Option<&str>, until: Option<&str>,
+    ) -> anyhow::Result<Vec<Action>> {
         let conn = self.0.lock().unwrap();
         let limit = limit.unwrap_or(500);
-        let mut stmt = conn.prepare(
+
+        // Build the WHERE clause dynamically so each bound is optional; collect
+        // positional params in the same order so bind indices line up.
+        let mut sql = String::from(
             "SELECT id,item_id,item_text,action,from_section,to_section,from_status,to_status,timestamp
-             FROM actions ORDER BY id DESC LIMIT ?1")?;
-        let rows = stmt.query_map(params![limit], |r| {
+             FROM actions WHERE 1=1");
+        let mut pv: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        if let Some(s) = since { sql.push_str(" AND timestamp >= ?"); pv.push(Box::new(s.to_string())); }
+        if let Some(u) = until { sql.push_str(" AND timestamp < ?"); pv.push(Box::new(u.to_string())); }
+        sql.push_str(" ORDER BY id DESC LIMIT ?");
+        pv.push(Box::new(limit));
+        let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(refs.as_slice(), |r| {
             Ok(Action {
                 id: r.get(0)?, item_id: r.get(1)?, item_text: r.get(2)?, action: r.get(3)?,
                 from_section: r.get(4)?, to_section: r.get(5)?,
@@ -439,6 +513,8 @@ fn item_from_row(r: &rusqlite::Row) -> rusqlite::Result<Item> {
         updated_at: r.get(7)?,
         hidden: r.get::<_, i64>(8)? != 0,
         hidden_until: r.get(9)?,
+        project_id: r.get(10)?,
+        remind_at: r.get(11)?,
     })
 }
 

@@ -3,9 +3,11 @@
 
 mod db;
 mod notes;
+mod projects;
 
 use db::{Db, Item, Action};
 use notes::Note;
+use projects::Project;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
@@ -100,8 +102,11 @@ async fn run_sweep(db: State<'_, DbState>) -> Result<usize, String> {
 }
 
 #[tauri::command]
-async fn list_actions(db: State<'_, DbState>, limit: Option<i64>) -> Result<Vec<Action>, String> {
-    with_db(db, move |db| db.list_actions(limit)).await
+async fn list_actions(
+    db: State<'_, DbState>, limit: Option<i64>,
+    since: Option<String>, until: Option<String>,
+) -> Result<Vec<Action>, String> {
+    with_db(db, move |db| db.list_actions(limit, since.as_deref(), until.as_deref())).await
 }
 
 #[tauri::command]
@@ -147,6 +152,45 @@ async fn unhide_note(db: State<'_, DbState>, id: String) -> Result<(), String> {
 #[tauri::command]
 async fn list_hidden_notes(db: State<'_, DbState>) -> Result<Vec<Note>, String> {
     with_db(db, move |db| db.list_hidden_notes()).await
+}
+
+// ---- Project commands ----------------------------------------------------
+// A second organising axis alongside Sections. Assignment is housekeeping, so
+// none of these are logged to `actions` — the journal stays focused on
+// completion/movement.
+
+#[tauri::command]
+async fn list_projects(db: State<'_, DbState>) -> Result<Vec<Project>, String> {
+    with_db(db, move |db| db.list_projects()).await
+}
+
+#[tauri::command]
+async fn create_project(db: State<'_, DbState>, name: String) -> Result<Project, String> {
+    with_db(db, move |db| db.create_project(&name)).await
+}
+
+#[tauri::command]
+async fn rename_project(db: State<'_, DbState>, id: String, name: String) -> Result<(), String> {
+    with_db(db, move |db| db.rename_project(&id, &name)).await
+}
+
+#[tauri::command]
+async fn delete_project(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    with_db(db, move |db| db.delete_project(&id)).await
+}
+
+#[tauri::command]
+async fn set_item_project(
+    db: State<'_, DbState>, id: String, project_id: Option<String>,
+) -> Result<(), String> {
+    with_db(db, move |db| db.set_item_project(&id, project_id.as_deref())).await
+}
+
+#[tauri::command]
+async fn set_reminder(
+    db: State<'_, DbState>, id: String, remind_at: Option<String>,
+) -> Result<(), String> {
+    with_db(db, move |db| db.set_reminder(&id, remind_at.as_deref())).await
 }
 
 // ---- Self-update ---------------------------------------------------------
@@ -294,6 +338,10 @@ pub fn run() {
             let ih = db.unhide_expired_items()?;
             let nh = db.unhide_expired_notes()?;
             if ih + nh > 0 { log::info!("unhide sweep: {ih} item(s), {nh} note(s) restored"); }
+            // Promote any backlog items whose reminder date has come due. Un-gated
+            // (idempotent) so it runs on every launch, independent of the day sweep.
+            let rp = db.promote_due_reminders()?;
+            if rp > 0 { log::info!("reminders: {rp} backlog item(s) promoted to today"); }
             // Ensure at least one empty note exists — zero-inertia landing surface.
             let _ = db.ensure_seed_note()?;
             app.manage(DbState(Arc::new(db)));
@@ -307,6 +355,8 @@ pub fn run() {
             list_actions, count_completions,
             list_notes, create_note, update_note, delete_note,
             hide_note, unhide_note, list_hidden_notes,
+            list_projects, create_project, rename_project, delete_project, set_item_project,
+            set_reminder,
             self_update,
         ])
         .run(tauri::generate_context!())

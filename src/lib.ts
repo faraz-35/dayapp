@@ -21,6 +21,8 @@ export interface Item {
   updatedAt: string;
   hidden: boolean;
   hiddenUntil: string | null;
+  projectId: string | null;
+  remindAt: string | null;
 }
 
 export interface Action {
@@ -51,10 +53,52 @@ export const api = {
     invoke<void>("hide_item", { id, duration }),
   unhideItem: (id: string) => invoke<void>("unhide_item", { id }),
   listHiddenItems: () => invoke<Item[]>("list_hidden_items"),
+  setItemProject: (id: string, projectId: string | null) =>
+    invoke<void>("set_item_project", { id, projectId }),
+  setReminder: (id: string, remindAt: string | null) =>
+    invoke<void>("set_reminder", { id, remindAt }),
   runSweep: () => invoke<number>("run_sweep"),
-  listActions: (limit = 500) => invoke<Action[]>("list_actions", { limit }),
+  listActions: (opts: { since?: string; until?: string; limit?: number } = {}) =>
+    invoke<Action[]>("list_actions", {
+      limit: opts.limit ?? 500,
+      since: opts.since ?? null,
+      until: opts.until ?? null,
+    }),
   countCompletions: (since: string) => invoke<number>("count_completions", { since }),
   selfUpdate: () => invoke<void>("self_update"),
+};
+
+export interface Project {
+  id: string;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+// Projects: a second organising axis alongside Sections. Assignment is
+// housekeeping (not logged), mirroring the hide affordance.
+export const projectsApi = {
+  list: () => invoke<Project[]>("list_projects"),
+  create: (name: string) => invoke<Project>("create_project", { name }),
+  rename: (id: string, name: string) => invoke<void>("rename_project", { id, name }),
+  delete: (id: string) => invoke<void>("delete_project", { id }),
+};
+
+/** Today's date as ISO YYYY-MM-DD in *local* time. The Rust backend timestamps
+ *  actions with local chrono, so journal date ranges must be local too — the
+ *  UTC-based `todayStr()` below would shift the day boundary near midnight. */
+export const localDateStr = (d: Date = new Date()) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+/** Add `days` to today (negative = past), returning local ISO YYYY-MM-DD. */
+export const localDateStrOffset = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return localDateStr(d);
 };
 
 export const todayStr = () => new Date().toISOString().slice(0, 10);

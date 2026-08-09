@@ -12,7 +12,8 @@ text field with a done button. Three behaviours fall out of the data model, no c
 |---|---|
 | Daily items reset overnight | `WHERE last_completed_date == today` on render — at midnight the comparison just stops being true |
 | Today items fall to backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date`); idempotent |
-| "What I did this week" | `SELECT FROM actions WHERE action='completed'` — the log writes itself on every mutation |
+| Reminders promote backlog → today | A backlog item's `remind_at` date comes due → `promote_due_reminders()` moves it to Today on launch; fires once, no cron |
+| "What I did this week" | `SELECT FROM actions WHERE action='completed'` — the log writes itself on every mutation; the Journal view narrows to Today/Week/Month or any day |
 | Hide tasks/notes for a while | `hidden=1` + optional `hidden_until` date; `list_*` filters `hidden=0`. The midnight sweep clears expired hides, so "hide for a day/week/month" auto-restores with no cron |
 
 Every action (create/complete/move/edit/delete/sweep) is appended to `actions`. That table
@@ -76,19 +77,23 @@ command to the registry in `App.tsx`.
 ```
 dayapp/
 ├── src/
-│   ├── App.tsx              ← UI: sections, DnD, keyboard nav, journal + hidden views
-│   ├── lib.ts               ← typed Tauri invoke wrappers
+│   ├── App.tsx              ← UI: sections, DnD, keyboard nav, journal + hidden views, project chips
+│   ├── lib.ts               ← typed Tauri invoke wrappers + types + date helpers
 │   ├── Notes.tsx            ← free-form notes (own state + API)
 │   ├── notesApi.ts          ← notes invoke wrappers
 │   ├── HideMenu.tsx         ← shared ◐ hide-duration popover
+│   ├── ProjectMenu.tsx      ← # assign/clear/create project popover
+│   ├── ReminderMenu.tsx     ← ◷ reminder-date popover
 │   ├── main.tsx             ← React entry
 │   └── index.css            ← dark Linear-flavoured theme
 └── src-tauri/
     ├── src/
-    │   ├── lib.rs           ← Tauri commands + setup (runs sweep on launch)
-    │   ├── db.rs            ← DB layer: items, actions, sweep, completions
+    │   ├── lib.rs           ← Tauri commands + setup (runs sweep + reminders on launch)
+    │   ├── db.rs            ← DB layer: items, actions, sweep, hide, reminders, completions
+    │   ├── notes.rs         ← notes DB logic
+    │   ├── projects.rs      ← projects DB logic + item.project_id assignment
     │   └── main.rs          ← binary entrypoint
-    ├── schema.sql           ← items + actions + meta
+    ├── schema.sql           ← items + actions + meta + notes + projects
     ├── Cargo.toml
     └── tauri.conf.json
 ```
@@ -106,6 +111,9 @@ dayapp/
 | `⌫` / `Delete` | delete selected |
 | double-click | edit |
 | drag handle (⠿) | drag between sections |
+| hover **#** | assign / clear / create project for the item |
+| hover **◷** | set a reminder (Tomorrow / 3 days / week / pick date) |
+| hover **◐** | hide item/note (forever / day / week / month) |
 | `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
 
 ## Hiding
@@ -119,6 +127,32 @@ Time-limited hides auto-restore: `hidden_until` is an ISO date, and the same
 midnight sweep that drops Today items into Backlog also clears any expired hide,
 so nothing needs a timer. Hiding is **not** logged to the journal — it's
 housekeeping, not activity.
+
+## Projects
+
+Projects are a second organising axis alongside the three sections. Hover any
+item and click **#** to assign it to a project (or clear it), or type a name and
+press Enter to create a new one. Once you have at least one project, a chip row
+appears above the sections: click a chip to narrow all three sections to that
+project, or **All** to clear the filter.
+
+Assigning a project is housekeeping — it's **not** logged to the journal (only
+completion/movement is). Deleting a project unassigns its items; the items
+themselves are kept.
+
+## Reminders
+
+A reminder schedules a backlog item to auto-promote to Today on a future date.
+Hover any item and click **◷** to pick **Tomorrow / In 3 days / In a week**, or
+choose any date. A set reminder shows as an accent chip on the row (e.g.
+`→ Aug 12`) so upcoming promotions are visible without hovering.
+
+Reminders are **date-granular** (not time-of-day) and fire when the app is open:
+on launch, `promote_due_reminders()` moves any backlog item whose date has come
+due into Today, clears the reminder so it fires once, and logs a `moved` action.
+There's no background daemon and no macOS notification — consistent with the
+app's no-cron model. If the app is closed on the due day, the promotion happens
+the next time you open it.
 
 ## Not yet built (intentional)
 

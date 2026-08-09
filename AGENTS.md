@@ -18,7 +18,8 @@ just queries over timestamped state.** No cron, no background jobs.
 |---|---|
 | Daily items reset overnight | `last_completed_date == today` comparison on render. At midnight the comparison just stops being true. |
 | Today items fall to Backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date`). Idempotent. |
-| "What I did this week" | `SELECT FROM actions WHERE action='completed'`. Every mutation logs itself. |
+| Backlog reminders promote to Today | `promote_due_reminders()` runs on launch (un-gated, idempotent): backlog rows with `remind_at <= today` move to `today`. |
+| "What I did this week" | `SELECT FROM actions WHERE action='completed'`. Every mutation logs itself. The Journal view filters this by day/week/month. |
 
 This is the spine of the product. New features should fit this model (state + a log that
 writes itself), not fight it.
@@ -59,7 +60,7 @@ Two independent feature areas, deliberately decoupled:
 
 ```
 items   id, text, section, status, last_completed_date, sort_order, created_at, updated_at,
-        hidden, hidden_until
+        hidden, hidden_until, project_id, remind_at
 actions id, item_id, item_text, action, from_section, to_section, from_status, to_status, timestamp
 meta    key, value           — currently holds last_sweep_date
 ```
@@ -69,6 +70,11 @@ meta    key, value           — currently holds last_sweep_date
 - `hidden` ∈ `0` | `1` — soft-archive; `list_*` filters `hidden = 0`. `hidden_until` is NULL
   (forever) or an ISO date cleared by the midnight sweep. Hide/unhide is **not** logged to
   `actions` — it's housekeeping, not activity.
+- `project_id` — optional assignment to a `projects` row (housekeeping; **not** logged). A
+  filter-chip axis alongside Sections. Deleting a project nulls the FK (items kept).
+- `remind_at` — ISO `YYYY-MM-DD` on which a backlog item auto-promotes to `today`. The
+  promotion is logged as a `moved` action (backlog→today) and `remind_at` is cleared so it
+  fires once. Date-granular, fires on launch (no cron / no macOS notification).
 - `actions.action` ∈ `created | completed | uncompleted | moved | edited | deleted | fell_to_backlog`
 - **`actions.item_text` is snapshotted at write time.** History must survive edits and
   deletions — if it referenced the live row, renaming a task would silently rewrite the
@@ -82,6 +88,25 @@ notes   id, body, sort_order, created_at, updated_at
 
 Notes are **content**, not **activity**. They have their own table and are never written
 to `actions`. Do not add notes to the journal.
+
+### Projects (a second organising axis — NOT logged)
+
+```
+projects id, name, sort_order, created_at
+```
+
+Projects let backlog/sections be narrowed by a chip row. Assignment is housekeeping (like
+hide) — **never** logged to `actions`. `items.project_id` is the nullable FK (no enforced
+cascade; deleting a project runs `UPDATE items SET project_id = NULL`). Logic lives in
+`src-tauri/src/projects.rs`; the popover is `src/ProjectMenu.tsx`.
+
+### Reminders (scheduled promotion via sweep — logged as `moved`)
+
+`items.remind_at` holds an ISO date. On app launch (`setup`, un-gated, idempotent),
+`promote_due_reminders()` moves any backlog item whose `remind_at <= today` to `today`,
+clears `remind_at`, and logs a `moved` action. No new action enum — reusing `moved` keeps
+the `actions` CHECK constraint untouched. Date-granular and fires only when the app is open
+(no background daemon); setting a reminder is **not** logged.
 
 ---
 
@@ -101,7 +126,8 @@ a detached helper.
 
 **What to log (the convention):**
 - **Lifecycle events at INFO:** app start/ready, DB open, migrations (`migrate: adding column …`),
-  the daily sweep (`sweep: N today item(s) fell to backlog`), the unhide sweep.
+  the daily sweep (`sweep: N today item(s) fell to backlog`), the unhide sweep, the reminder
+  promotion sweep (`reminders: N backlog item(s) promoted to today`).
 - **Every external-flow step at INFO:** the `self_update` command logs each phase (starting
   build → build succeeded → spawning swap helper → exiting app). This is the critical path
   to debug update failures.
@@ -127,23 +153,26 @@ dayapp/
 ├── scripts/
 │   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
 ├── src/
-│   ├── App.tsx                     ← UI: sections, DnD, keyboard nav, views, ⌘P palette, update overlay
+│   ├── App.tsx                     ← UI: sections, DnD, keyboard nav, views, ⌘P palette, update overlay, project chips
 │   ├── Notes.tsx                   ← self-contained notes component (own state + persistence)
 │   ├── notesApi.ts                 ← notes typed API wrapper
-│   ├── lib.ts                      ← items typed API wrapper + types + todayStr()
+│   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi
 │   ├── log.ts                      ← prefixed console logger (webview side)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
+│   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
+│   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
 │   ├── CommandPalette.tsx          ← ⌘P modal: filter + keyboard nav
 │   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
 │   ├── main.tsx                    ← React entry
 │   └── index.css                   ← the dark theme + all component styles
 └── src-tauri/
     ├── src/
-    │   ├── lib.rs                  ← Tauri commands + setup (sweep, seed, logging plugin) + self_update
-    │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, completions + Db struct
+    │   ├── lib.rs                  ← Tauri commands + setup (sweep, reminders, seed, logging plugin) + self_update
+    │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, reminders, completions + Db struct
     │   ├── notes.rs                ← notes DB logic (methods on Db, touches only notes table)
+    │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
     │   └── main.rs                 ← binary entrypoint
-    ├── schema.sql                  ← items + actions + meta + notes (all with hidden/hidden_until)
+    ├── schema.sql                  ← items + actions + meta + notes + projects
     ├── Cargo.toml
     ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target
     └── capabilities/default.json
@@ -240,11 +269,13 @@ into Notes or edit fields isn't hijacked.
 
 - No light theme. No `prefers-color-scheme`.
 - No second accent colour. No status colours per section.
-- No tags, projects, priorities, due dates in v1. Sections are the only organising axis.
+- No priorities, tags, or arbitrary due-date fields. (Projects are now a first-class
+  filter axis; reminders are a date-granular promotion — these are the deliberate scope
+  expansions. Don't pile on more organising metadata on top.)
 - No journal surface / blank-page daily note. The log IS the journal.
 - No agent writes (read-only bridge, planned Phase 3).
 - No sync/cloud. Local SQLite only.
-- Do not log Notes to `actions`.
+- Do not log Notes, Projects, or reminder-setting to `actions`.
 - Do not add multi-select / bulk edit. This is a focused single-action tool.
 
 ---

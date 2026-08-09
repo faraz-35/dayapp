@@ -16,7 +16,10 @@ CREATE TABLE IF NOT EXISTS items (
     -- hidden_until is NULL when hidden forever, else ISO YYYY-MM-DD at which
     -- the midnight sweep clears hidden back to 0 (time-limited hide auto-restores).
     hidden              INTEGER NOT NULL DEFAULT 0,
-    hidden_until        TEXT
+    hidden_until        TEXT,
+    -- Housekeeping columns (not logged to actions): assignment + scheduled promotion.
+    project_id          TEXT,                                    -- FK→projects.id; nullable, no CASCADE enforced inline
+    remind_at           TEXT                                     -- ISO YYYY-MM-DD when a backlog item auto-promotes to today
 );
 
 CREATE INDEX IF NOT EXISTS idx_items_section ON items(section, sort_order);
@@ -64,3 +67,16 @@ CREATE TABLE IF NOT EXISTS notes (
 
 CREATE INDEX IF NOT EXISTS idx_notes_order ON notes(sort_order);
 -- `hidden` intentionally unindexed on notes too; see comment on items table.
+
+-- Projects: a second organising axis alongside Sections. Assigning an item to a
+-- project is housekeeping (like hide), so it is NOT logged to `actions` — the
+-- journal stays focused on completion/movement. items.project_id (added via the
+-- ensure_column migration) is nullable; deleting a project nulls it (items kept).
+CREATE TABLE IF NOT EXISTS projects (
+    id         TEXT PRIMARY KEY,                          -- ULID
+    name       TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_order ON projects(sort_order, created_at);
