@@ -70,8 +70,9 @@ meta    key, value           — currently holds last_sweep_date
 - `hidden` ∈ `0` | `1` — soft-archive; `list_*` filters `hidden = 0`. `hidden_until` is NULL
   (forever) or an ISO date cleared by the midnight sweep. Hide/unhide is **not** logged to
   `actions` — it's housekeeping, not activity.
-- `project_id` — optional assignment to a `projects` row (housekeeping; **not** logged). A
-  filter-chip axis alongside Sections. Deleting a project nulls the FK (items kept).
+- `project_id` — optional assignment to a `projects` row (housekeeping; **not** logged). Shown
+  as a color-coded label on the far right of each item row (deterministic hue per project id).
+  Deleting a project nulls the FK (items kept).
 - `remind_at` — ISO `YYYY-MM-DD` on which a backlog item auto-promotes to `today`. The
   promotion is logged as a `moved` action (backlog→today) and `remind_at` is cleared so it
   fires once. Date-granular, fires on launch (no cron / no macOS notification).
@@ -95,7 +96,8 @@ to `actions`. Do not add notes to the journal.
 projects id, name, sort_order, created_at
 ```
 
-Projects let backlog/sections be narrowed by a chip row. Assignment is housekeeping (like
+Projects let each item carry a color-coded label on the far right of its row (deterministic
+hue per project, so the eye groups items across sections). Assignment is housekeeping (like
 hide) — **never** logged to `actions`. `items.project_id` is the nullable FK (no enforced
 cascade; deleting a project runs `UPDATE items SET project_id = NULL`). Logic lives in
 `src-tauri/src/projects.rs`; the popover is `src/ProjectMenu.tsx`.
@@ -153,7 +155,7 @@ dayapp/
 ├── scripts/
 │   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
 ├── src/
-│   ├── App.tsx                     ← UI: sections, DnD, keyboard nav, views, ⌘P palette, update overlay, project chips
+│   ├── App.tsx                     ← UI: sections, DnD, keyboard nav, views, ⌘P palette, update overlay, project labels
 │   ├── Notes.tsx                   ← self-contained notes component (own state + persistence)
 │   ├── notesApi.ts                 ← notes typed API wrapper
 │   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi

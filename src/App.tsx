@@ -41,6 +41,16 @@ function formatReminder(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+// Deterministic, well-spaced color per project so the eye can group items at a
+// glance. Hash the id → hue; fixed S/L tuned for legibility on the dark bg. The
+// golden-angle offset spreads consecutive projects apart on the wheel.
+function projectColor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return `hsl(${hue} 65% 68%)`;
+}
+
 type View = "list" | "journal" | "hidden";
 
 // Self-update status, accumulated from "update-status" events emitted by the
@@ -66,7 +76,6 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProject, setActiveProject] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -86,11 +95,7 @@ export default function App() {
     setItems({ today, daily, backlog });
     setDoneCount(count);
     setProjects(projs);
-    // If the active project was deleted, fall back to All.
-    if (activeProject && !projs.some((p) => p.id === activeProject)) {
-      setActiveProject(null);
-    }
-  }, [activeProject]);
+  }, []);
 
   useEffect(() => {
     refresh().catch((e) => log.error("initial load failed", e));
@@ -377,23 +382,6 @@ export default function App() {
         {/* Notes live above the DnD area so typing/pasting isn't a drag surface.
             Self-contained: owns its state, API, and persistence. */}
         <Notes />
-        {/* Project filter chips — only when at least one project exists. Clicking
-            narrows all three sections to that project; All clears it. */}
-        {projects.length > 0 && (
-          <div className="filter-bar project-bar">
-            <button
-              className={`pill${activeProject === null ? " active" : ""}`}
-              onClick={() => setActiveProject(null)}
-            >All</button>
-            {projects.map((p) => (
-              <button
-                key={p.id}
-                className={`pill${activeProject === p.id ? " active" : ""}`}
-                onClick={() => setActiveProject(p.id)}
-              >{p.name}</button>
-            ))}
-          </div>
-        )}
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
@@ -408,6 +396,7 @@ export default function App() {
                 label={sec.label}
                 hint={sec.hint}
                 items={items[sec.id]}
+                projects={projects}
                 selectedId={selectedId}
                 editingId={editingId}
                 onSelect={setSelectedId}
@@ -455,7 +444,7 @@ export default function App() {
 // ---- Section -------------------------------------------------------------
 
 function SectionView({
-  section, label, hint, items, selectedId, editingId,
+  section, label, hint, items, projects, selectedId, editingId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide,
   onSetProject, onSetReminder,
 }: {
@@ -463,6 +452,7 @@ function SectionView({
   label: string;
   hint: string;
   items: Item[];
+  projects: Project[];
   selectedId: string | null;
   editingId: string | null;
   onSelect: (id: string) => void;
@@ -475,7 +465,6 @@ function SectionView({
   onSetProject: (id: string, projectId: string | null) => void;
   onSetReminder: (id: string, remindAt: string | null) => void;
 }) {
-  const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const { setNodeRef, isOver } = useDroppable({ id: `dropzone-${section}` });
 
@@ -483,7 +472,6 @@ function SectionView({
     const t = draft.trim();
     if (t) onQuickAdd(section, t);
     setDraft("");
-    setAdding(false);
   };
 
   return (
@@ -493,11 +481,27 @@ function SectionView({
         <span className="section-count">{items.length || ""}</span>
       </div>
 
+      {/* Always-open capture at the top of the section: type + Enter to add.
+          No button, no click-to-reveal — the input itself is the affordance. */}
+      <div className="capture">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); submit(); }
+            else if (e.key === "Escape") setDraft("");
+          }}
+          placeholder="..."
+          spellCheck={false}
+        />
+      </div>
+
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
         {items.map((item) => (
           <ItemRow
             key={item.id}
             item={item}
+            project={projects.find((p) => p.id === item.projectId) ?? null}
             selected={item.id === selectedId}
             editing={item.id === editingId}
             onSelect={onSelect}
@@ -515,26 +519,7 @@ function SectionView({
       {/* Droppable empty zone — accepts drops even when the section is empty. */}
       <div ref={setNodeRef} className={`section-dropzone${isOver ? " is-over" : ""}`} />
 
-      {items.length === 0 && !adding && <div className="empty">Nothing here.</div>}
-
-      <div className="quickadd" onClick={() => setAdding(true)}>
-        <span style={{ color: "var(--text-faint)" }}>+</span>
-        {adding ? (
-          <input
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={submit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit();
-              if (e.key === "Escape") { setAdding(false); setDraft(""); }
-            }}
-            placeholder={`Add to ${label.toLowerCase()}…`}
-          />
-        ) : (
-          <span className="quickadd-hint">Add to {label.toLowerCase()}…</span>
-        )}
-      </div>
+      {items.length === 0 && <div className="empty">Nothing here.</div>}
     </section>
   );
 }
@@ -542,11 +527,12 @@ function SectionView({
 // ---- Item row -----------------------------------------------------------
 
 function ItemRow({
-  item, selected, editing,
+  item, project, selected, editing,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide,
   onSetProject, onSetReminder,
 }: {
   item: Item;
+  project: Project | null;
   selected: boolean;
   editing: boolean;
   onSelect: (id: string) => void;
@@ -594,12 +580,23 @@ function ItemRow({
         </span>
       )}
 
-      {/* A set reminder shows as an always-visible accent chip so upcoming
-          promotions are visible without hovering. Format: → Aug 12. */}
-      {!editing && item.remindAt && (
-        <span className="reminder-chip" title={`Reminds on ${item.remindAt}`}>
-          → {formatReminder(item.remindAt)}
-        </span>
+      {/* Right-aligned metadata (project label + reminder). Resting state shows
+          this; on hover it yields to the action buttons (which take its place). */}
+      {!editing && (project || item.remindAt) && (
+        <div className="item-meta">
+          {project && (
+            <span
+              className="project-label"
+              style={{ color: projectColor(project.id) }}
+              title={`Project: ${project.name}`}
+            >{project.name}</span>
+          )}
+          {item.remindAt && (
+            <span className="reminder-chip" title={`Reminds on ${item.remindAt}`}>
+              → {formatReminder(item.remindAt)}
+            </span>
+          )}
+        </div>
       )}
 
       {!editing && (
@@ -729,8 +726,8 @@ function JournalView() {
 
   return (
     <div>
-      {/* Range row: Today/Week/Month/All pills + a date jump. Picking a date
-          overrides the pills until cleared or a pill is clicked. */}
+      {/* One calm toolbar: range segments · date jump | action-type segments.
+          Picking a date overrides the range pills until a pill is clicked. */}
       <div className="filter-bar">
         {ranges.map((r) => (
           <button
@@ -741,14 +738,12 @@ function JournalView() {
         ))}
         <input
           type="date"
-          className={`pill date-jump${dayPick ? " active" : ""}`}
+          className={`date-jump${dayPick ? " active" : ""}`}
           value={dayPick ?? localDateStr()}
           onChange={(e) => setDayPick(e.target.value || null)}
           title="Jump to a specific day"
         />
-      </div>
-      {/* Secondary row: action-type filter applied on the fetched range. */}
-      <div className="filter-bar">
+        <span className="filter-sep" />
         {filters.map((f) => (
           <button
             key={f.id}

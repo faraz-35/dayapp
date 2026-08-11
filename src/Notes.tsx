@@ -12,21 +12,19 @@ import HideMenu from "./HideMenu";
 
 export default function Notes() {
   const [notes, setNotes] = useState<Note[]>([]);
-  const [showEmpty, setShowEmpty] = useState(false);
+  const [draft, setDraft] = useState("");
 
   const refresh = useCallback(async () => {
     const list = await notesApi.list();
     setNotes(list);
-    // Show an empty input surface even when all notes have content, so there's
-    // always a ready place to write. Tracked locally (not persisted as a note
-    // until something is typed).
-    setShowEmpty(true);
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const handleCreate = async () => {
-    const note = await notesApi.create();
+  // Type + Enter creates a real note at the bottom of the list. The capture
+  // field stays open for the next note, so capture stays zero-inertia.
+  const handleCreate = async (body: string) => {
+    const note = await notesApi.create(body);
     setNotes((s) => [...s, note]);
   };
 
@@ -52,18 +50,30 @@ export default function Notes() {
     <section className="notes">
       <div className="section-head">
         <span className="section-name">Notes</span>
-        <button
-          className="icon-btn"
-          onClick={handleCreate}
-          title="New note"
-          aria-label="New note"
-          style={{ width: 20, height: 20 }}
-        >+</button>
+        <span className="section-count">{notes.length || ""}</span>
       </div>
 
-      {notes.length === 0 && !showEmpty && (
-        <div className="empty">No notes.</div>
-      )}
+      {/* Always-open capture: type + Enter writes a note. No + button. */}
+      <div className="capture">
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              const t = draft.trim();
+              if (t) {
+                handleCreate(t);
+                setDraft("");
+              }
+            }
+            if (e.key === "Escape") setDraft("");
+          }}
+          placeholder="..."
+          rows={1}
+          spellCheck={false}
+        />
+      </div>
 
       {notes.map((note) => (
         <NoteInput

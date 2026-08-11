@@ -16,7 +16,7 @@ export interface Note {
 
 export const notesApi = {
   list: () => invoke<Note[]>("list_notes"),
-  create: () => invoke<Note>("create_note"),
+  create: (body: string) => invoke<Note>("create_note", { body }),
   update: (id: string, body: string) => invoke<void>("update_note", { id, body }),
   delete: (id: string) => invoke<void>("delete_note", { id }),
   hide: (id: string, duration: HideDuration) =>

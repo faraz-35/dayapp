@@ -123,8 +123,8 @@ async fn list_notes(db: State<'_, DbState>) -> Result<Vec<Note>, String> {
 }
 
 #[tauri::command]
-async fn create_note(db: State<'_, DbState>) -> Result<Note, String> {
-    with_db(db, move |db| db.create_note()).await
+async fn create_note(db: State<'_, DbState>, body: String) -> Result<Note, String> {
+    with_db(db, move |db| db.create_note(&body)).await
 }
 
 #[tauri::command]
@@ -342,8 +342,6 @@ pub fn run() {
             // (idempotent) so it runs on every launch, independent of the day sweep.
             let rp = db.promote_due_reminders()?;
             if rp > 0 { log::info!("reminders: {rp} backlog item(s) promoted to today"); }
-            // Ensure at least one empty note exists — zero-inertia landing surface.
-            let _ = db.ensure_seed_note()?;
             app.manage(DbState(Arc::new(db)));
             log::info!("DayApp ready");
             Ok(())

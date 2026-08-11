@@ -31,8 +31,8 @@ impl Db {
         list_notes_inner(&conn)
     }
 
-    /// Create a new empty note at the bottom of the list. Returns the new note.
-    pub fn create_note(&self) -> anyhow::Result<Note> {
+    /// Create a new note with the given body at the bottom of the list.
+    pub fn create_note(&self, body: &str) -> anyhow::Result<Note> {
         let conn = self.0.lock().unwrap();
         let now = now_iso();
         let id = ulid::Ulid::new().to_string();
@@ -44,13 +44,13 @@ impl Db {
 
         conn.execute(
             "INSERT INTO notes (id, body, sort_order, created_at, updated_at)
-             VALUES (?1, '', ?2, ?3, ?3)",
-            params![id, sort_order, now],
+             VALUES (?1, ?2, ?3, ?4, ?4)",
+            params![id, body, sort_order, now],
         )?;
 
         Ok(Note {
             id,
-            body: String::new(),
+            body: body.to_string(),
             sort_order,
             created_at: now.clone(),
             updated_at: now,
@@ -132,29 +132,12 @@ impl Db {
         )?;
         Ok(n)
     }
-
-    /// Ensure at least one note exists. Called on startup so the user always
-    /// has a ready textarea — zero inertia to write a note.
-    pub fn ensure_seed_note(&self) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
-        let count: i64 = conn.query_row("SELECT COUNT(*) FROM notes", [], |r| r.get(0))?;
-        if count == 0 {
-            let now = now_iso();
-            let id = ulid::Ulid::new().to_string();
-            conn.execute(
-                "INSERT INTO notes (id, body, sort_order, created_at, updated_at)
-                 VALUES (?1, '', 0, ?2, ?2)",
-                params![id, now],
-            )?;
-        }
-        Ok(())
-    }
 }
 
 fn list_notes_inner(conn: &Connection) -> anyhow::Result<Vec<Note>> {
     let mut stmt = conn.prepare(
         "SELECT id, body, sort_order, created_at, updated_at, hidden, hidden_until
-         FROM notes WHERE hidden = 0 ORDER BY sort_order, created_at",
+         FROM notes WHERE hidden = 0 AND body != '' ORDER BY sort_order, created_at",
     )?;
     let rows = stmt.query_map([], note_from_row)?;
     let mut out = Vec::new();

@@ -224,33 +224,44 @@ button {
 .item:hover .grip, .item.dragging .grip { opacity: 0.6; }
 .item.dragging { opacity: 0.3; }
 
-/* ---- Quick add --------------------------------------------------------- */
+/* ---- Capture input (per section) -------------------------------------- */
+/* Always-open, minimal: an elevated surface (the --bg-elev token is for inputs)
+   so it reads as a field against the page bg, with a quiet placeholder ('...')
+   and the accent border on focus. No button, no verbose hint. Sits at the top
+   of its section, directly under the header. */
 
-.quickadd {
-  margin: 6px 8px 0;
+.capture {
+  margin: 0 8px 6px;
   padding: 7px 10px;
   border-radius: 6px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: text;
-  transition: border-color 0.1s ease, color 0.1s ease;
+  transition: border-color 0.1s ease;
 }
-.quickadd:hover { border-color: var(--text-faint); }
-.quickadd:focus-within { border-color: var(--accent); color: var(--text); }
-.quickadd input {
-  flex: 1;
+.capture:hover { border-color: var(--text-faint); }
+.capture:focus-within { border-color: var(--accent); }
+/* Item sections use <input>; Notes uses a single-row <textarea> so Shift+Enter
+   can expand it. Both share the same borderless, placeholder-led treatment. */
+.capture input,
+.capture textarea {
+  width: 100%;
   background: none;
   border: none;
   outline: none;
   color: var(--text);
   font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  resize: none;
+  overflow: hidden;
+  min-height: 18px;
+  display: block;
 }
-.quickadd-hint { font-size: 12px; }
+.capture input::placeholder,
+.capture textarea::placeholder {
+  color: var(--text-faint);
+  letter-spacing: 0.15em;
+}
 
 .empty {
   padding: 6px 10px;
@@ -313,33 +324,58 @@ button {
 .journal-verb { color: var(--text-faint); font-style: italic; }
 .journal-row .journal-text { color: var(--text); }
 
-/* Completed-filter pills */
+/* Journal toolbar. Borderless uppercase segments — the same language as
+   .section-name / .title — so the filter reads as chrome, not a foreign
+   widget. Active = accent text + a thin underline; nothing is filled. */
 .filter-bar {
   display: flex;
-  gap: 6px;
-  padding: 8px 8px 4px;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 16px;
+  flex-wrap: wrap;
 }
+.filter-bar + .filter-bar { padding-top: 0; }
 .pill {
   font-size: 11px;
-  padding: 3px 9px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  background: var(--bg);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
   cursor: pointer;
-  transition: all 0.08s ease;
+  transition: color 0.08s ease, background 0.08s ease;
 }
-.pill:hover { border-color: var(--text-faint); color: var(--text); }
-.pill.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-/* The date jump is a native date input styled to sit with the pills.
-   color-scheme: dark keeps the native picker chrome on-theme. */
+.pill:hover { color: var(--text); background: var(--bg-hover); }
+.pill.active { color: var(--accent); }
+/* A divider between the range group and the action-type group. */
+.filter-sep {
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+  margin: 0 6px;
+}
+/* The date jump is a native date input. Stripped to a faint, borderless label
+   that picks up the accent when it's the active source. */
 .date-jump {
   font: inherit;
-  padding: 2px 6px;
-  width: 116px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  width: auto;
   color-scheme: dark;
+  cursor: pointer;
+  transition: color 0.08s ease, background 0.08s ease;
 }
-.date-jump.active { color: var(--bg); }
+.date-jump:hover { color: var(--text); background: var(--bg-hover); }
+.date-jump.active { color: var(--accent); }
 
 /* Scrollbars */
 ::-webkit-scrollbar { width: 8px; }
@@ -468,9 +504,34 @@ button {
 }
 .menu-input:focus { border-color: var(--accent); }
 .menu-input::placeholder { color: var(--text-faint); }
-/* Project filter chip row above the sections. */
-.project-bar { padding-top: 2px; }
-/* Always-visible accent chip showing a set reminder (e.g. → Aug 12). */
+
+/* Right-aligned row metadata. Pushed to the far edge (margin-left:auto) so the
+   project name + reminder sit flush right. On hover this fades out so the row's
+   action buttons take its place — resting state shows metadata, hover reveals
+   actions (the existing reveal-on-hover pattern). */
+.item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: opacity 0.08s ease;
+}
+.item:hover .item-meta { opacity: 0; }
+
+/* Per-project label. Color is set inline per project (deterministic hue) so the
+   eye can group items across sections at a glance. */
+.project-label {
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-align: right;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Accent chip showing a set reminder (e.g. → Aug 12). */
 .reminder-chip {
   font-size: 10px;
   padding: 1px 6px;
@@ -478,10 +539,7 @@ button {
   color: var(--accent);
   background: rgba(123, 140, 255, 0.1);
   border: 1px solid rgba(123, 140, 255, 0.25);
-  flex-shrink: 0;
   white-space: nowrap;
-  margin-left: auto;
-  margin-right: 2px;
 }
 
 /* ---- Hidden view ------------------------------------------------------ */
