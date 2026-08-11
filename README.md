@@ -77,13 +77,17 @@ command to the registry in `App.tsx`.
 ```
 dayapp/
 ├── src/
-│   ├── App.tsx              ← UI: sections, DnD, keyboard nav, journal + hidden views, project chips
-│   ├── lib.ts               ← typed Tauri invoke wrappers + types + date helpers
+│   ├── App.tsx              ← shell: state, effects, keyboard handlers, header, view switching
+│   ├── lib.ts               ← typed Tauri invoke wrappers + types + date/color helpers
 │   ├── Notes.tsx            ← free-form notes (own state + API)
 │   ├── notesApi.ts          ← notes invoke wrappers
 │   ├── HideMenu.tsx         ← shared ◐ hide-duration popover
 │   ├── ProjectMenu.tsx      ← # assign/clear/create project popover
 │   ├── ReminderMenu.tsx     ← ◷ reminder-date popover
+│   ├── CommandPalette.tsx   ← ⌘P command palette modal
+│   ├── UpdateOverlay.tsx    ← self-update progress modal
+│   ├── components/          ← feature components (SectionList, SectionView, ItemRow,
+│   │                          JournalView, HiddenView, SearchMenu)
 │   ├── main.tsx             ← React entry
 │   └── index.css            ← dark Linear-flavoured theme
 └── src-tauri/
@@ -109,12 +113,13 @@ dayapp/
 | `Enter` | complete selected |
 | `e` | edit selected |
 | `⌫` / `Delete` | delete selected |
-| double-click | edit |
+| single-click | select + edit (caret at end) |
 | drag handle (⠿) | drag between sections |
 | hover **#** | assign / clear / create project for the item |
 | hover **◷** | set a reminder (Tomorrow / 3 days / week / pick date) |
 | hover **◐** | hide item/note (forever / day / week / month) |
 | `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
+| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump |
 
 ## Hiding
 

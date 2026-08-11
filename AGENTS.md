@@ -155,21 +155,28 @@ dayapp/
 ├── scripts/
 │   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
 ├── src/
-│   ├── App.tsx                     ← UI: sections, DnD, keyboard nav, views, ⌘P palette, update overlay, project labels
-│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence)
+│   ├── App.tsx                     ← shell only: state, effects, keyboard handlers, header, view switching
+│   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + projectColor/formatReminder
 │   ├── notesApi.ts                 ← notes typed API wrapper
-│   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi
 │   ├── log.ts                      ← prefixed console logger (webview side)
+│   ├── main.tsx                    ← React entry
+│   ├── index.css                   ← the dark theme + all component styles
+│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
 │   ├── CommandPalette.tsx          ← ⌘P modal: filter + keyboard nav
 │   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
-│   ├── main.tsx                    ← React entry
-│   └── index.css                   ← the dark theme + all component styles
+│   └── components/                 ← feature components, one per file (see "Component responsibilities")
+│       ├── SectionList.tsx         ← DndContext + drag handlers + maps the 3 sections
+│       ├── SectionView.tsx         ← one section (head + capture input + sortable items + dropzone)
+│       ├── ItemRow.tsx             ← one item row + inline EditInput
+│       ├── JournalView.tsx         ← the journal: actions log grouped by day
+│       ├── HiddenView.tsx          ← soft-archive view: unhide/delete hidden items + notes
+│       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump)
 └── src-tauri/
     ├── src/
-    │   ├── lib.rs                  ← Tauri commands + setup (sweep, reminders, seed, logging plugin) + self_update
+    │   ├── lib.rs                  ← Tauri commands + setup (sweep, reminders, logging plugin) + self_update
     │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, reminders, completions + Db struct
     │   ├── notes.rs                ← notes DB logic (methods on Db, touches only notes table)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
@@ -179,6 +186,80 @@ dayapp/
     ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target
     └── capabilities/default.json
 ```
+
+### Component responsibilities
+
+`App.tsx` is intentionally a thin shell — it owns app-wide **state** (items,
+selection, view, overlays), **effects** (load, sweep tick, self-update events),
+and **global keyboard handlers** (⌘P, ⌘F, j/k nav). Everything else is delegated
+to a focused component in `src/components/`. When adding a feature, pick the
+single file it belongs in; do not grow `App.tsx` with new rendering logic.
+
+| File | Owns | Does NOT own |
+|---|---|---|
+| `App.tsx` | state, effects, keyboard handlers, header, view switching | rendering of items/rows, DnD logic, view internals |
+| `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
+| `SectionView.tsx` | one section's header + capture input + sortable items + dropzone | DnD sensors/handlers |
+| `ItemRow.tsx` | one row's render + `EditInput` | DnD wiring (from `useSortable` via parent) |
+| `JournalView.tsx` | fetching + filtering + grouping the actions log | — |
+| `HiddenView.tsx` | listing/unhiding/deleting hidden items + notes | — |
+| `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump | the hit list (passed in from `App`) |
+
+---
+
+## Layout architecture (load-bearing — read before any UI change)
+
+The bugs in this codebase have repeatedly come from layout, not logic. These
+rules exist because each one fixes a real regression. Follow them, do not
+relitigate them.
+
+### 1. One scroll container
+
+The header is pinned; **a single `.scroll` wrapper scrolls the entire body.**
+Never add a second `overflow-y: auto` (or `overflow: auto`) to a child — that
+splits the page into independent scroll areas and is exactly the "X scrolls
+separately" bug.
+
+```
+.app       display:flex column; height:100%; overflow:hidden   ← the shell, never scrolls
+  .header  flex-shrink:0                                       ← pinned
+  .scroll   flex:1; overflow-y:auto; min-height:0              ← THE ONE scroll container
+    Notes / SectionList / JournalView / HiddenView              ← in-flow, no own scroll
+```
+
+`.notes`, `.sections`, `.journal`, `.hidden-view` must **not** set `overflow`,
+`max-height`, `flex: 1`, or `min-height: 0` — they are plain in-flow blocks
+inside `.scroll`. If you ever need a region to scroll independently, you are
+changing the architecture: update this section and justify why.
+
+### 2. Floating surfaces vs inline chrome
+
+There are two kinds of UI elements, and they must not be mixed:
+
+- **Inline chrome** — capture inputs, section heads, item rows, notes. These
+  live in the `.scroll` flow and push content. `position: static`/`relative`.
+- **Floating surfaces** — `CommandPalette` (⌘P), `SearchMenu` (⌘F),
+  `UpdateOverlay`. These are transient overlays: `position: fixed; inset: 0` +
+  a dim `rgba(0,0,0,0.4)` backdrop + a centered card, mounted at the end of
+  `.app` (not inside `.scroll`). They float *over* content; they never push it.
+
+**Never mount a floating surface as an inline flex sibling** — it consumes
+layout space and "feels inline." The backdrop + centered card is what makes a
+modal read as transient. Match `.palette-backdrop`/`.palette` exactly when
+adding a new one.
+
+`z-index` ordering: command palette `100` > search `90` > update overlay `110`.
+(Update is highest because it represents an in-flight, non-cancellable swap.)
+
+### 3. Positioning discipline
+
+- **No `position: absolute` across a section boundary.** Every absolutely
+  positioned element must be contained inside a `position: relative` ancestor
+  that owns it (`.hide-menu-wrap`, `.note`, `.search`). An absolute element
+  that escapes its section is how rows "land on top of each other."
+- **The only `transform` on item rows** is the dnd-kit drag transform
+  (`ItemRow.tsx`), which is `null` at rest. Do not add static transforms.
+- **No negative margins.** Ever. If you reach for one, the layout model is wrong.
 
 ---
 
@@ -207,7 +288,7 @@ keyboard-first.** Every choice below is intentional.
 | Token | Value | Use |
 |---|---|---|
 | `--bg` | `#0e0f11` | app background, window bg |
-| `--bg-elev` | `#16181c` | cards, inputs, elevated surfaces (notes, quickadd) |
+| `--bg-elev` | `#16181c` | cards, inputs, elevated surfaces (floating modals, notes) |
 | `--bg-hover` | `#1c1f24` | row hover, button hover |
 | `--border` | `#23262d` | dividers, input borders |
 | `--text` | `#e6e7ea` | primary text |
@@ -256,7 +337,9 @@ Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spac
 | `Enter` | complete selected |
 | `e` | edit selected |
 | `⌫` / `Delete` | delete selected |
-| double-click | edit |
+| single-click | select + enter edit mode (caret at end, not full-select) |
+| `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
+| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump |
 
 The keyboard handler **ignores events when an `<input>`/`<textarea>` is focused** so typing
 into Notes or edit fields isn't hijacked.
@@ -265,7 +348,8 @@ into Notes or edit fields isn't hijacked.
 - Auto-growing `<textarea>` (height driven by JS, `resize: none`, no internal scrollbar).
 - Debounced autosave (600ms) + save-on-blur.
 - Delete button appears on hover, only when there's content.
-- A seed empty note is created on launch so there's always a place to write.
+- An always-open capture field sits at the top of Notes: type + Enter creates a
+  note. (Replaced the old `+` button + seed empty note.)
 
 ### What NOT to add (explicit non-goals)
 

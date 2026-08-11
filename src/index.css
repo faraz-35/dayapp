@@ -27,6 +27,22 @@ html, body, #root {
   user-select: none;
 }
 
+/* App shell: header (pinned) + a single scroll container for the whole body.
+   THE ONLY place scroll happens is .scroll — children must not set their own
+   overflow-y, or content splits into independent scroll areas (the recurring
+   bug documented in AGENTS.md "Layout architecture"). */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
 input, textarea { user-select: text; }
 
 button {
@@ -93,15 +109,98 @@ button {
 .icon-btn:hover { background: var(--bg-hover); color: var(--text); }
 .icon-btn.active { color: var(--accent); }
 
+/* ---- Search (⌘F) — floating modal ---------------------------------- */
+/* Mirrors the ⌘P command palette: a fixed dim backdrop + a centered card. NOT
+   an inline/sticky bar — inline chrome pushes content and "feels inline." This
+   reads as a transient surface. See AGENTS.md "Layout architecture". */
+
+.search-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 90;                    /* below the command palette (100) so ⌘P wins */
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  -webkit-app-region: no-drag;
+}
+.search {
+  width: 90%;
+  max-width: 420px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.search-input {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 12px 14px;
+}
+.search-input::placeholder { color: var(--text-faint); }
+.search-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.search-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-style: italic;
+}
+.search-row {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--text-dim);
+  transition: background 0.06s ease, color 0.06s ease;
+}
+.search-row.active { background: var(--bg-hover); color: var(--text); }
+.search-row-section {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  width: 48px;
+}
+.search-row-text {
+  flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- Sections ---------------------------------------------------------- */
+/* The three sections stack vertically inside .scroll. They are NOT a scroll
+   container themselves — .scroll owns scroll. */
 
 .sections {
   padding: 8px 8px 32px;
   display: flex;
   flex-direction: column;
   gap: 18px;
-  overflow-y: auto;
-  height: calc(100vh - 53px);
+}
+
+/* Each section is an in-flow block. Sections are separated by the flex gap on
+   .sections (and the bg differentiation on their content), not dividers. */
+.section {
+  padding-top: 2px;
 }
 
 .section-head {
@@ -225,23 +324,16 @@ button {
 .item.dragging { opacity: 0.3; }
 
 /* ---- Capture input (per section) -------------------------------------- */
-/* Always-open, minimal: an elevated surface (the --bg-elev token is for inputs)
-   so it reads as a field against the page bg, with a quiet placeholder ('...')
-   and the accent border on focus. No button, no verbose hint. Sits at the top
-   of its section, directly under the header. */
+/* Minimal: just a bottom border that goes accent on focus. No fill, no box,
+   no placeholder — the line is the affordance. Sits at the top of its section. */
 
 .capture {
   margin: 0 8px 6px;
-  padding: 7px 10px;
-  border-radius: 6px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
+  padding: 4px 2px 5px;
+  border-bottom: 1px solid var(--border);
   transition: border-color 0.1s ease;
 }
-.capture:hover { border-color: var(--text-faint); }
 .capture:focus-within { border-color: var(--accent); }
-/* Item sections use <input>; Notes uses a single-row <textarea> so Shift+Enter
-   can expand it. Both share the same borderless, placeholder-led treatment. */
 .capture input,
 .capture textarea {
   width: 100%;
@@ -256,11 +348,6 @@ button {
   overflow: hidden;
   min-height: 18px;
   display: block;
-}
-.capture input::placeholder,
-.capture textarea::placeholder {
-  color: var(--text-faint);
-  letter-spacing: 0.15em;
 }
 
 .empty {
@@ -288,8 +375,6 @@ button {
 
 .journal {
   padding: 8px 16px 32px;
-  height: calc(100vh - 53px);
-  overflow-y: auto;
 }
 .journal-empty {
   color: var(--text-faint);
@@ -387,9 +472,9 @@ button {
    inertia to write or paste. Deliberately its own visual block. */
 
 .notes {
-  padding: 8px 8px 0;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 6px;
+  padding: 8px 8px 8px;
+  /* No independent scroll — .scroll owns it. Notes is an in-flow block above
+     the sections. Separated by bg alone, no divider. */
 }
 
 .note {
@@ -398,10 +483,9 @@ button {
   padding: 8px 48px 8px 10px;
   border-radius: 6px;
   background: var(--bg-elev);
-  border: 1px solid var(--border);
-  transition: border-color 0.1s ease;
+  transition: box-shadow 0.1s ease;
 }
-.note:focus-within { border-color: var(--accent); }
+.note:focus-within { box-shadow: 0 0 0 1px var(--accent); }
 
 .note-textarea {
   width: 100%;
@@ -546,8 +630,6 @@ button {
 
 .hidden-view {
   padding: 8px 16px 32px;
-  height: calc(100vh - 53px);
-  overflow-y: auto;
 }
 
 .hidden-row {

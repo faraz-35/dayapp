@@ -102,3 +102,19 @@ export const localDateStrOffset = (days: number) => {
 };
 
 export const todayStr = () => new Date().toISOString().slice(0, 10);
+
+/** Format an ISO YYYY-MM-DD reminder as a short, scannable chip (→ Aug 12). */
+export const formatReminder = (iso: string): string => {
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
+
+/** Deterministic, well-spaced color per project so the eye can group items at a
+ *  glance. Hash the id → hue; fixed S/L tuned for legibility on the dark bg. */
+export const projectColor = (id: string): string => {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return `hsl(${hue} 65% 68%)`;
+};

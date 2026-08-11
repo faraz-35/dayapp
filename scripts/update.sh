@@ -134,6 +134,11 @@ if ! npm run tauri build; then
   echo "✗ Build failed — installed app left untouched." >&2
   exit 1
 fi
+echo "▸ Quitting running ${APP_NAME}…"
+# Must quit before swapping: rm -rf on a running .app races with the process
+# and the subsequent relaunch can reopen stale code. Same helper the in-app
+# (--swap-only) path uses after spawning this script detached.
+wait_for_quit
 echo "▸ Installing to ${DEST_APP}…"
 do_swap
 echo "▸ Relaunching ${APP_NAME}…"

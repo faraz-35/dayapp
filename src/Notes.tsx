@@ -69,7 +69,6 @@ export default function Notes() {
             }
             if (e.key === "Escape") setDraft("");
           }}
-          placeholder="..."
           rows={1}
           spellCheck={false}
         />
