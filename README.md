@@ -14,11 +14,12 @@ text field with a done button. Three behaviours fall out of the data model, no c
 | Today items fall to backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date`); idempotent |
 | Reminders promote backlog → today | A backlog item's `remind_at` date comes due → `promote_due_reminders()` moves it to Today on launch; fires once, no cron |
 | "What I did this week" | `SELECT FROM actions WHERE action='completed'` — the log writes itself on every mutation; the Journal view narrows to Today/Week/Month or any day |
+| "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X` — ▶/⏸ write open/close timestamps; the Journal groups them by day |
 | Hide tasks/notes for a while | `hidden=1` + optional `hidden_until` date; `list_*` filters `hidden=0`. The midnight sweep clears expired hides, so "hide for a day/week/month" auto-restores with no cron |
 
 Every action (create/complete/move/edit/delete/sweep) is appended to `actions`. That table
-powers both the journal view (top-right `≡` icon) and the "balls in the box" counter
-(completions today) in the header.
+powers the journal view (top-right `≡` icon); the journal also layers in tracked time (from
+the separate `sessions` table) as a per-day total and per-task breakdown.
 
 ## Stack
 
@@ -96,8 +97,9 @@ dayapp/
     │   ├── db.rs            ← DB layer: items, actions, sweep, hide, reminders, completions
     │   ├── notes.rs         ← notes DB logic
     │   ├── projects.rs      ← projects DB logic + item.project_id assignment
+    │   ├── timers.rs        ← timer sessions: start/stop/discard/totals/per-day
     │   └── main.rs          ← binary entrypoint
-    ├── schema.sql           ← items + actions + meta + notes + projects
+    ├── schema.sql           ← items + actions + meta + notes + projects + sessions
     ├── Cargo.toml
     └── tauri.conf.json
 ```
@@ -112,9 +114,11 @@ dayapp/
 | `k` / `↑` | select previous |
 | `Enter` | complete selected |
 | `e` | edit selected |
+| `t` | start/stop timer on selected (toggles; starting stops any other) |
 | `⌫` / `Delete` | delete selected |
 | single-click | select + edit (caret at end) |
 | drag handle (⠿) | drag between sections |
+| hover **▶** | start / stop a timer on the item |
 | hover **#** | assign / clear / create project for the item |
 | hover **◷** | set a reminder (Tomorrow / 3 days / week / pick date) |
 | hover **◐** | hide item/note (forever / day / week / month) |
@@ -159,6 +163,21 @@ due into Today, clears the reminder so it fires once, and logs a `moved` action.
 There's no background daemon and no macOS notification — consistent with the
 app's no-cron model. If the app is closed on the due day, the promotion happens
 the next time you open it.
+
+## Time tracking
+
+Each task can carry a **single global timer** — start work on one thing at a
+time. Hover an item and click **▶** (or select it and press **`t`**) to start;
+the running row shows a live `H:MM:SS` in the accent colour, and a chip in the
+header mirrors it so the timer survives scrolling away. Starting a timer on
+another task stops the current one. Click the chip to **stop** (the session is
+kept), or **×** to **discard** it (for the "left it running overnight" case).
+
+Tracked time shows up two ways: a faint `⏱ 2h 14m` cumulative label on each row
+that has any, and — in the Journal — a per-day total in each day header plus a
+per-task breakdown. Time tracking is **not** logged to `actions`; sessions live
+in their own `sessions` table and are layered into the journal as a separate
+dimension. Completing or deleting a running item stops its timer first.
 
 ## Not yet built (intentional)
 

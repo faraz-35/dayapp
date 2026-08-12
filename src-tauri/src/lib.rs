@@ -4,11 +4,13 @@
 mod db;
 mod notes;
 mod projects;
+mod timers;
 
 use db::{Db, Item, Action};
 use notes::Note;
 use projects::Project;
 use std::sync::Arc;
+use timers::{ActiveTimer, DayTaskTime};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
 
@@ -109,11 +111,6 @@ async fn list_actions(
     with_db(db, move |db| db.list_actions(limit, since.as_deref(), until.as_deref())).await
 }
 
-#[tauri::command]
-async fn count_completions(db: State<'_, DbState>, since: String) -> Result<i64, String> {
-    with_db(db, move |db| db.count_completions(&since)).await
-}
-
 // ---- Notes commands ------------------------------------------------------
 // Separate from items. Notes are content (not activity), so no journal logging.
 
@@ -191,6 +188,45 @@ async fn set_reminder(
     db: State<'_, DbState>, id: String, remind_at: Option<String>,
 ) -> Result<(), String> {
     with_db(db, move |db| db.set_reminder(&id, remind_at.as_deref())).await
+}
+
+// ---- Timer commands -----------------------------------------------------
+// Per-task time tracking via single-active-timer sessions. Sessions are
+// measurement (not item-state transitions), so — like notes/projects — they are
+// never logged to `actions`; the journal reads them via session_time_by_day.
+
+#[tauri::command]
+async fn start_timer(db: State<'_, DbState>, item_id: String) -> Result<ActiveTimer, String> {
+    with_db(db, move |db| db.start_timer(&item_id)).await
+}
+
+#[tauri::command]
+async fn stop_timer(db: State<'_, DbState>) -> Result<(), String> {
+    with_db(db, move |db| db.stop_timer()).await
+}
+
+#[tauri::command]
+async fn discard_timer(db: State<'_, DbState>) -> Result<(), String> {
+    with_db(db, move |db| db.discard_timer()).await
+}
+
+#[tauri::command]
+async fn get_active_timer(db: State<'_, DbState>) -> Result<Option<ActiveTimer>, String> {
+    with_db(db, move |db| db.get_active_timer()).await
+}
+
+#[tauri::command]
+async fn time_totals(
+    db: State<'_, DbState>, item_ids: Vec<String>,
+) -> Result<std::collections::HashMap<String, i64>, String> {
+    with_db(db, move |db| db.time_totals(&item_ids)).await
+}
+
+#[tauri::command]
+async fn session_time_by_day(
+    db: State<'_, DbState>, since: Option<String>, until: Option<String>,
+) -> Result<Vec<DayTaskTime>, String> {
+    with_db(db, move |db| db.session_time_by_day(since.as_deref(), until.as_deref())).await
 }
 
 // ---- Self-update ---------------------------------------------------------
@@ -350,11 +386,13 @@ pub fn run() {
             list_items, create_item, edit_item, complete_item,
             move_item, delete_item, run_sweep,
             hide_item, unhide_item, list_hidden_items,
-            list_actions, count_completions,
+            list_actions,
             list_notes, create_note, update_note, delete_note,
             hide_note, unhide_note, list_hidden_notes,
             list_projects, create_project, rename_project, delete_project, set_item_project,
             set_reminder,
+            start_timer, stop_timer, discard_timer, get_active_timer,
+            time_totals, session_time_by_day,
             self_update,
         ])
         .run(tauri::generate_context!())

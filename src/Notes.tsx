@@ -50,7 +50,6 @@ export default function Notes() {
     <section className="notes">
       <div className="section-head">
         <span className="section-name">Notes</span>
-        <span className="section-count">{notes.length || ""}</span>
       </div>
 
       {/* Always-open capture: type + Enter writes a note. No + button. */}
@@ -69,7 +68,7 @@ export default function Notes() {
             }
             if (e.key === "Escape") setDraft("");
           }}
-          rows={1}
+          rows={3}
           spellCheck={false}
         />
       </div>

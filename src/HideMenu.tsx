@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { HideDuration } from "./lib";
+import { usePopoverFlip } from "./usePopoverFlip";
 
 const OPTIONS: { id: HideDuration; label: string; sub: string }[] = [
   { id: "forever", label: "Forever", sub: "until unhidden" },
@@ -19,6 +20,8 @@ const OPTIONS: { id: HideDuration; label: string; sub: string }[] = [
 export default function HideMenu({ onHide }: { onHide: (duration: HideDuration) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const flip = usePopoverFlip(open, ref, menuRef);
 
   // Close on outside click or Escape.
   useEffect(() => {
@@ -47,7 +50,7 @@ export default function HideMenu({ onHide }: { onHide: (duration: HideDuration) 
         aria-expanded={open}
       >◐</button>
       {open && (
-        <div className="hide-menu" onClick={(e) => e.stopPropagation()}>
+        <div className={`hide-menu${flip ? " flip" : ""}`} ref={menuRef} onClick={(e) => e.stopPropagation()}>
           {OPTIONS.map((o) => (
             <button
               key={o.id}

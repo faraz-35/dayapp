@@ -55,7 +55,6 @@ export default function HiddenView() {
         <>
           <div className="section-head">
             <span className="section-name">Tasks</span>
-            <span className="section-count">{items.length}</span>
           </div>
           {items.map((item) => (
             <div key={item.id} className="hidden-row">
@@ -84,7 +83,6 @@ export default function HiddenView() {
         <>
           <div className="section-head">
             <span className="section-name">Notes</span>
-            <span className="section-count">{notes.length}</span>
           </div>
           {notes.map((note) => (
             <div key={note.id} className="hidden-row">

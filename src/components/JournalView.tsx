@@ -1,9 +1,12 @@
 // JournalView — reads the append-only `actions` log and groups by day. This is
 // the auto-journal: every create/complete/move/edit/delete/sweep writes a row,
-// so the view composes itself.
+// so the view composes itself. Time tracked on each task is layered in as a
+// per-day total (in the day header) and a per-task breakdown block — sessions
+// are a separate dimension (see src-tauri/src/timers.rs), not action rows.
 
 import { useEffect, useMemo, useState } from "react";
-import { api, localDateStr, localDateStrOffset, type Action } from "../lib";
+import { api, formatDuration, localDateStr, localDateStrOffset, timersApi, type Action, type DayTaskTime } from "../lib";
+import { log } from "../log";
 
 const VERB: Record<string, string> = {
   created: "added",
@@ -19,6 +22,7 @@ type JournalRange = "today" | "week" | "month" | "all";
 
 export default function JournalView() {
   const [actions, setActions] = useState<Action[]>([]);
+  const [times, setTimes] = useState<DayTaskTime[]>([]);
   const [filter, setFilter] = useState<string>("all");
   const [range, setRange] = useState<JournalRange>("today");
   // When set, overrides the range pills with a single specific day.
@@ -43,6 +47,9 @@ export default function JournalView() {
 
   useEffect(() => {
     api.listActions({ since: bounds.since, until: bounds.until }).then(setActions);
+    timersApi.sessionTimeByDay({ since: bounds.since, until: bounds.until })
+      .then(setTimes)
+      .catch((e) => log.warn("session time load failed", e));
   }, [bounds]);
 
   const filtered = useMemo(() => {
@@ -50,16 +57,40 @@ export default function JournalView() {
     return actions.filter((a) => a.action === filter);
   }, [actions, filter]);
 
-  // Group by YYYY-MM-DD, preserving reverse-chronological order.
-  const groups = useMemo(() => {
+  // Actions grouped by day. Time is a separate dimension (not affected by the
+  // action-type filter), so it has its own map.
+  const actionsByDay = useMemo(() => {
     const map = new Map<string, Action[]>();
     for (const a of filtered) {
       const day = a.timestamp.slice(0, 10);
       if (!map.has(day)) map.set(day, []);
       map.get(day)!.push(a);
     }
-    return Array.from(map.entries());
+    return map;
   }, [filtered]);
+
+  // Per-task time grouped by day, each day's tasks sorted longest-first.
+  const timeByDay = useMemo(() => {
+    const map = new Map<string, DayTaskTime[]>();
+    for (const t of times) {
+      if (!map.has(t.day)) map.set(t.day, []);
+      map.get(t.day)!.push(t);
+    }
+    for (const arr of map.values()) arr.sort((a, b) => b.seconds - a.seconds);
+    return map;
+  }, [times]);
+
+  // The set of days to render is the union of days with actions (post-filter)
+  // and days with tracked time — so a day with only time still shows up.
+  const days = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of filtered) set.add(a.timestamp.slice(0, 10));
+    for (const t of times) set.add(t.day);
+    return Array.from(set).sort().reverse();
+  }, [filtered, times]);
+
+  const dayTotal = (day: string) =>
+    (timeByDay.get(day) ?? []).reduce((s, t) => s + t.seconds, 0);
 
   const filters = [
     { id: "all", label: "All" },
@@ -106,19 +137,33 @@ export default function JournalView() {
         ))}
       </div>
       <div className="journal">
-        {groups.length === 0 && <div className="journal-empty">No activity yet.</div>}
-        {groups.map(([day, rows]) => (
-          <div key={day}>
-            <div className="journal-day">{day}</div>
-            {rows.map((a) => (
-              <div key={a.id} className="journal-row">
-                <span className="journal-time">{a.timestamp.slice(11, 16)}</span>
-                <span className="journal-verb">{VERB[a.action] ?? a.action}</span>
-                <span className="journal-text">{a.itemText}</span>
+        {days.length === 0 && <div className="journal-empty">No activity yet.</div>}
+        {days.map((day) => {
+          const total = dayTotal(day);
+          return (
+            <div key={day}>
+              <div className="journal-day">
+                {day}
+                {total > 0 && <span className="journal-day-time"> · {formatDuration(total)}</span>}
               </div>
-            ))}
-          </div>
-        ))}
+              {/* Time-by-task breakdown — only tasks with tracked time that day. */}
+              {timeByDay.get(day)?.map((t) => (
+                <div key={`t-${t.day}-${t.itemId}`} className="journal-time-row">
+                  <span className="journal-time-icon">⏱</span>
+                  <span className="journal-time-text">{t.itemText || "(deleted)"}</span>
+                  <span className="journal-time-secs">{formatDuration(t.seconds)}</span>
+                </div>
+              ))}
+              {actionsByDay.get(day)?.map((a) => (
+                <div key={a.id} className="journal-row">
+                  <span className="journal-time">{a.timestamp.slice(11, 16)}</span>
+                  <span className="journal-verb">{VERB[a.action] ?? a.action}</span>
+                  <span className="journal-text">{a.itemText}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

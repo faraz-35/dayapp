@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { localDateStrOffset } from "./lib";
+import { usePopoverFlip } from "./usePopoverFlip";
 
 const PRESETS: { days: number; label: string }[] = [
   { days: 1, label: "Tomorrow" },
@@ -24,6 +25,8 @@ export default function ReminderMenu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const flip = usePopoverFlip(open, ref, menuRef);
 
   // Close on outside click or Escape.
   useEffect(() => {
@@ -57,7 +60,7 @@ export default function ReminderMenu({
         aria-expanded={open}
       >◷</button>
       {open && (
-        <div className="hide-menu" onClick={(e) => e.stopPropagation()}>
+        <div className={`hide-menu${flip ? " flip" : ""}`} ref={menuRef} onClick={(e) => e.stopPropagation()}>
           {PRESETS.map((p) => (
             <button
               key={p.days}

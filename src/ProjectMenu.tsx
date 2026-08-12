@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { projectsApi, type Project } from "./lib";
+import { usePopoverFlip } from "./usePopoverFlip";
 
 export default function ProjectMenu({
   projectId, onAssign,
@@ -20,6 +21,8 @@ export default function ProjectMenu({
   const [projects, setProjects] = useState<Project[]>([]);
   const [draft, setDraft] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const flip = usePopoverFlip(open, ref, menuRef);
 
   // Load projects on first open. Cheap (personal-scale list) and keeps the
   // menu fresh if projects changed elsewhere without a full app refresh.
@@ -72,7 +75,7 @@ export default function ProjectMenu({
         aria-expanded={open}
       >#</button>
       {open && (
-        <div className="hide-menu" onClick={(e) => e.stopPropagation()}>
+        <div className={`hide-menu${flip ? " flip" : ""}`} ref={menuRef} onClick={(e) => e.stopPropagation()}>
           <button
             className="hide-menu-item"
             onClick={() => assign(null)}

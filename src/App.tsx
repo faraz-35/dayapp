@@ -7,7 +7,7 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, projectsApi, todayStr, type HideDuration, type Item, type Project, type Section } from "./lib";
+import { api, formatLiveDuration, parseProjectTag, projectsApi, timersApi, todayStr, type ActiveTimer, type HideDuration, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import Notes from "./Notes";
 import SectionList from "./components/SectionList";
@@ -34,7 +34,6 @@ export default function App() {
     daily: [],
     backlog: [],
   });
-  const [doneCount, setDoneCount] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [view, setView] = useState<View>("list");
@@ -42,19 +41,22 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null);
+  const [timeTotals, setTimeTotals] = useState<Record<string, number>>({});
+  // Wall-clock tick; bumped once a second while a timer runs, so the chip and
+  // running row's elapsed update live. Idle (no re-render loop) when idle.
+  const [now, setNow] = useState(() => Date.now());
 
   // ---- Load -------------------------------------------------------------
 
   const refresh = useCallback(async () => {
-    const [today, daily, backlog, count, projs] = await Promise.all([
+    const [today, daily, backlog, projs] = await Promise.all([
       api.listItems("today", false),
       api.listItems("daily", false),
       api.listItems("backlog", false),
-      api.countCompletions(todayStr()),
       projectsApi.list(),
     ]);
     setItems({ today, daily, backlog });
-    setDoneCount(count);
     setProjects(projs);
   }, []);
 
@@ -67,6 +69,45 @@ export default function App() {
     }, 60_000);
     return () => clearInterval(tick);
   }, [refresh]);
+
+  // The active timer persists across app restarts (its open session row is the
+  // source of truth), so restore it on mount. The elapsed may be large if the
+  // app was closed mid-session — that's the honest count; the chip offers a
+  // discard for the "left it running overnight" case.
+  useEffect(() => {
+    timersApi.active().then(setActiveTimer).catch((e) => log.warn("active timer load failed", e));
+  }, []);
+
+  // All currently-visible item ids — drives the per-row cumulative totals fetch.
+  const allIds = useMemo(
+    () => [...items.today, ...items.daily, ...items.backlog].map((i) => i.id),
+    [items],
+  );
+
+  const refreshTotals = useCallback(async () => {
+    if (allIds.length === 0) { setTimeTotals({}); return; }
+    try {
+      setTimeTotals(await timersApi.totals(allIds));
+    } catch (e) { log.warn("time totals failed", e); }
+  }, [allIds]);
+
+  useEffect(() => { refreshTotals(); }, [refreshTotals]);
+
+  // Tick once a second while a timer runs so the header chip + the running row's
+  // elapsed are live. No interval when nothing's timing — no busy work.
+  useEffect(() => {
+    if (!activeTimer) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [activeTimer]);
+
+  // Live elapsed for the active timer, in seconds. Both startedAt (from the
+  // backend's local RFC3339) and Date.now() resolve to epoch ms, so the diff is
+  // correct wall-clock elapsed regardless of the timestamp's offset suffix.
+  const liveElapsed = activeTimer
+    ? Math.max(0, Math.floor((now - new Date(activeTimer.startedAt).getTime()) / 1000))
+    : 0;
 
   // ---- Self-update: accumulate "update-status" events from the backend ----
   // Each building line appends to the log; restarting/error flip the phase.
@@ -139,12 +180,27 @@ export default function App() {
 
   // ---- Mutations --------------------------------------------------------
 
-  const handleCreate = async (section: Section, text: string) => {
+  const handleCreate = async (section: Section, raw: string) => {
+    // Resolve a `#tag` → project on capture (e.g. "fix bug #day" → dayapp),
+    // stripping the tag from the text. Project assignment is housekeeping, so
+    // it happens after the item exists — same path as the # popover.
+    const { text, projectId } = parseProjectTag(raw, projects);
     const item = await api.createItem(text, section);
-    setItems((s) => ({ ...s, [section]: [...s[section], item] }));
+    if (projectId) {
+      const assigned = { ...item, projectId };
+      setItems((s) => ({ ...s, [section]: [...s[section], assigned] }));
+      api.setItemProject(item.id, projectId);
+    } else {
+      setItems((s) => ({ ...s, [section]: [...s[section], item] }));
+    }
   };
 
   const handleComplete = async (id: string, section: Section) => {
+    // Completing a running item stops its timer first — the session is kept.
+    if (activeTimer?.itemId === id) {
+      setActiveTimer(null);
+      timersApi.stop().catch((e) => log.warn("auto-stop on complete failed", e));
+    }
     if (section === "daily") {
       setItems((s) => ({
         ...s,
@@ -159,27 +215,37 @@ export default function App() {
       }));
     }
     await api.completeItem(id);
-    setDoneCount((c) => c + 1);
   };
 
   const handleDelete = async (id: string, section: Section) => {
+    // Deleting a running item stops its timer first (session history is kept —
+    // the item_text snapshot in sessions survives the deletion, like actions).
+    if (activeTimer?.itemId === id) {
+      setActiveTimer(null);
+      timersApi.stop().catch((e) => log.warn("auto-stop on delete failed", e));
+    }
     setItems((s) => ({ ...s, [section]: s[section].filter((i) => i.id !== id) }));
     await api.deleteItem(id);
   };
 
-  const handleCommitEdit = async (id: string, text: string) => {
-    const t = text.trim();
+  const handleCommitEdit = async (id: string, raw: string) => {
+    const { text, projectId } = parseProjectTag(raw, projects);
     setEditingId(null);
-    if (!t) return;
+    if (!text) return;
+    // Apply the stripped text, and — only if a #tag resolved — override the
+    // project. No tag in the edit leaves any existing assignment alone.
     setItems((s) => {
-      const update = (list: Item[]) => list.map((i) => (i.id === id ? { ...i, text: t } : i));
+      const patch: Partial<Item> = { text };
+      if (projectId) patch.projectId = projectId;
+      const update = (list: Item[]) => list.map((i) => (i.id === id ? { ...i, ...patch } : i));
       return {
         today: update(s.today),
         daily: update(s.daily),
         backlog: update(s.backlog),
       };
     });
-    await api.editItem(id, t);
+    await api.editItem(id, text);
+    if (projectId) api.setItemProject(id, projectId);
   };
 
   // Soft-archive a task. Optimistically removed from its section; time-limited
@@ -206,6 +272,37 @@ export default function App() {
     updateItemField(id, { remindAt });
     await api.setReminder(id, remindAt);
   };
+
+  // Toggle the single active timer on `id`. Starting B auto-stops A (the
+  // backend finalizes any open session first). Optimistic: show the timer with
+  // ~0 elapsed immediately, then reconcile with the authoritative started_at.
+  const handleToggleTimer = useCallback(async (id: string) => {
+    if (activeTimer?.itemId === id) {
+      setActiveTimer(null);
+      try { await timersApi.stop(); }
+      catch (e) { log.error("timer stop failed", e); }
+      refreshTotals();
+      return;
+    }
+    const item = [...items.today, ...items.daily, ...items.backlog].find((i) => i.id === id);
+    setActiveTimer({ itemId: id, itemText: item?.text ?? "", startedAt: new Date().toISOString() });
+    try {
+      setActiveTimer(await timersApi.start(id));
+    } catch (e) {
+      log.error("timer start failed", e);
+      setActiveTimer(null);
+    }
+    refreshTotals();
+  }, [activeTimer, items, refreshTotals]);
+
+  // Discard the open session entirely (don't save it) — for the "left it running
+  // overnight" case where the elapsed is obviously wrong.
+  const handleDiscardTimer = useCallback(async () => {
+    setActiveTimer(null);
+    try { await timersApi.discard(); }
+    catch (e) { log.error("timer discard failed", e); }
+    refreshTotals();
+  }, [refreshTotals]);
 
   // Optimistic reorder/move for DnD. `onMoveItem` from SectionList.
   const handleMoveItem = async (id: string, toSection: Section, newIndex: number) => {
@@ -281,12 +378,15 @@ export default function App() {
       } else if ((e.key === "Backspace" || e.key === "Delete") && selectedId) {
         const item = allVisible.find((i) => i.id === selectedId);
         if (item) { e.preventDefault(); handleDelete(item.id, item.section); }
+      } else if (e.key === "t" && selectedId) {
+        const item = allVisible.find((i) => i.id === selectedId);
+        if (item) { e.preventDefault(); handleToggleTimer(item.id); }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allVisible, selectedId, view]);
+  }, [allVisible, selectedId, view, activeTimer]);
 
   const moveSelection = (delta: number) => {
     const idx = allVisible.findIndex((i) => i.id === selectedId);
@@ -299,23 +399,39 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        <span className="title">
-          {view === "list" ? "Today" : view === "journal" ? "Journal" : "Hidden"}
-        </span>
+        {view !== "list" && (
+          <span className="title">{view === "journal" ? "Journal" : "Hidden"}</span>
+        )}
         <div className="header-right">
+          {/* The running timer is always visible here — survives scrolling away
+              from the timed row, and doubles as a "current focus" display. Click
+              the body to stop (keep the session); × discards it entirely. */}
+          {activeTimer && (
+            <div className="timer-chip" title="Timer running">
+              <button
+                className="timer-chip-main"
+                onClick={() => handleToggleTimer(activeTimer.itemId)}
+                title="Stop timer (keep session)"
+              >
+                <span className="timer-chip-pulse" />
+                <span className="timer-chip-name">{activeTimer.itemText || "Timer"}</span>
+                <span className="timer-chip-elapsed">{formatLiveDuration(liveElapsed)}</span>
+              </button>
+              <button
+                className="timer-chip-discard"
+                onClick={handleDiscardTimer}
+                title="Discard session (don't save)"
+                aria-label="Discard timer"
+              >×</button>
+            </div>
+          )}
           {view === "list" && (
             <button
-              className={`icon-btn${searchOpen ? " active" : ""}`}
+              className={`icon-btn search-btn${searchOpen ? " active" : ""}`}
               onClick={() => setSearchOpen(true)}
               title="Search (⌘F)"
               aria-label="Search"
             >⌕</button>
-          )}
-          {view === "list" && (
-            <span className="counter" title="Completions today — balls in the box">
-              <span className="counter-dot" />
-              {doneCount} today
-            </span>
           )}
           <button
             className={`icon-btn ${view === "hidden" ? "active" : ""}`}
@@ -359,6 +475,10 @@ export default function App() {
               onSetProject={handleSetProject}
               onSetReminder={handleSetReminder}
               onMoveItem={handleMoveItem}
+              activeTimerId={activeTimer?.itemId ?? null}
+              liveElapsed={liveElapsed}
+              timeTotals={timeTotals}
+              onToggleTimer={handleToggleTimer}
             />
           </>
         ) : view === "journal" ? (

@@ -11,7 +11,7 @@ decision in it exists for a reason and must be followed, not relitigated.
 
 ## Product philosophy
 
-The whole app is built on one insight: **three behaviours that sound like features are
+The whole app is built on one insight: **several behaviours that sound like features are
 just queries over timestamped state.** No cron, no background jobs.
 
 | Behaviour | How it actually works |
@@ -20,6 +20,7 @@ just queries over timestamped state.** No cron, no background jobs.
 | Today items fall to Backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date`). Idempotent. |
 | Backlog reminders promote to Today | `promote_due_reminders()` runs on launch (un-gated, idempotent): backlog rows with `remind_at <= today` move to `today`. |
 | "What I did this week" | `SELECT FROM actions WHERE action='completed'`. Every mutation logs itself. The Journal view filters this by day/week/month. |
+| "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X`. ▶/⏸ write open/close timestamps; the Journal groups these by day. The open session row *is* the active timer — no separate state. |
 
 This is the spine of the product. New features should fit this model (state + a log that
 writes itself), not fight it.
@@ -110,6 +111,30 @@ clears `remind_at`, and logs a `moved` action. No new action enum — reusing `m
 the `actions` CHECK constraint untouched. Date-granular and fires only when the app is open
 (no background daemon); setting a reminder is **not** logged.
 
+### Timers (per-task time tracking — NOT logged)
+
+```
+sessions id, item_id, item_text, started_at, ended_at, duration_secs
+```
+
+A **single active timer**: at most one row has `ended_at IS NULL`, and that open row *is*
+the running timer — there is no separate "active timer" state anywhere. ▶ opens a row;
+⏸ fills `ended_at` + `duration_secs`. Starting a new timer finalizes the previous open
+session first (single-timer invariant, enforced in `start_timer`). Like Notes/Projects,
+sessions are **measurement (content)**, not item-state transitions, so they are **never**
+logged to `actions` — the Journal surfaces time as a separate dimension via
+`session_time_by_day`, which splits sessions across midnight so daily totals are accurate.
+
+- `item_text` is snapshotted at write time (like `actions.item_text`), so the Journal's
+  per-task breakdown survives edits and deletions.
+- The active timer **persists across app restarts** (the open row is the source of truth).
+  If the app closes mid-session the elapsed keeps counting honestly on reopen; the header
+  chip's × discards the session for the "left it running overnight" case.
+- Completing or deleting a running item stops its timer first (the session is kept).
+- Logic lives in `src-tauri/src/timers.rs`; the row control is in `src/components/ItemRow.tsx`,
+  the header chip + `t` keybinding in `src/App.tsx`. Live elapsed ticks once a second in the
+  frontend; the backend is stateless between ticks (it derives elapsed from `started_at`).
+
 ---
 
 ## Logging
@@ -155,8 +180,8 @@ dayapp/
 ├── scripts/
 │   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
 ├── src/
-│   ├── App.tsx                     ← shell only: state, effects, keyboard handlers, header, view switching
-│   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + projectColor/formatReminder
+│   ├── App.tsx                     ← shell only: state, effects, keyboard handlers, header, view switching, timer chip
+│   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + projectColor/formatReminder/formatDuration
 │   ├── notesApi.ts                 ← notes typed API wrapper
 │   ├── log.ts                      ← prefixed console logger (webview side)
 │   ├── main.tsx                    ← React entry
@@ -170,8 +195,8 @@ dayapp/
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + capture input + sortable items + dropzone)
-│       ├── ItemRow.tsx             ← one item row + inline EditInput
-│       ├── JournalView.tsx         ← the journal: actions log grouped by day
+│       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput
+│       ├── JournalView.tsx         ← the journal: actions log + per-task time, grouped by day
 │       ├── HiddenView.tsx          ← soft-archive view: unhide/delete hidden items + notes
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump)
 └── src-tauri/
@@ -180,8 +205,9 @@ dayapp/
     │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, reminders, completions + Db struct
     │   ├── notes.rs                ← notes DB logic (methods on Db, touches only notes table)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
+    │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
     │   └── main.rs                 ← binary entrypoint
-    ├── schema.sql                  ← items + actions + meta + notes + projects
+    ├── schema.sql                  ← items + actions + meta + notes + projects + sessions
     ├── Cargo.toml
     ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target
     └── capabilities/default.json
@@ -197,11 +223,11 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 
 | File | Owns | Does NOT own |
 |---|---|---|
-| `App.tsx` | state, effects, keyboard handlers, header, view switching | rendering of items/rows, DnD logic, view internals |
+| `App.tsx` | state (incl. the active timer), effects, keyboard handlers, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
 | `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + capture input + sortable items + dropzone | DnD sensors/handlers |
-| `ItemRow.tsx` | one row's render + `EditInput` | DnD wiring (from `useSortable` via parent) |
-| `JournalView.tsx` | fetching + filtering + grouping the actions log | — |
+| `ItemRow.tsx` | one row's render + ▶/⏸ timer control + `EditInput` | DnD wiring (from `useSortable` via parent) |
+| `JournalView.tsx` | fetching + filtering + grouping the actions log + per-task time totals | — |
 | `HiddenView.tsx` | listing/unhiding/deleting hidden items + notes | — |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump | the hit list (passed in from `App`) |
 
@@ -313,10 +339,17 @@ Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spac
 ### Interaction patterns (existing — match these for new features)
 
 **Item rows:**
-- Resting: only the checkbox circle + text.
-- Hover: row bg → `--bg-hover`; grip (⠿) + edit (✎) + delete (×) buttons fade in; checkbox
-  circle border → `--accent`.
-- Done (non-daily): status flips, row removed from active view, completion logged.
+- Resting: the checkbox circle + text, plus any right-aligned metadata (`⏱` cumulative time,
+  project label, reminder chip). Rows with no tracked time / project / reminder show only
+  checkbox + text.
+- Hover: row bg → `--bg-hover`; grip (⠿) + ▶ timer + project/reminder/hide + delete (×) buttons
+  fade in (replacing the resting metadata); checkbox circle border → `--accent`. Editing is
+  reached by single-click or the `e` key — there is no explicit edit button.
+- Timing (the one row whose timer is running): the ⏸ button + live `H:MM:SS` elapsed are
+  **always visible** (not hover-gated), in the accent colour, so the active timer is
+  identifiable at a glance. The pinned header chip mirrors it (survives scrolling away).
+- Done (non-daily): status flips, row removed from active view, completion logged. A running
+  timer on it is stopped first (the session is kept).
 - Done-today (daily): stays in place, greyed + line-through, checkbox filled accent. Resets
   automatically when `last_completed_date != today`.
 - Edit: double-click text, or hover ✎, or select + `e`. Inline `<input>`, commits on
@@ -336,6 +369,7 @@ Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spac
 | `k` / `↑` | select previous |
 | `Enter` | complete selected |
 | `e` | edit selected |
+| `t` | start/stop timer on selected (toggles; starting stops any other) |
 | `⌫` / `Delete` | delete selected |
 | single-click | select + enter edit mode (caret at end, not full-select) |
 | `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
@@ -355,13 +389,15 @@ into Notes or edit fields isn't hijacked.
 
 - No light theme. No `prefers-color-scheme`.
 - No second accent colour. No status colours per section.
-- No priorities, tags, or arbitrary due-date fields. (Projects are now a first-class
-  filter axis; reminders are a date-granular promotion — these are the deliberate scope
-  expansions. Don't pile on more organising metadata on top.)
+- No priorities, tags, or arbitrary due-date fields. (Projects are a first-class
+  filter axis; reminders are a date-granular promotion; timers are a measurement layer —
+  these are the deliberate scope expansions. Don't pile on more organising metadata on top.)
+- No time-tracking reports / billable hours / charts. The timer's payoff is the per-row
+  cumulative + the Journal's per-day, per-task totals — not an analytics surface.
 - No journal surface / blank-page daily note. The log IS the journal.
 - No agent writes (read-only bridge, planned Phase 3).
 - No sync/cloud. Local SQLite only.
-- Do not log Notes, Projects, or reminder-setting to `actions`.
+- Do not log Notes, Projects, reminder-setting, or timer sessions to `actions`.
 - Do not add multi-select / bulk edit. This is a focused single-action tool.
 
 ---

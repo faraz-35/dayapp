@@ -441,16 +441,6 @@ impl Db {
         for r in rows { out.push(r?); }
         Ok(out)
     }
-
-    /// Count completions in a date range. Powers the balls-in-the-box counter.
-    pub fn count_completions(&self, since: &str) -> anyhow::Result<i64> {
-        let conn = self.0.lock().unwrap();
-        let n: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM actions
-             WHERE action = 'completed' AND timestamp >= ?1",
-            params![since], |r| r.get(0))?;
-        Ok(n)
-    }
 }
 
 fn log_action(

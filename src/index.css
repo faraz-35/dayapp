@@ -41,6 +41,8 @@ html, body, #root {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  padding-bottom: 30px;
+  box-sizing: border-box;
 }
 
 input, textarea { user-select: text; }
@@ -61,10 +63,9 @@ button {
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px 10px;
-  border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;             /* let the title bar area drag the window */
 }
-.header button, .header .counter { -webkit-app-region: no-drag; }
+.header button { -webkit-app-region: no-drag; }
 
 .title {
   font-size: 12px;
@@ -78,22 +79,7 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.counter {
-  font-size: 11px;
-  color: var(--text-dim);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.counter-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 6px var(--accent);
+  margin-left: auto;   /* push right whether or not a .title sibling exists */
 }
 
 .icon-btn {
@@ -104,10 +90,15 @@ button {
   align-items: center;
   justify-content: center;
   color: var(--text-faint);
+  font-size: 17px;
+  line-height: 1;
   transition: background 0.08s ease, color 0.08s ease;
 }
 .icon-btn:hover { background: var(--bg-hover); color: var(--text); }
 .icon-btn.active { color: var(--accent); }
+/* The ⌕ search glyph renders smaller than the other header glyphs at the same
+   font-size (it's a thin-line symbol), so give it a dedicated larger size. */
+.icon-btn.search-btn { font-size: 20px; }
 
 /* ---- Search (⌘F) — floating modal ---------------------------------- */
 /* Mirrors the ⌘P command palette: a fixed dim backdrop + a centered card. NOT
@@ -194,7 +185,7 @@ button {
   padding: 8px 8px 32px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 36px;
 }
 
 /* Each section is an in-flow block. Sections are separated by the flex gap on
@@ -215,11 +206,6 @@ button {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.section-count {
-  font-size: 11px;
   color: var(--text-faint);
 }
 
@@ -306,7 +292,8 @@ button {
   color: var(--text-faint);
   opacity: 0;
   transition: opacity 0.08s ease, background 0.08s ease, color 0.08s ease;
-  font-size: 14px;
+  font-size: 17px;
+  line-height: 1;
 }
 .item:hover .item-action { opacity: 1; }
 .item-action:hover { background: var(--bg-elev); color: var(--text); }
@@ -350,6 +337,14 @@ button {
   display: block;
 }
 
+/* Notes capture is a multiline field (unlike the single-line section inputs):
+   3 lines tall, scrolls internally once the draft grows past that. Type +
+   Enter still commits the note; Shift+Enter adds a line within the draft. */
+.notes .capture textarea {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .empty {
   padding: 6px 10px;
   font-size: 12px;
@@ -391,6 +386,42 @@ button {
   padding: 14px 0 6px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 4px;
+}
+/* Day total (e.g. " · 4h 12m") — inline after the date, in accent. Overrides
+   the header's uppercase/letterspacing so the duration reads naturally. */
+.journal-day-time {
+  color: var(--accent);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: 0;
+}
+/* Per-task time breakdown row. The icon column is the same 44px as the action
+   rows' time column, so the two row kinds line up on the left edge. */
+.journal-time-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 4px;
+  font-size: 12px;
+}
+.journal-time-icon {
+  color: var(--accent);
+  width: 44px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.journal-time-text {
+  flex: 1;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.journal-time-secs {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 .journal-row {
   display: flex;
@@ -462,10 +493,10 @@ button {
 .date-jump:hover { color: var(--text); background: var(--bg-hover); }
 .date-jump.active { color: var(--accent); }
 
-/* Scrollbars */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+/* Scrollbars — hidden. The single .scroll container (and modal lists) still
+   scroll, just without visible chrome, matching the minimal aesthetic.
+   WKWebView is WebKit, so ::-webkit-scrollbar is the lever. */
+::-webkit-scrollbar { display: none; }
 
 /* ---- Notes ------------------------------------------------------------ */
 /* Free-form multiline text. Sits above the item sections so there's minimum
@@ -560,6 +591,14 @@ button {
   gap: 1px;
 }
 
+/* Flip the menu open upward when opening downward would overflow the viewport
+   (rows near the bottom). Prevents .scroll's scrollable region from growing
+   every time a menu opens — opening a menu must be a no-op on layout. */
+.hide-menu.flip {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
 .hide-menu-item {
   display: flex;
   align-items: baseline;
@@ -625,6 +664,97 @@ button {
   border: 1px solid rgba(123, 140, 255, 0.25);
   white-space: nowrap;
 }
+
+/* Cumulative time tracked on an item, shown faint in .item-meta (resting only
+   — suppressed while timing, when the live elapsed takes over). */
+.time-label {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Live elapsed on the running row. Always visible (not hover-gated, not an
+   .item-action) so the active timer is identifiable at a glance. Sits in the
+   action cluster just left of the ⏸ button. */
+.timer-live {
+  font-size: 12px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* The ▶/⏸ toggle. Resting ▶ is an .item-action (hover-revealed); the running
+   ⏸ overrides opacity to stay visible on the timed row, in the accent colour. */
+.timer-btn.timing {
+  opacity: 1;
+  color: var(--accent);
+}
+.timer-btn.timing:hover {
+  background: var(--bg-elev);
+  color: var(--accent);
+}
+
+/* ---- Timer chip (header) ---------------------------------------------- */
+/* Pinned in the header so the running timer survives scrolling away from the
+   timed row. A pulsing accent dot + task name + live elapsed; click to stop
+   (keep session), × to discard. */
+.timer-chip {
+  display: flex;
+  align-items: stretch;
+  margin-right: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.timer-chip-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 9px;
+  color: var(--text);
+  transition: background 0.08s ease;
+}
+.timer-chip-main:hover { background: var(--bg-hover); }
+.timer-chip-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  animation: timer-pulse 1.4s ease-in-out infinite;
+}
+@keyframes timer-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(123, 140, 255, 0.45); }
+  50%      { opacity: 0.55; box-shadow: 0 0 0 3px rgba(123, 140, 255, 0); }
+}
+.timer-chip-name {
+  font-size: 12px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timer-chip-elapsed {
+  font-size: 12px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.timer-chip-discard {
+  width: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 13px;
+  border-left: 1px solid var(--border);
+  transition: color 0.08s ease, background 0.08s ease;
+}
+.timer-chip-discard:hover { color: var(--danger); background: var(--bg-hover); }
 
 /* ---- Hidden view ------------------------------------------------------ */
 

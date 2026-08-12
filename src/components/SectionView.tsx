@@ -11,7 +11,7 @@ import ItemRow from "./ItemRow";
 export default function SectionView({
   section, label, hint, items, projects, selectedId, editingId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide,
-  onSetProject, onSetReminder,
+  onSetProject, onSetReminder, activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
   section: Section;
   label: string;
@@ -29,6 +29,10 @@ export default function SectionView({
   onHide: (id: string, section: Section, duration: HideDuration) => void;
   onSetProject: (id: string, projectId: string | null) => void;
   onSetReminder: (id: string, remindAt: string | null) => void;
+  activeTimerId: string | null;
+  liveElapsed: number;
+  timeTotals: Record<string, number>;
+  onToggleTimer: (id: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   const { setNodeRef, isOver } = useDroppable({ id: `dropzone-${section}` });
@@ -43,7 +47,6 @@ export default function SectionView({
     <section className="section" style={{ minHeight: 40 }}>
       <div className="section-head" title={hint}>
         <span className="section-name">{label}</span>
-        <span className="section-count">{items.length || ""}</span>
       </div>
 
       {/* Always-open capture at the top of the section: type + Enter to add.
@@ -61,23 +64,30 @@ export default function SectionView({
       </div>
 
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-        {items.map((item) => (
-          <ItemRow
-            key={item.id}
-            item={item}
-            project={projects.find((p) => p.id === item.projectId) ?? null}
-            selected={item.id === selectedId}
-            editing={item.id === editingId}
-            onSelect={onSelect}
-            onComplete={() => onComplete(item.id, section)}
-            onDelete={() => onDelete(item.id, section)}
-            onCommitEdit={(text) => onCommitEdit(item.id, text)}
-            onStartEdit={() => onStartEdit(item.id)}
-            onHide={(duration) => onHide(item.id, section, duration)}
-            onSetProject={(projectId) => onSetProject(item.id, projectId)}
-            onSetReminder={(remindAt) => onSetReminder(item.id, remindAt)}
-          />
-        ))}
+        {items.map((item) => {
+          const timing = item.id === activeTimerId;
+          return (
+            <ItemRow
+              key={item.id}
+              item={item}
+              project={projects.find((p) => p.id === item.projectId) ?? null}
+              selected={item.id === selectedId}
+              editing={item.id === editingId}
+              onSelect={onSelect}
+              onComplete={() => onComplete(item.id, section)}
+              onDelete={() => onDelete(item.id, section)}
+              onCommitEdit={(text) => onCommitEdit(item.id, text)}
+              onStartEdit={() => onStartEdit(item.id)}
+              onHide={(duration) => onHide(item.id, section, duration)}
+              onSetProject={(projectId) => onSetProject(item.id, projectId)}
+              onSetReminder={(remindAt) => onSetReminder(item.id, remindAt)}
+              onToggleTimer={() => onToggleTimer(item.id)}
+              isTiming={timing}
+              elapsedSec={timing ? liveElapsed : 0}
+              totalSec={timeTotals[item.id] ?? 0}
+            />
+          );
+        })}
       </SortableContext>
 
       {/* Droppable empty zone — accepts drops even when the section is empty. */}

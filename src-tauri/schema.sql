@@ -80,3 +80,28 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_order ON projects(sort_order, created_at);
+
+-- Timer sessions: per-task time tracking. A session is an interval of focused
+-- work on one item: ▶ opens a row (ended_at NULL), ⏸ fills ended_at +
+-- duration_secs. Exactly one row may be open at a time (the single active
+-- timer) — `start_timer` enforces this by finalizing any open session first, so
+-- the open-row invariant is maintained in code (no DB-level unique constraint).
+--
+-- Sessions are *measurement* (content), not item-state transitions, so — like
+-- notes/projects — they are NOT logged to `actions`. The journal surfaces time
+-- as a separate dimension via `session_time_by_day`. `item_text` is snapshotted
+-- at write time so history survives edits/deletes, mirroring actions.item_text.
+CREATE TABLE IF NOT EXISTS sessions (
+    id            TEXT PRIMARY KEY,                     -- ULID
+    item_id       TEXT NOT NULL,
+    item_text     TEXT NOT NULL,                        -- snapshot at write time
+    started_at    TEXT NOT NULL,                        -- local ISO timestamp (from now_iso)
+    ended_at      TEXT,                                 -- NULL while the session is open
+    duration_secs INTEGER                                -- NULL while open; set when ended_at is written
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_item  ON sessions(item_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_start ON sessions(started_at);
+-- A partial index over the (at most one) open row makes get_active_timer /
+-- time_totals lookups cheap and keeps the "one open session" invariant visible.
+CREATE INDEX IF NOT EXISTS idx_sessions_open  ON sessions(id) WHERE ended_at IS NULL;

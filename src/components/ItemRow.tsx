@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { formatReminder, projectColor, todayStr, type HideDuration, type Item, type Project } from "../lib";
+import { formatDuration, formatLiveDuration, formatReminder, projectColor, todayStr, type HideDuration, type Item, type Project } from "../lib";
 import HideMenu from "../HideMenu";
 import ProjectMenu from "../ProjectMenu";
 import ReminderMenu from "../ReminderMenu";
@@ -16,7 +16,7 @@ import ReminderMenu from "../ReminderMenu";
 export default function ItemRow({
   item, project, selected, editing,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide,
-  onSetProject, onSetReminder,
+  onSetProject, onSetReminder, onToggleTimer, isTiming, elapsedSec, totalSec,
 }: {
   item: Item;
   project: Project | null;
@@ -30,6 +30,10 @@ export default function ItemRow({
   onHide: (duration: HideDuration) => void;
   onSetProject: (projectId: string | null) => void;
   onSetReminder: (remindAt: string | null) => void;
+  onToggleTimer: () => void;
+  isTiming: boolean;
+  elapsedSec: number;
+  totalSec: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id });
@@ -62,10 +66,14 @@ export default function ItemRow({
         <span className="item-text">{item.text}</span>
       )}
 
-      {/* Right-aligned metadata (project label + reminder). Resting state shows
-          this; on hover it yields to the action buttons (which take its place). */}
-      {!editing && (project || item.remindAt) && (
+      {/* Right-aligned metadata (time + project label + reminder). Resting state
+          shows this; on hover it yields to the action buttons. Suppressed while
+          timing — the live elapsed then lives in the action cluster instead. */}
+      {!editing && !isTiming && (totalSec > 0 || project || item.remindAt) && (
         <div className="item-meta">
+          {totalSec > 0 && (
+            <span className="time-label" title="Time tracked">⏱ {formatDuration(totalSec)}</span>
+          )}
           {project && (
             <span
               className="project-label"
@@ -83,12 +91,17 @@ export default function ItemRow({
 
       {!editing && (
         <>
+          {/* Live elapsed shows only on the running row, always visible (not
+              hover-gated) so the active timer is identifiable at a glance. */}
+          {isTiming && (
+            <span className="timer-live" title="Elapsed">{formatLiveDuration(elapsedSec)}</span>
+          )}
           <button
-            className="item-action"
-            onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
-            title="Edit"
-            aria-label="Edit"
-          >✎</button>
+            className={`item-action timer-btn${isTiming ? " timing" : ""}`}
+            onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
+            title={isTiming ? "Stop timer" : "Start timer"}
+            aria-label={isTiming ? "Stop timer" : "Start timer"}
+          >{isTiming ? "⏸" : "▶"}</button>
           <ProjectMenu projectId={item.projectId} onAssign={onSetProject} />
           <ReminderMenu remindAt={item.remindAt} onSet={onSetReminder} />
           <HideMenu onHide={onHide} />

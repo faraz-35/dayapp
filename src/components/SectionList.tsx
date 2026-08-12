@@ -33,6 +33,7 @@ export default function SectionList({
   items, projects, selectedId, editingId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide,
   onSetProject, onSetReminder, onMoveItem,
+  activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
   items: Record<Section, Item[]>;
   projects: Project[];
@@ -48,6 +49,10 @@ export default function SectionList({
   onSetProject: (id: string, projectId: string | null) => void;
   onSetReminder: (id: string, remindAt: string | null) => void;
   onMoveItem: (id: string, toSection: Section, newIndex: number) => void;
+  activeTimerId: string | null;
+  liveElapsed: number;
+  timeTotals: Record<string, number>;
+  onToggleTimer: (id: string) => void;
 }) {
   const [activeDrag, setActiveDrag] = useState<Item | null>(null);
 
@@ -127,6 +132,10 @@ export default function SectionList({
             onHide={onHide}
             onSetProject={onSetProject}
             onSetReminder={onSetReminder}
+            activeTimerId={activeTimerId}
+            liveElapsed={liveElapsed}
+            timeTotals={timeTotals}
+            onToggleTimer={onToggleTimer}
           />
         ))}
       </main>
