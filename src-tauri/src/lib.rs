@@ -67,6 +67,11 @@ async fn complete_item(db: State<'_, DbState>, id: String) -> Result<(), String>
 }
 
 #[tauri::command]
+async fn uncomplete_item(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    with_db(db, move |db| db.uncomplete_item(&id)).await
+}
+
+#[tauri::command]
 async fn move_item(db: State<'_, DbState>, id: String, to_section: String, new_index: i64)
     -> Result<(), String>
 {
@@ -372,6 +377,11 @@ pub fn run() {
             // Today → Backlog sweep on every launch. Idempotent — cheap if already run today.
             let fell = db.run_sweep()?;
             if fell > 0 { log::info!("sweep: {fell} today item(s) fell to backlog"); }
+            // Retire completed Today items left from before today. Un-gated
+            // (idempotent) like the reminder sweep — catches rows written by
+            // older versions even on a day whose boundary sweep already ran.
+            let purged = db.purge_completed_today()?;
+            if purged > 0 { log::info!("sweep: {purged} completed today item(s) cleared"); }
             // Restore any items/notes whose time-limited hide expired. Runs
             // independently of run_sweep's once-per-day guard so expired hides
             // clear even if the day-boundary sweep already ran.
@@ -387,7 +397,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            list_items, create_item, edit_item, complete_item,
+            list_items, create_item, edit_item, complete_item, uncomplete_item,
             move_item, delete_item, run_sweep,
             hide_item, unhide_item,
             list_actions,

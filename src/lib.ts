@@ -52,6 +52,7 @@ export const api = {
   editItem: (id: string, text: string) =>
     invoke<void>("edit_item", { id, text }),
   completeItem: (id: string) => invoke<void>("complete_item", { id }),
+  uncompleteItem: (id: string) => invoke<void>("uncomplete_item", { id }),
   moveItem: (id: string, toSection: Section, newIndex: number) =>
     invoke<void>("move_item", { id, toSection, newIndex }),
   deleteItem: (id: string) => invoke<void>("delete_item", { id }),

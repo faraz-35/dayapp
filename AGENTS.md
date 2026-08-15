@@ -18,6 +18,7 @@ just queries over timestamped state.** No cron, no background jobs.
 |---|---|
 | Daily items reset overnight | `last_completed_date == today` comparison on render. At midnight the comparison just stops being true. |
 | Today items fall to Backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date`). Idempotent. |
+| Completed Today items disappear overnight | The same sweep deletes today rows with `status='done'` dated before today — the completion already lives in `actions`, so no extra log row. `purge_completed_today()` repeats it un-gated on launch for rows a gated-out sweep left behind. |
 | Backlog reminders promote to Today | `promote_due_reminders()` runs on launch (un-gated, idempotent): backlog rows with `remind_at <= today` move to `today`. |
 | "What I did this week" | `SELECT FROM actions WHERE action='completed'`. Every mutation logs itself. The Journal view filters this by day/week/month. |
 | "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X`. ▶/⏸ write open/close timestamps; the Journal groups these by day. The open session row *is* the active timer — no separate state. |
@@ -67,7 +68,12 @@ meta    key, value           — currently holds last_sweep_date
 ```
 
 - `section` ∈ `today` | `daily` | `backlog`
-- `status` ∈ `active` | `done`
+- `status` ∈ `active` | `done` — done Today rows stay in the list (crossed, like
+  done-daily) until the day-boundary sweep deletes them; `uncomplete_item` flips one
+  back to `active` and logs `uncompleted`. Done Backlog rows leave the list (the
+  legacy "complete = vanish" behaviour — only Today asks `list_items` for done rows).
+- `last_completed_date` — set on every completion (daily's greyed-reset keys off it;
+  today's sweep retirement uses it to keep same-day completions safe).
 - `hidden` ∈ `0` | `1` — soft-archive. The list commands take a `HiddenFilter`
   (`exclude | include | only` — the three ⌘P visibility modes) instead of always
   filtering `hidden = 0`; in `include`/`only` modes archived rows render inline in
@@ -356,7 +362,11 @@ Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spac
 - Timing (the one row whose timer is running): the ⏸ button + live `H:MM:SS` elapsed are
   **always visible** (not hover-gated), in the accent colour, so the active timer is
   identifiable at a glance. The pinned header chip mirrors it (survives scrolling away).
-- Done (non-daily): status flips, row removed from active view, completion logged. A running
+- Done (today): stays in place, greyed + line-through with the checkbox filled accent —
+  the same look as done-daily. Enter or a checkbox click toggles it back to active
+  (logged as `uncompleted`); the day-boundary sweep deletes the row. A running timer on
+  it is stopped first (the session is kept).
+- Done (backlog): status flips, row removed from active view, completion logged. A running
   timer on it is stopped first (the session is kept).
 - Done-today (daily): stays in place, greyed + line-through, checkbox filled accent. Resets
   automatically when `last_completed_date != today`.
@@ -375,7 +385,7 @@ Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spac
 |---|---|
 | `j` / `↓` | select next |
 | `k` / `↑` | select previous |
-| `Enter` | complete selected |
+| `Enter` | complete selected (toggles a crossed Today row back to active) |
 | `e` | edit selected |
 | `t` | start/stop timer on selected (toggles; starting stops any other) |
 | `⌫` / `Delete` | delete selected |

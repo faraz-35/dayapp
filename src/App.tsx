@@ -8,7 +8,7 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, formatLiveDuration, hideExpiry, parseItemTags, projectsApi, timersApi, todayStr, type ActiveTimer, type HideDuration, type HiddenFilter, type Item, type Project, type Section } from "./lib";
+import { api, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, timersApi, type ActiveTimer, type HideDuration, type HiddenFilter, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import Notes from "./Notes";
 import SectionList from "./components/SectionList";
@@ -87,7 +87,10 @@ export default function App() {
   const refresh = useCallback(async () => {
     const hidden = HIDDEN_FILTER[visibility];
     const [today, daily, backlog, projs] = await Promise.all([
-      api.listItems("today", false, hidden),
+      // Completed Today rows stay in the list — crossed out, like a done
+      // daily — until the day-boundary sweep retires them, so only Today
+      // asks for done rows.
+      api.listItems("today", true, hidden),
       api.listItems("daily", false, hidden),
       api.listItems("backlog", false, hidden),
       projectsApi.list(),
@@ -315,6 +318,19 @@ export default function App() {
   };
 
   const handleComplete = async (id: string, section: Section) => {
+    // A crossed Today row toggles back off — Enter or a checkbox click
+    // un-completes it. (Daily has no inverse: its completion is just
+    // "done for today".)
+    if (section === "today" && items.today.find((i) => i.id === id)?.status === "done") {
+      setItems((s) => ({
+        ...s,
+        today: s.today.map((i) =>
+          i.id === id ? { ...i, status: "active", lastCompletedDate: null } : i,
+        ),
+      }));
+      await api.uncompleteItem(id);
+      return;
+    }
     // Completing a running item stops its timer first — the session is kept.
     if (activeTimer?.itemId === id) {
       setActiveTimer(null);
@@ -324,7 +340,15 @@ export default function App() {
       setItems((s) => ({
         ...s,
         daily: s.daily.map((i) =>
-          i.id === id ? { ...i, lastCompletedDate: todayStr() } : i,
+          i.id === id ? { ...i, lastCompletedDate: localDateStr() } : i,
+        ),
+      }));
+    } else if (section === "today") {
+      // Stays in place, crossed out; the day-boundary sweep retires it.
+      setItems((s) => ({
+        ...s,
+        today: s.today.map((i) =>
+          i.id === id ? { ...i, status: "done", lastCompletedDate: localDateStr() } : i,
         ),
       }));
     } else {

@@ -2,6 +2,9 @@
 // and the hover-revealed action buttons (edit / project / reminder / hide /
 // delete). Drag handle is the ⠿ grip; DnD is wired by the parent via useSortable.
 //
+// Completed Today rows render like a done daily — crossed out, in place — until
+// the day-boundary sweep retires them; the checkbox (or Enter) toggles them back.
+//
 // Hidden rows (⌘P → Show All / Show Hidden Only) render inline but archived:
 // dimmed text, an inert checkbox, a ◐ chip carrying the hide's expiry, no drag
 // handle, and their only actions are unhide (↺) and delete.
@@ -12,7 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { formatDuration, formatLiveDuration, formatReminder, projectColor, todayStr, type HideDuration, type Item, type Project } from "../lib";
+import { formatDuration, formatLiveDuration, formatReminder, localDateStr, projectColor, type HideDuration, type Item, type Project } from "../lib";
 import HideMenu from "../HideMenu";
 import ProjectMenu from "../ProjectMenu";
 import ReminderMenu from "../ReminderMenu";
@@ -44,7 +47,7 @@ export default function ItemRow({
     useSortable({ id: item.id });
 
   const doneToday =
-    item.section === "daily" && item.lastCompletedDate === todayStr();
+    item.section === "daily" && item.lastCompletedDate === localDateStr();
   const done = item.status === "done" || doneToday;
 
   return (
@@ -66,8 +69,19 @@ export default function ItemRow({
 
       <button
         className={`item-check${done ? " checked" : ""}`}
-        onClick={(e) => { e.stopPropagation(); if (!done && !item.hidden) onComplete(); }}
-        title={item.hidden ? "Hidden — hover for ↺ unhide" : doneToday ? "Completed for today" : "Mark done"}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (item.hidden) return;
+          // Daily's checked state is inert (completion is per-day); a crossed
+          // Today row toggles back off.
+          if (done && item.section !== "today") return;
+          onComplete();
+        }}
+        title={item.hidden
+          ? "Hidden — hover for ↺ unhide"
+          : done
+            ? item.section === "today" ? "Completed — click to undo" : "Completed for today"
+            : "Mark done"}
         aria-label="Mark done"
       />
 

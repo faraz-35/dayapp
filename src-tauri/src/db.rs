@@ -182,8 +182,12 @@ impl Db {
         Ok(tx.commit()?)
     }
 
-    /// Mark a non-daily item done. Hides from active lists.
-    /// For a daily item, records completion for today; item stays visible but greyed.
+    /// Mark a non-daily item done. For a daily item, records completion for
+    /// today; the item stays visible but greyed. A today item also stays —
+    /// crossed out like a done daily — until the day-boundary sweep retires it;
+    /// `last_completed_date` is what tells that sweep which completions belong
+    /// to the current day (and keeps a same-day completion safe if the sweep
+    /// has already run).
     pub fn complete_item(&self, id: &str) -> anyhow::Result<()> {
         let conn = self.0.lock().unwrap();
         let now = now_iso();
@@ -205,11 +209,30 @@ impl Db {
                        Some(&status), Some(&status), &now)?;
         } else {
             tx.execute(
-                "UPDATE items SET status = 'done', updated_at = ?1 WHERE id = ?2",
-                params![now, id])?;
+                "UPDATE items SET status = 'done', last_completed_date = ?1, updated_at = ?2 WHERE id = ?3",
+                params![today, now, id])?;
             log_action(&tx, id, &text, "completed", Some(&section), Some(&section),
                        Some(&status), Some("done"), &now)?;
         }
+        Ok(tx.commit()?)
+    }
+
+    /// Restore a completed today item to active — Enter or a checkbox click on
+    /// a crossed row toggles it back. Logs `uncompleted`, the inverse of the
+    /// completion entry, so the journal shows the correction.
+    pub fn uncomplete_item(&self, id: &str) -> anyhow::Result<()> {
+        let conn = self.0.lock().unwrap();
+        let now = now_iso();
+        let tx = conn.unchecked_transaction()?;
+        let (text, section, status): (String, String, String) = tx.query_row(
+            "SELECT text, section, status FROM items WHERE id = ?1", params![id], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })?;
+        tx.execute(
+            "UPDATE items SET status = 'active', last_completed_date = NULL, updated_at = ?1 WHERE id = ?2",
+            params![now, id])?;
+        log_action(&tx, id, &text, "uncompleted", Some(&section), Some(&section),
+                   Some(&status), Some("active"), &now)?;
         Ok(tx.commit()?)
     }
 
@@ -421,6 +444,17 @@ impl Db {
                        Some("today"), Some("backlog"), None, None, &now)?;
         }
 
+        // Completed today items retire here — the cross has served its day and
+        // the completion already lives in `actions`, so the row is deleted (a
+        // NULL date means a pre-date-logging version wrote it; retire those
+        // too). Rows dated today are kept: the sweep runs at a day boundary,
+        // so a today-dated completion belongs to the fresh day.
+        let purged = tx.execute(
+            "DELETE FROM items
+             WHERE section = 'today' AND status = 'done'
+               AND (last_completed_date IS NULL OR last_completed_date != ?1)",
+            params![today])?;
+
         // Bump last_sweep_date. Even if zero items fell, we still record the sweep
         // so we don't re-run.
         tx.execute(
@@ -441,7 +475,25 @@ impl Db {
             params![now, today])?;
 
         tx.commit()?;
+        if purged > 0 {
+            log::info!("sweep: {purged} completed today item(s) cleared");
+        }
         Ok(to_fall.len())
+    }
+
+    /// Delete completed today items from before today — the un-gated half of
+    /// the sweep's retirement step. `run_sweep` does this when the day boundary
+    /// actually opens; this standalone pass catches rows a gated-out sweep
+    /// left behind (e.g. ones written by older versions on a day whose sweep
+    /// already ran). Idempotent.
+    pub fn purge_completed_today(&self) -> anyhow::Result<usize> {
+        let conn = self.0.lock().unwrap();
+        let n = conn.execute(
+            "DELETE FROM items
+             WHERE section = 'today' AND status = 'done'
+               AND (last_completed_date IS NULL OR last_completed_date != ?1)",
+            params![today_iso()])?;
+        Ok(n)
     }
 
     // ---- Log queries -----------------------------------------------------

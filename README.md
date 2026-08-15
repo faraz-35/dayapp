@@ -11,7 +11,7 @@ text field with a done button. Three behaviours fall out of the data model, no c
 | Behaviour | How |
 |---|---|
 | Daily items reset overnight | `WHERE last_completed_date == today` on render — at midnight the comparison just stops being true |
-| Today items fall to backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date`); idempotent |
+| Today items fall to backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date`); idempotent. Completed Today rows stay crossed in place until that sweep deletes them |
 | Reminders promote backlog → today | A backlog item's `remind_at` date comes due → `promote_due_reminders()` moves it to Today on launch; fires once, no cron |
 | "What I did this week" | `SELECT FROM actions WHERE action='completed'` — the log writes itself on every mutation; the Journal view narrows to Today/Week/Month or any day |
 | "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X` — ▶/⏸ write open/close timestamps; the Journal groups them by day |
@@ -113,7 +113,7 @@ dayapp/
 |---|---|
 | `j` / `↓` | select next |
 | `k` / `↑` | select previous |
-| `Enter` | complete selected |
+| `Enter` | complete selected (on a crossed Today row: un-complete) |
 | `e` | edit selected |
 | `t` | start/stop timer on selected (toggles; starting stops any other) |
 | `⌫` / `Delete` | delete selected |

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS items (
     section             TEXT NOT NULL CHECK (section IN ('today','daily','backlog')),
     status              TEXT NOT NULL DEFAULT 'active'
                         CHECK (status IN ('active','done')),
-    last_completed_date TEXT,                                    -- ISO YYYY-MM-DD; only daily uses it
+    last_completed_date TEXT,                                    -- ISO YYYY-MM-DD; daily's reset + today's sweep retirement key off it
     sort_order          INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL,
     updated_at          TEXT NOT NULL,
