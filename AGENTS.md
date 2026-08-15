@@ -207,7 +207,7 @@ dayapp/
 │       ├── SectionView.tsx         ← one section (head + capture input + sortable items + dropzone)
 │       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput
 │       ├── JournalView.tsx         ← the journal: actions log + per-task time, grouped by day
-│       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump)
+│       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
 └── src-tauri/
     ├── src/
     │   ├── lib.rs                  ← Tauri commands + setup (sweep, reminders, logging plugin) + self_update
@@ -237,7 +237,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionView.tsx` | one section's header + capture input + sortable items + dropzone | DnD sensors/handlers |
 | `ItemRow.tsx` | one row's render + ▶/⏸ timer control + `EditInput` | DnD wiring (from `useSortable` via parent) |
 | `JournalView.tsx` | fetching + filtering + grouping the actions log + per-task time totals | — |
-| `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump | the hit list (passed in from `App`) |
+| `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---
 
@@ -381,7 +381,7 @@ Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spac
 | `⌫` / `Delete` | delete selected |
 | single-click | select + enter edit mode (caret at end, not full-select) |
 | `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, …) |
-| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump |
+| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` flips it to the project filter picker |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets) — CSS `zoom` on `<html>`, persisted in localStorage (`dayapp-zoom`); scales every px dimension together, so the design's proportions hold at any size |
 
 **Visibility modes (⌘P):** `Show Regular View` (default — hidden entries excluded),
@@ -393,7 +393,15 @@ button toggles hidden-only.
 
 **Priority filter (⌘P):** `Show Priority 1/2/3 Only` narrows the main list to one tier
 (`displayItems` in `App.tsx`; DnD indexes map back to full-list space in `handleMoveItem`).
-Re-running the active tier's command clears it; `Show Regular View` resets everything.
+Re-running the active tier's command clears it.
+
+**Project filter (⌘F `#`):** typing a leading `#` in the ⌘F search flips the hit list to the
+projects (color dot + name, narrowed by the text after the `#`); picking one narrows the main
+list to that project, picking the already-active one clears it (the same toggle rule as the
+priority tiers). Same `displayItems` pipeline — it composes with the priority tier.
+
+**Show Regular View is the universal reset:** it clears the visibility mode, priority tier,
+and project filter together — one command always restores the plain unfiltered list.
 
 The keyboard handler **ignores events when an `<input>`/`<textarea>` is focused** so typing
 into Notes or edit fields isn't hijacked.

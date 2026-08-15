@@ -63,6 +63,9 @@ export default function App() {
   // ⌘P "Show Priority N Only" — narrow the list to one urgency tier; null = off.
   // Session-only, like visibility.
   const [priorityFilter, setPriorityFilter] = useState<1 | 2 | 3 | null>(null);
+  // ⌘F "#project" — narrow the list to one project; null = off. Session-only,
+  // like the others, and composed with the priority tier in displayItems.
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
@@ -120,19 +123,21 @@ export default function App() {
     localStorage.setItem("dayapp-zoom", String(zoom));
   }, [zoom]);
 
-  // What the user sees: items narrowed to the ⌘P priority filter, if any.
-  // Everything display-shaped (SectionList, search hits, keyboard nav, totals)
-  // reads this; mutations read the full `items`, and DnD indexes map back to
-  // full-list space in handleMoveItem.
+  // What the user sees: items narrowed by the ⌘P priority tier and/or the ⌘F
+  // project filter, if any. Everything display-shaped (SectionList, search
+  // hits, keyboard nav, totals) reads this; mutations read the full `items`,
+  // and DnD indexes map back to full-list space in handleMoveItem.
   const displayItems = useMemo<Record<Section, Item[]>>(() => {
-    if (priorityFilter === null) return items;
-    const byTier = (list: Item[]) => list.filter((i) => i.priority === priorityFilter);
+    if (priorityFilter === null && projectFilter === null) return items;
+    const matches = (i: Item) =>
+      (priorityFilter === null || i.priority === priorityFilter) &&
+      (projectFilter === null || i.projectId === projectFilter);
     return {
-      today: byTier(items.today),
-      daily: byTier(items.daily),
-      backlog: byTier(items.backlog),
+      today: items.today.filter(matches),
+      daily: items.daily.filter(matches),
+      backlog: items.backlog.filter(matches),
     };
-  }, [items, priorityFilter]);
+  }, [items, priorityFilter, projectFilter]);
 
   // All currently-visible item ids — drives the per-row cumulative totals fetch.
   const allIds = useMemo(
@@ -210,8 +215,15 @@ export default function App() {
     {
       id: "view-regular",
       label: "Show Regular View",
-      hint: "hidden entries tucked away",
-      run: () => { setView("list"); setVisibility("regular"); setPriorityFilter(null); },
+      hint: "clears every filter",
+      // The universal reset: the unfiltered list, regardless of which
+      // visibility / priority / project filters are stacked up.
+      run: () => {
+        setView("list");
+        setVisibility("regular");
+        setPriorityFilter(null);
+        setProjectFilter(null);
+      },
     },
     {
       id: "view-all",
@@ -494,6 +506,14 @@ export default function App() {
     });
   }, []);
 
+  // Selecting a project in ⌘F's `#` mode narrows the main list to it; picking
+  // the already-active project clears the filter — the same toggle rule as the
+  // ⌘P priority tiers. Show Regular View clears it with everything else.
+  const handleSelectProject = useCallback((id: string) => {
+    setView("list");
+    setProjectFilter((p) => (p === id ? null : id));
+  }, []);
+
   // ---- Keyboard nav ----------------------------------------------------
 
   const allVisible = useMemo(
@@ -601,9 +621,13 @@ export default function App() {
                 surface. Self-contained: owns its state, API, and persistence.
                 In hidden-only mode it lists the hidden notes instead. */}
             <Notes hiddenFilter={HIDDEN_FILTER[visibility]} />
-            {(visibility === "hidden" || priorityFilter !== null) && allVisible.length === 0 && (
+            {(visibility === "hidden" || priorityFilter !== null || projectFilter !== null) && allVisible.length === 0 && (
               <div className="empty">
-                {visibility === "hidden" ? "Nothing hidden." : `No priority ${priorityFilter} tasks.`}
+                {visibility === "hidden"
+                  ? "Nothing hidden."
+                  : projectFilter
+                    ? `No tasks in ${projects.find((p) => p.id === projectFilter)?.name ?? "project"}.`
+                    : `No priority ${priorityFilter} tasks.`}
               </div>
             )}
             <SectionList
@@ -639,8 +663,11 @@ export default function App() {
       <SearchMenu
         open={searchOpen}
         hits={searchHits}
+        projects={projects}
+        activeProjectId={projectFilter}
         onClose={() => setSearchOpen(false)}
         onJump={jumpTo}
+        onSelectProject={handleSelectProject}
       />
       <CommandPalette
         open={paletteOpen}

@@ -124,7 +124,7 @@ dayapp/
 | hover **◷** | set a reminder (Tomorrow / 3 days / week / pick date) |
 | hover **◐** | hide item/note (forever / day / week / month) |
 | `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
-| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump |
+| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` switches it to the project filter |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets; persists across launches) |
 
 ## Hiding
@@ -136,7 +136,9 @@ entirely (no faded clutter).
 The three visibility commands in the ⌘P palette are all filters over the same main
 page — there is no separate archive screen:
 
-- **Show Regular View** — the default; hidden entries are excluded.
+- **Show Regular View** — the default; hidden entries are excluded. This is
+  also the universal reset: it clears the priority and project filters too,
+  so one command always brings back the plain list.
 - **Show All** — hidden tasks appear inline in their sections and hidden notes
   back in the notes list: dimmed, marked **◐** with the hide's expiry, hover
   actions reduced to unhide (↺) and delete.
@@ -167,6 +169,13 @@ project, a new one is created from it — but only when the tag is the last thin
 typed (`fix bug #acme` creates "acme"; `fix bug #acme notes` does not). The tag
 is stripped from the row once linked. (Tags compose with `!1..3` priority
 tokens — see [Priorities](#priorities).)
+
+To focus on one project's work, press **⌘F and type `#`**: the search list
+becomes your projects (keep typing after the `#` to narrow it), each shown with
+its color dot. Pick one — ↑/↓ + Enter or a click — and the main list shows only
+that project's tasks. The filtered project is marked **filtered** in the list;
+picking it again clears the filter, as does **⌘P → Show Regular View**. The
+filter composes with the priority tiers and lasts for the session only.
 
 Assigning a project is housekeeping — it's **not** logged to the journal (only
 completion/movement is). Deleting a project unassigns its items; the items
