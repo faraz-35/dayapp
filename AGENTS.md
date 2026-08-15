@@ -90,10 +90,11 @@ meta    key, value           — currently holds last_sweep_date
   **not** logged. Shown as signal bars (`▮▮▮` `▮▮▯` `▮▯▯` — filled count = urgency, so
   P1 carries the most visual mass; filled bars use the accent, empty slots a faint track)
   on Today/Daily rows only; Backlog rows are clean. The Backlog is sorted by it (priority
-  first, then manual order — DnD reorders within a tier) and tier boundaries there render
-  as hairline dividers whose label is the entering tier's bars (bare hairline before the
-  unprioritized tail — derived purely from the rendered order in `SectionView.tsx`, so
-  filters that drop tiers drop their dividers); Today/Daily stay manual.
+  first, then manual order — DnD reorders within a tier) and every tier group there is
+  introduced by a hairline divider labeled with the group's bars (the unmarked group's
+  label is the empty track; a single-tier Backlog renders undivided — derived purely from
+  the rendered order in `SectionView.tsx`, so filters that drop tiers drop their dividers);
+  Today/Daily stay manual.
 - `remind_at` — ISO `YYYY-MM-DD` on which a backlog item auto-promotes to `today`. The
   promotion is logged as a `moved` action (backlog→today) and `remind_at` is cleared so it
   fires once. Date-granular, fires on launch (no cron / no macOS notification).
@@ -365,8 +366,8 @@ below 455px of width a media query hides the masthead.
 - Resting: the checkbox circle + text, plus any right-aligned metadata (priority signal
   bars, `⏱` cumulative time, project label, reminder chip). Rows with no priority / tracked
   time / project / reminder show only checkbox + text — and Backlog rows never show bars:
-  tier boundaries between neighbours render as `.tier-divider` hairlines labeled with the
-  tier's bars (Backlog only — never Today/Daily).
+  every tier group there is introduced by a `.tier-divider` hairline labeled with the
+  group's bars, empty track for unmarked (Backlog only — never Today/Daily).
 - Hover: row bg → `--bg-hover`; grip (⠿) + ▶ timer + project/reminder/hide + delete (×) buttons
   fade in. The priority bars + project label stay visible (the row's identity, wanted while its
   actions are on screen); the time / reminder / hidden metadata fades out. Checkbox circle

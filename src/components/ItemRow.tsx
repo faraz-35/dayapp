@@ -187,14 +187,15 @@ export default function ItemRow({
 // The tier's signal bars: filled count = urgency (P1 = 3 filled, P3 = 1), so
 // the most urgent tier carries the most visual mass. Shown on Today/Daily
 // rows; in the Backlog the tier dividers use it as their label instead — rows
-// there stay clean, the groups carry the tier.
-export function PriorityBars({ priority }: { priority: 1 | 2 | 3 }) {
-  const filled = 4 - priority;
+// there stay clean, the groups carry the tier. A null priority renders the
+// bare track (no filled bars): the unmarked group's divider label.
+export function PriorityBars({ priority }: { priority: 1 | 2 | 3 | null }) {
+  const filled = priority == null ? 0 : 4 - priority;
   return (
     <span
       className="priority-bars"
-      title={`Priority ${priority}`}
-      aria-label={`Priority ${priority}`}
+      title={priority == null ? undefined : `Priority ${priority}`}
+      aria-label={priority == null ? undefined : `Priority ${priority}`}
     >
       {[0, 1, 2].map((i) => (
         <span key={i} className={`bar${i < filled ? " filled" : ""}`} />

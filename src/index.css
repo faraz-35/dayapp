@@ -700,10 +700,10 @@ button {
 .priority-bars .bar.filled { background: var(--accent); }
 
 /* Priority tier dividers (Backlog only). The section sorts P1 → P3 → unmarked,
-   so each tier boundary renders as a hairline whose label is the entering
-   tier's signal bars; the unmarked tail gets a bare hairline. Sub-header
-   level — quieter than the section heads. Dividers appear only between
-   consecutive items whose tiers differ, so absent tiers leave no trace. */
+   and every tier group is introduced by a hairline whose label is the group's
+   signal bars — the unmarked group's label is the empty track. The label keeps
+   the divider from reading as a capture input's underline. Sub-header level —
+   quieter than the section heads; a single-tier Backlog renders undivided. */
 .tier-divider {
   display: flex;
   align-items: center;
@@ -717,7 +717,6 @@ button {
   height: 1px;
   background: var(--border);
 }
-.tier-divider.bare::after { content: none; }
 
 /* Per-project label. Color is set inline per project (deterministic hue) so the
    eye can group items across sections at a glance. */

@@ -1,9 +1,9 @@
 // SectionView — one of the three task sections (Today / Daily / Backlog).
 // Renders: header (label + count), always-open capture input, sortable item
 // rows, and a droppable empty zone so the section accepts drops even when empty.
-// In the Backlog (sorted P1 → P3 → unmarked) tier changes between neighbours
-// render as hairline dividers labeled with the tier's signal bars, making the
-// existing sort legible.
+// In the Backlog (sorted P1 → P3 → unmarked) each tier group is introduced by
+// a hairline divider labeled with the group's signal bars, making the existing
+// sort legible.
 
 import { Fragment, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
@@ -42,6 +42,11 @@ export default function SectionView({
   const [draft, setDraft] = useState("");
   const { setNodeRef, isOver } = useDroppable({ id: `dropzone-${section}` });
 
+  // A Backlog whose items all share one tier (including all-unmarked) is a
+  // single group — no dividers, nothing to label.
+  const singleTier =
+    items.length > 0 && items.every((i) => i.priority === items[0].priority);
+
   const submit = () => {
     const t = draft.trim();
     if (t) onQuickAdd(section, t);
@@ -75,20 +80,23 @@ export default function SectionView({
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
         {items.map((item, idx) => {
           const timing = item.id === activeTimerId;
-          // Backlog only: the section is sorted P1 → P3 → unmarked, so a tier
-          // change between neighbours becomes a hairline separator labeled
-          // with the entering tier's signal bars (a bare hairline before the
-          // unmarked tail). Rows in the Backlog carry no bars — the dividers
-          // are the tier signal there. Divider state comes purely from the
-          // rendered order — filters that drop tiers just remove their
-          // boundaries — and they're inert: not sortable, not droppable.
-          const tierChange =
-            section === "backlog" && idx > 0 && items[idx - 1].priority !== item.priority;
+          // Backlog only: the section is sorted P1 → P3 → unmarked, so every
+          // tier group — including the first, and the unmarked tail, whose
+          // label is the empty track — is introduced by a hairline divider
+          // labeled with the group's signal bars. Rows carry no bars there;
+          // the dividers are the tier signal, and never read as a bare input
+          // underline. Divider state comes purely from the rendered order —
+          // filters that drop tiers just remove their boundaries — and the
+          // dividers are inert: not sortable, not droppable.
+          const dividerBefore =
+            section === "backlog" &&
+            !singleTier &&
+            (idx === 0 || items[idx - 1].priority !== item.priority);
           return (
             <Fragment key={item.id}>
-              {tierChange && (
-                <div className={`tier-divider${item.priority == null ? " bare" : ""}`}>
-                  {item.priority != null && <PriorityBars priority={item.priority} />}
+              {dividerBefore && (
+                <div className="tier-divider">
+                  <PriorityBars priority={item.priority} />
                 </div>
               )}
               <ItemRow

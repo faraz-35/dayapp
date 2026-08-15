@@ -193,10 +193,12 @@ without one leaves it alone; `!0` clears it.
 Today and Daily rows show the tier as three small **signal bars** on the right —
 `▮▮▮` = priority 1, `▮▮▯` = 2, `▮▯▯` = 3 — more filled bars means more urgent.
 The **Backlog is sorted by priority** — tier 1 first, no priority last, manual
-drag order within a tier — and its rows carry no bars: each tier boundary is a
-hairline divider labeled with the entering tier's bars (a bare hairline before
-the unprioritized tail), so the groups read structurally and a drag across a
-divider snapping back to its tier is visible, not surprising.
+drag order within a tier — and its rows carry no bars: every tier group is
+introduced by a hairline divider labeled with the group's bars (the
+unprioritized group's label is an empty track), so the groups read
+structurally, no divider can be mistaken for the capture input, and a drag
+across a divider snapping back to its tier is visible, not surprising. A
+Backlog whose items all share one tier renders undivided.
 
 **⌘P → Show Priority 1/2/3 Only** filters the whole list down to one tier
 (each command's hint shows its bars). Re-run the active tier's command — or
