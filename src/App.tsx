@@ -253,7 +253,7 @@ export default function App() {
     { id: "view-journal", label: "View Journal", run: () => setView("journal") },
     {
       id: "update",
-      label: "Update DayApp",
+      label: "Update Faraz’s Day",
       hint: "rebuild from source",
       run: startUpdate,
     },
@@ -591,7 +591,8 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        {view === "journal" && <span className="title">Journal</span>}
+        {/* The list view carries the brand; the journal view its own title. */}
+        <span className="title">{view === "journal" ? "Journal" : "Faraz’s Day"}</span>
         <div className="header-right">
           {/* The running timer is always visible here — survives scrolling away
               from the timed row, and doubles as a "current focus" display. Click
