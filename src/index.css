@@ -59,6 +59,7 @@ button {
 /* ---- Header ------------------------------------------------------------ */
 
 .header {
+  position: relative;                   /* owns the absolutely centered masthead */
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -67,13 +68,28 @@ button {
 }
 .header button { -webkit-app-region: no-drag; }
 
+/* The masthead — brand on the list view, "Journal" in the journal. Truly
+   centered over the header (not flex-centered, which the varying right-side
+   controls would offset). The one serif surface in the app: New York (ui-serif)
+   italic, falling back to Didot/Georgia on systems without it. */
 .title {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: ui-serif, "New York", Didot, Georgia, serif;
+  font-style: italic;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   color: var(--text-dim);
+  white-space: nowrap;
+  transition: opacity 0.12s ease;
 }
+
+/* Fades out while a timer runs, so the right-side timer chip (task names up
+   to 120px wide) never collides with it on a 480px window. */
+.title-yields { opacity: 0; }
 
 .header-right {
   display: flex;
@@ -455,7 +471,7 @@ button {
 .journal-row .journal-text { color: var(--text); }
 
 /* Journal toolbar. Borderless uppercase segments — the same language as
-   .section-name / .title — so the filter reads as chrome, not a foreign
+   .section-name — so the filter reads as chrome, not a foreign
    widget. Active = accent text + a thin underline; nothing is filled. */
 .filter-bar {
   display: flex;
@@ -647,18 +663,20 @@ button {
 .menu-input::placeholder { color: var(--text-faint); }
 
 /* Right-aligned row metadata. Pushed to the far edge (margin-left:auto) so the
-   project name + reminder sit flush right. On hover this fades out so the row's
-   action buttons take its place — resting state shows metadata, hover reveals
-   actions (the existing reveal-on-hover pattern). */
+   project name + reminder sit flush right. Priority + project label stay
+   visible on hover — they're the row's identity, wanted while its actions are
+   on screen — while time / reminder / hidden-status fade so the buttons take
+   their place. Everything is opacity-only with reserved slots, so nothing
+   reflows on hover. */
 .item-meta {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-left: auto;
   flex-shrink: 0;
-  transition: opacity 0.08s ease;
 }
-.item:hover .item-meta { opacity: 0; }
+.item-meta :is(.time-label, .reminder-chip, .hidden-chip) { transition: opacity 0.08s ease; }
+.item:hover .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { opacity: 0; }
 
 /* Priority bangs (!, !!, !!!) — the row's urgency tier, set via !1/!2/!3
    tokens in the text. Brighter = more urgent; the Backlog is sorted by it. */

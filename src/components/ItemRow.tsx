@@ -91,9 +91,11 @@ export default function ItemRow({
         <span className="item-text">{item.text}</span>
       )}
 
-      {/* Right-aligned metadata (time + project label + reminder). Resting state
-          shows this; on hover it yields to the action buttons. Suppressed while
-          timing — the live elapsed then lives in the action cluster instead. */}
+      {/* Right-aligned metadata (priority + time + project label + reminder).
+          Priority + project stay visible on hover (the row's identity, wanted
+          while its actions are on screen); time / reminder yield to the
+          buttons. Suppressed while timing — the live elapsed then lives in the
+          action cluster instead. */}
       {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || item.priority != null) && (
         <div className="item-meta">
           {item.priority != null && (

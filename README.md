@@ -159,8 +159,9 @@ Projects are a second organising axis alongside the three sections. Hover any
 item and click **#** to assign it to a project (or clear it), or type a name and
 press Enter to create a new one. Each item shows its project as a small,
 **color-coded** label on the far right of the row — the color is stable per
-project, so you can group items across sections at a glance. The label fades out
-on hover to make room for the row's action buttons.
+project, so you can group items across sections at a glance. The label (and the
+item's `!` priority bangs) stay visible on hover, alongside the row's action
+buttons.
 
 You can also assign a project right from the capture field: end the text with a
 `#tag` and it links to the project. Matching is case-insensitive by exact name

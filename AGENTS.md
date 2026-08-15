@@ -340,6 +340,9 @@ keyboard-first.** Every choice below is intentional.
 
 Typography: `-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif`.
 Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spacing.
+The one serif surface is the centered header masthead (the "Faraz's Day" brand, or
+"Journal" in the journal view): `ui-serif` (New York) italic at 14px, Didot/Georgia
+fallbacks; it fades out while a timer runs so the timer chip never collides with it.
 
 ### Spacing & shape
 
@@ -353,12 +356,14 @@ Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spac
 ### Interaction patterns (existing — match these for new features)
 
 **Item rows:**
-- Resting: the checkbox circle + text, plus any right-aligned metadata (`⏱` cumulative time,
-  project label, reminder chip). Rows with no tracked time / project / reminder show only
-  checkbox + text.
+- Resting: the checkbox circle + text, plus any right-aligned metadata (`!` priority bangs,
+  `⏱` cumulative time, project label, reminder chip). Rows with no priority / tracked time /
+  project / reminder show only checkbox + text.
 - Hover: row bg → `--bg-hover`; grip (⠿) + ▶ timer + project/reminder/hide + delete (×) buttons
-  fade in (replacing the resting metadata); checkbox circle border → `--accent`. Editing is
-  reached by single-click or the `e` key — there is no explicit edit button.
+  fade in. The priority bangs + project label stay visible (the row's identity, wanted while its
+  actions are on screen); the time / reminder / hidden metadata fades out. Checkbox circle
+  border → `--accent`. Editing is reached by single-click or the `e` key — there is no explicit
+  edit button.
 - Timing (the one row whose timer is running): the ⏸ button + live `H:MM:SS` elapsed are
   **always visible** (not hover-gated), in the accent colour, so the active timer is
   identifiable at a glance. The pinned header chip mirrors it (survives scrolling away).
