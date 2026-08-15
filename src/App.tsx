@@ -592,24 +592,24 @@ export default function App() {
     <div className="app">
       <header className="header">
         {/* The list view carries the brand; the journal view its own title.
-            While a timer runs, the masthead steps aside — the chip can reach
-            the center on a 480px window. */}
-        <span className={`title${activeTimer ? " title-yields" : ""}`}>
-          {view === "journal" ? "Journal" : "Faraz’s Day"}
-        </span>
+            Always rendered — the timer chip carries no task-name text (tooltip
+            only), so the two coexist on the 480px window. Below ~455px the
+            media query in index.css hides the masthead. */}
+        <span className="title">{view === "journal" ? "Journal" : "Faraz’s Day"}</span>
         <div className="header-right">
           {/* The running timer is always visible here — survives scrolling away
-              from the timed row, and doubles as a "current focus" display. Click
-              the body to stop (keep the session); × discards it entirely. */}
+              from the timed row, and doubles as a "current focus" display.
+              Pulse + elapsed only; the task name rides in the tooltip so the
+              centered masthead never has to hide. Click to stop (keep the
+              session); × discards it entirely. */}
           {activeTimer && (
             <div className="timer-chip" title="Timer running">
               <button
                 className="timer-chip-main"
                 onClick={() => handleToggleTimer(activeTimer.itemId)}
-                title="Stop timer (keep session)"
+                title={`Stop timer (keep session) — ${activeTimer.itemText || "Timer"}`}
               >
                 <span className="timer-chip-pulse" />
-                <span className="timer-chip-name">{activeTimer.itemText || "Timer"}</span>
                 <span className="timer-chip-elapsed">{formatLiveDuration(liveElapsed)}</span>
               </button>
               <button

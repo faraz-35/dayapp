@@ -342,7 +342,9 @@ Typography: `-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-u
 Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spacing.
 The one serif surface is the centered header masthead (the "Faraz's Day" brand, or
 "Journal" in the journal view): `ui-serif` (New York) italic at 14px, Didot/Georgia
-fallbacks; it fades out while a timer runs so the timer chip never collides with it.
+fallbacks. It is always rendered, even while a timer runs — the timer chip shows only
+a pulse + elapsed (task name in its tooltip) so the two coexist on the 480px window;
+below 455px of width a media query hides the masthead.
 
 ### Spacing & shape
 
