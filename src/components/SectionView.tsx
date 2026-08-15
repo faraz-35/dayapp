@@ -1,8 +1,10 @@
 // SectionView — one of the three task sections (Today / Daily / Backlog).
 // Renders: header (label + count), always-open capture input, sortable item
 // rows, and a droppable empty zone so the section accepts drops even when empty.
+// In the Backlog (sorted P1 → P3 → unmarked) tier changes between neighbours
+// render as labeled hairline dividers, making the existing sort legible.
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { type HideDuration, type Item, type Project, type Section } from "../lib";
@@ -70,29 +72,42 @@ export default function SectionView({
       )}
 
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-        {items.map((item) => {
+        {items.map((item, idx) => {
           const timing = item.id === activeTimerId;
+          // Backlog only: the section is sorted P1 → P3 → unmarked, so a tier
+          // change between neighbours becomes a labeled separator (a bare
+          // hairline before the unmarked tail). Divider state comes purely
+          // from the rendered order — filters that drop tiers just remove
+          // their boundaries — and they're inert: not sortable, not droppable.
+          const tierChange =
+            section === "backlog" && idx > 0 && items[idx - 1].priority !== item.priority;
           return (
-            <ItemRow
-              key={item.id}
-              item={item}
-              project={projects.find((p) => p.id === item.projectId) ?? null}
-              selected={item.id === selectedId}
-              editing={item.id === editingId}
-              onSelect={onSelect}
-              onComplete={() => onComplete(item.id, section)}
-              onDelete={() => onDelete(item.id, section)}
-              onCommitEdit={(text) => onCommitEdit(item.id, text)}
-              onStartEdit={() => onStartEdit(item.id)}
-              onHide={(duration) => onHide(item.id, section, duration)}
-              onUnhide={() => onUnhide(item.id)}
-              onSetProject={(projectId) => onSetProject(item.id, projectId)}
-              onSetReminder={(remindAt) => onSetReminder(item.id, remindAt)}
-              onToggleTimer={() => onToggleTimer(item.id)}
-              isTiming={timing}
-              elapsedSec={timing ? liveElapsed : 0}
-              totalSec={timeTotals[item.id] ?? 0}
-            />
+            <Fragment key={item.id}>
+              {tierChange && (
+                <div className={`tier-divider${item.priority == null ? " bare" : ""}`}>
+                  {item.priority != null && <span className="tier-label">P{item.priority}</span>}
+                </div>
+              )}
+              <ItemRow
+                item={item}
+                project={projects.find((p) => p.id === item.projectId) ?? null}
+                selected={item.id === selectedId}
+                editing={item.id === editingId}
+                onSelect={onSelect}
+                onComplete={() => onComplete(item.id, section)}
+                onDelete={() => onDelete(item.id, section)}
+                onCommitEdit={(text) => onCommitEdit(item.id, text)}
+                onStartEdit={() => onStartEdit(item.id)}
+                onHide={(duration) => onHide(item.id, section, duration)}
+                onUnhide={() => onUnhide(item.id)}
+                onSetProject={(projectId) => onSetProject(item.id, projectId)}
+                onSetReminder={(remindAt) => onSetReminder(item.id, remindAt)}
+                onToggleTimer={() => onToggleTimer(item.id)}
+                isTiming={timing}
+                elapsedSec={timing ? liveElapsed : 0}
+                totalSec={timeTotals[item.id] ?? 0}
+              />
+            </Fragment>
           );
         })}
       </SortableContext>

@@ -680,17 +680,48 @@ button {
 .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { transition: opacity 0.08s ease; }
 .item:hover .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { opacity: 0; }
 
-/* Priority bangs (!, !!, !!!) — the row's urgency tier, set via !1/!2/!3
-   tokens in the text. Brighter = more urgent; the Backlog is sorted by it. */
-.priority-label {
-  font-size: 11px;
-  font-weight: 700;
+/* Priority signal bars — the row's urgency tier, set via !1/!2/!3 tokens in
+   the text. Filled count = urgency (P1 = 3 filled … P3 = 1), filled in the one
+   accent, empty slots a faint track. The Backlog sorts + groups by tier (see
+   .tier-divider below). Like the project label, stays visible on hover. */
+.priority-bars {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
   flex-shrink: 0;
-  white-space: nowrap;
 }
-.priority-label.p1 { color: var(--text); }
-.priority-label.p2 { color: var(--text-dim); }
-.priority-label.p3 { color: var(--text-faint); }
+.priority-bars .bar {
+  width: 3px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--border);
+}
+.priority-bars .bar.filled { background: var(--accent); }
+
+/* Priority tier dividers (Backlog only). The section sorts P1 → P3 → unmarked,
+   so each tier boundary renders as a hairline with a centered micro-label
+   (P2 / P3 …); the unmarked tail gets a bare hairline. Sub-header level —
+   quieter than the section heads. Dividers appear only between consecutive
+   items whose tiers differ, so absent tiers leave no trace. */
+.tier-divider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 8px;
+}
+.tier-divider::before,
+.tier-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.tier-divider.bare::after { content: none; }
+.tier-divider .tier-label {
+  font-size: 9px;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+}
 
 /* Per-project label. Color is set inline per project (deterministic hue) so the
    eye can group items across sections at a glance. */

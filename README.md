@@ -160,7 +160,7 @@ item and click **#** to assign it to a project (or clear it), or type a name and
 press Enter to create a new one. Each item shows its project as a small,
 **color-coded** label on the far right of the row — the color is stable per
 project, so you can group items across sections at a glance. The label (and the
-item's `!` priority bangs) stay visible on hover, alongside the row's action
+item's priority bars) stay visible on hover, alongside the row's action
 buttons.
 
 You can also assign a project right from the capture field: end the text with a
@@ -190,13 +190,17 @@ composes with `#tags` in either order: `fix bug #acme !1`, `fix bug !1 #acme`,
 or either one alone. Editing with a `!N` token updates the priority; editing
 without one leaves it alone; `!0` clears it.
 
-Each row shows its tier as bangs on the right — `!`, `!!`, `!!!` (brighter =
-more urgent) — and the **Backlog is sorted by priority**: tier 1 first, no
-priority last, manual drag order within a tier. Today and Daily keep their
-manual order.
+Each row shows its tier as three small **signal bars** on the right — `▮▮▮` =
+priority 1, `▮▮▯` = 2, `▮▯▯` = 3 — so more filled bars means more urgent. The
+**Backlog is sorted by priority**: tier 1 first, no priority last, manual drag
+order within a tier. Tier boundaries in the Backlog render as hairline
+dividers (labeled `P2` / `P3`; a bare hairline before the unprioritized tail),
+so the groups read structurally — and a drag across a divider snaps back to
+its tier, which the dividers now make visible. Today and Daily keep their
+manual order, with the bars as the only priority signal.
 
 **⌘P → Show Priority 1/2/3 Only** filters the whole list down to one tier
-(each command's hint shows its bangs). Re-run the active tier's command — or
+(each command's hint shows its bars). Re-run the active tier's command — or
 **Show Regular View** — to clear the filter. Priorities are housekeeping, like
 projects: not logged to the journal.
 

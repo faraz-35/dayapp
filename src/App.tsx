@@ -243,7 +243,8 @@ export default function App() {
     ...([1, 2, 3] as const).map((n) => ({
       id: `prio-${n}`,
       label: `Show Priority ${n} Only`,
-      hint: "!".repeat(n),
+      // Mirrors the row's signal bars: filled count = urgency (P1 = 3).
+      hint: "▮".repeat(4 - n),
       run: () => {
         setView("list");
         // Re-running the active tier's command clears the filter.

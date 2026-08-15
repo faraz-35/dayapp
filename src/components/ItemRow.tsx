@@ -50,6 +50,11 @@ export default function ItemRow({
     item.section === "daily" && item.lastCompletedDate === localDateStr();
   const done = item.status === "done" || doneToday;
 
+  // Priority renders as signal bars — filled count = urgency (P1 = 3 filled,
+  // P3 = 1), so the most urgent rows carry the most visual mass, matching the
+  // Backlog's tier-first sort.
+  const priorityFilled = item.priority != null ? 4 - item.priority : 0;
+
   return (
     <div
       ref={setNodeRef}
@@ -100,9 +105,14 @@ export default function ItemRow({
         <div className="item-meta">
           {item.priority != null && (
             <span
-              className={`priority-label p${item.priority}`}
+              className="priority-bars"
               title={`Priority ${item.priority}`}
-            >{"!".repeat(item.priority)}</span>
+              aria-label={`Priority ${item.priority}`}
+            >
+              {[0, 1, 2].map((i) => (
+                <span key={i} className={`bar${i < priorityFilled ? " filled" : ""}`} />
+              ))}
+            </span>
           )}
           {item.hidden && (
             <span
