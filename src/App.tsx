@@ -1,5 +1,6 @@
-// App — the shell. Owns app-wide state (items, selection, view), effects (load,
-// sweep tick, self-update events), and global keyboard handlers (⌘P, ⌘F, j/k).
+// App — the shell. Owns app-wide state (items, selection, view, zoom), effects
+// (load, sweep tick, self-update events), and global keyboard handlers (⌘P,
+// ⌘F, ⌘+/⌘-, j/k).
 // Everything else is delegated to focused components in ./components.
 //
 // Layout contract (see AGENTS.md "Layout architecture"): the header is pinned
@@ -30,6 +31,15 @@ const HIDDEN_FILTER: Record<Visibility, HiddenFilter> = {
   all: "include",
   hidden: "only",
 };
+
+// ⌘+/⌘- zoom bounds and step, in the comfortable-reading range around the 13px
+// base — much beyond it and the fixed 480px window stops fitting a list. The
+// round-to-10th keeps float drift (0.1 + 0.2 style) from wedging the clamps.
+const ZOOM_MIN = 0.7;
+const ZOOM_MAX = 1.6;
+const ZOOM_STEP = 0.1;
+const clampZoom = (z: number) =>
+  Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
 
 // Self-update status, accumulated from "update-status" events emitted by the
 // backend's self_update command. `lines` is the streamed build log; `message`
@@ -62,6 +72,12 @@ export default function App() {
   // Wall-clock tick; bumped once a second while a timer runs, so the chip and
   // running row's elapsed update live. Idle (no re-render loop) when idle.
   const [now, setNow] = useState(() => Date.now());
+  // UI zoom (⌘+/⌘-/⌘0). Persisted in localStorage — it's a display preference,
+  // unlike the session-only visibility/priority filters.
+  const [zoom, setZoom] = useState(() => {
+    const saved = Number(localStorage.getItem("dayapp-zoom"));
+    return Number.isFinite(saved) && saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;
+  });
 
   // ---- Load -------------------------------------------------------------
 
@@ -94,6 +110,15 @@ export default function App() {
   useEffect(() => {
     timersApi.active().then(setActiveTimer).catch((e) => log.warn("active timer load failed", e));
   }, []);
+
+  // Browser-style page zoom, set on <html>: every px dimension (fonts, rows,
+  // modals, the fixed overlays) scales together, so proportions hold at any
+  // size. Metrics like the notes' scrollHeight are read in each element's
+  // local (unzoomed) space, so the auto-grow logic doesn't skew under it.
+  useEffect(() => {
+    document.documentElement.style.zoom = String(zoom);
+    localStorage.setItem("dayapp-zoom", String(zoom));
+  }, [zoom]);
 
   // What the user sees: items narrowed to the ⌘P priority filter, if any.
   // Everything display-shaped (SectionList, search hits, keyboard nav, totals)
@@ -219,8 +244,9 @@ export default function App() {
     },
   ], [startUpdate]);
 
-  // ⌘P toggles the palette; ⌘F opens search. Both intercept globally (they're
-  // modifier combos, so they don't interfere with typing in a field).
+  // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
+  // (⌘0 resets). All intercept globally (they're modifier combos, so they
+  // don't interfere with typing in a field).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -230,6 +256,15 @@ export default function App() {
       } else if (e.key === "f") {
         e.preventDefault();
         setSearchOpen(true);
+      } else if (e.key === "=" || e.key === "+") {
+        e.preventDefault();
+        setZoom((z) => clampZoom(z + ZOOM_STEP));
+      } else if (e.key === "-" || e.key === "_") {
+        e.preventDefault();
+        setZoom((z) => clampZoom(z - ZOOM_STEP));
+      } else if (e.key === "0") {
+        e.preventDefault();
+        setZoom(1);
       }
     };
     window.addEventListener("keydown", handler);

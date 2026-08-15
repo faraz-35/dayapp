@@ -125,6 +125,7 @@ dayapp/
 | hover **◐** | hide item/note (forever / day / week / month) |
 | `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
 | `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump |
+| `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets; persists across launches) |
 
 ## Hiding
 

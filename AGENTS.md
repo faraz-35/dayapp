@@ -382,6 +382,7 @@ Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spac
 | single-click | select + enter edit mode (caret at end, not full-select) |
 | `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, …) |
 | `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump |
+| `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets) — CSS `zoom` on `<html>`, persisted in localStorage (`dayapp-zoom`); scales every px dimension together, so the design's proportions hold at any size |
 
 **Visibility modes (⌘P):** `Show Regular View` (default — hidden entries excluded),
 `Show All` (hidden entries inline, dimmed, ↺/× actions), `Show Hidden Only` (only hidden
