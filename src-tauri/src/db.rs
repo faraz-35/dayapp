@@ -23,6 +23,7 @@ pub struct Item {
     pub hidden_until: Option<String>,  // ISO YYYY-MM-DD when a time-limited hide expires; NULL = forever
     pub project_id: Option<String>,    // assigned project (housekeeping — not logged to actions)
     pub remind_at: Option<String>,     // ISO YYYY-MM-DD when a backlog item auto-promotes to today
+    pub priority: Option<i64>,         // urgency tier 1–3 (housekeeping — not logged); Backlog sorts by it
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +38,29 @@ pub struct Action {
     pub from_status: Option<String>,
     pub to_status: Option<String>,
     pub timestamp: String,
+}
+
+/// How `list` treats hidden rows — the three ⌘P visibility modes over the main
+/// list: the default excludes them, "Show All" includes them inline, and
+/// "Show Hidden Only" returns just them (the archive view).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HiddenFilter {
+    Exclude,
+    Include,
+    Only,
+}
+
+impl HiddenFilter {
+    /// SQL fragment appending the hidden-row predicate (empty for Include,
+    /// since those rows need no filter). Shared by the items and notes lists.
+    pub fn clause(self) -> &'static str {
+        match self {
+            HiddenFilter::Exclude => " AND hidden = 0",
+            HiddenFilter::Include => "",
+            HiddenFilter::Only => " AND hidden = 1",
+        }
+    }
 }
 
 // Single shared connection behind a mutex. DayApp is single-user, single-process,
@@ -68,6 +92,7 @@ impl Db {
         ensure_column(conn, "items", "hidden_until", "TEXT")?;
         ensure_column(conn, "items", "project_id", "TEXT")?;
         ensure_column(conn, "items", "remind_at", "TEXT")?;
+        ensure_column(conn, "items", "priority", "INTEGER")?;
         ensure_column(conn, "notes", "hidden", "INTEGER NOT NULL DEFAULT 0")?;
         ensure_column(conn, "notes", "hidden_until", "TEXT")?;
         Ok(())
@@ -75,21 +100,31 @@ impl Db {
 
     // ---- Reads -----------------------------------------------------------
 
-    /// All items in a section, ordered by sort_order. Optionally include done items.
-    /// Hidden items are always excluded here — see `list_hidden_items` for the archive view.
-    pub fn list(&self, section: &str, include_done: bool) -> anyhow::Result<Vec<Item>> {
+    /// All items in a section. `hidden` picks the
+    /// visibility mode: Exclude (default) keeps archived rows out, Include is
+    /// the ⌘P "Show All" mode (hidden rows render inline — they keep their
+    /// sort_order, so they appear where they were hidden), Only is "Show
+    /// Hidden Only". In Only mode the status filter is skipped — archived rows
+    /// show as-is, like the old dedicated Hidden view.
+    ///
+    /// Ordering: the Backlog is sorted by priority first (NULL last), then
+    /// manual order — priority is the primary axis there, DnD orders within a
+    /// tier. Today/Daily are purely manual (sort_order).
+    pub fn list(&self, section: &str, include_done: bool, hidden: HiddenFilter) -> anyhow::Result<Vec<Item>> {
         let conn = self.0.lock().unwrap();
-        let mut stmt = if include_done {
-            conn.prepare(
-                "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until,project_id,remind_at
-                 FROM items WHERE section = ?1 AND hidden = 0 ORDER BY sort_order, created_at"
-            )?
+        let mut sql = String::from(
+            "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until,project_id,remind_at,priority
+             FROM items WHERE section = ?1");
+        if !include_done && hidden != HiddenFilter::Only {
+            sql.push_str(" AND status = 'active'");
+        }
+        sql.push_str(hidden.clause());
+        sql.push_str(if section == "backlog" {
+            " ORDER BY COALESCE(priority, 99), sort_order, created_at"
         } else {
-            conn.prepare(
-                "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until,project_id,remind_at
-                 FROM items WHERE section = ?1 AND status = 'active' AND hidden = 0 ORDER BY sort_order, created_at"
-            )?
-        };
+            " ORDER BY sort_order, created_at"
+        });
+        let mut stmt = conn.prepare(&sql)?;
         let rows = stmt.query_map(params![section], item_from_row)?;
         let mut out = Vec::new();
         for row in rows { out.push(row?); }
@@ -126,7 +161,7 @@ impl Db {
             status: "active".into(), last_completed_date: None,
             sort_order, created_at: now.clone(), updated_at: now,
             hidden: false, hidden_until: None,
-            project_id: None, remind_at: None,
+            project_id: None, remind_at: None, priority: None,
         })
     }
 
@@ -199,10 +234,18 @@ impl Db {
 
         // Re-index destination section so sort_order is contiguous & matches new_index.
         // Simple approach: load all ids in dest in desired order, write 0..N.
+        // The Backlog is priority-sorted for display, so index in that same
+        // order there — drops land where they visually fell (priority stays
+        // the primary axis; manual order applies within a tier).
+        let dest_order = if to_section == "backlog" {
+            "ORDER BY COALESCE(priority, 99), sort_order, created_at"
+        } else {
+            "ORDER BY sort_order, created_at"
+        };
         let mut ids: Vec<String> = {
-            let mut stmt = tx.prepare(
-                "SELECT id FROM items WHERE section = ?1 AND id != ?2 ORDER BY sort_order, created_at"
-            )?;
+            let mut stmt = tx.prepare(&format!(
+                "SELECT id FROM items WHERE section = ?1 AND id != ?2 {dest_order}"
+            ))?;
             let rows = stmt.query_map(params![to_section, id], |r| r.get::<_,String>(0))?;
             let mut v = Vec::new();
             for r in rows { v.push(r?); }
@@ -261,21 +304,6 @@ impl Db {
         Ok(())
     }
 
-    /// All hidden items, ordered so soonest-expiring dated hides come first,
-    /// then forever-hides. Powers the Hidden view.
-    pub fn list_hidden_items(&self) -> anyhow::Result<Vec<Item>> {
-        let conn = self.0.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until,project_id,remind_at
-             FROM items WHERE hidden = 1
-             ORDER BY (hidden_until IS NULL), hidden_until ASC, sort_order, created_at"
-        )?;
-        let rows = stmt.query_map([], item_from_row)?;
-        let mut out = Vec::new();
-        for row in rows { out.push(row?); }
-        Ok(out)
-    }
-
     /// Clear the hidden flag on any item whose time-limited hide has expired.
     /// Called by the launch + 60s-tick sweep, so hides auto-restore at midnight
     /// without a cron job. Idempotent. Returns the number of rows restored.
@@ -300,6 +328,18 @@ impl Db {
         conn.execute(
             "UPDATE items SET remind_at = ?1, updated_at = ?2 WHERE id = ?3",
             params![remind_at, now, id],
+        )?;
+        Ok(())
+    }
+
+    /// Set (or clear) an item's priority (1–3, or None). Housekeeping like the
+    /// project assignment — not logged to `actions`.
+    pub fn set_item_priority(&self, id: &str, priority: Option<i64>) -> anyhow::Result<()> {
+        let conn = self.0.lock().unwrap();
+        let now = now_iso();
+        conn.execute(
+            "UPDATE items SET priority = ?1, updated_at = ?2 WHERE id = ?3",
+            params![priority, now, id],
         )?;
         Ok(())
     }
@@ -490,7 +530,7 @@ pub fn hidden_until_for(duration: &str) -> Option<String> {
     Some(date.format("%Y-%m-%d").to_string())
 }
 
-// Build an Item from a 10-column SELECT row (id..hidden_until).
+// Build an Item from a 13-column SELECT row (id..priority).
 fn item_from_row(r: &rusqlite::Row) -> rusqlite::Result<Item> {
     Ok(Item {
         id: r.get(0)?,
@@ -505,6 +545,7 @@ fn item_from_row(r: &rusqlite::Row) -> rusqlite::Result<Item> {
         hidden_until: r.get(9)?,
         project_id: r.get(10)?,
         remind_at: r.get(11)?,
+        priority: r.get(12)?,
     })
 }
 

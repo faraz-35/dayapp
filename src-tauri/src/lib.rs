@@ -6,7 +6,7 @@ mod notes;
 mod projects;
 mod timers;
 
-use db::{Db, Item, Action};
+use db::{Db, HiddenFilter, Item, Action};
 use notes::Note;
 use projects::Project;
 use std::sync::Arc;
@@ -40,10 +40,11 @@ struct DbState(Arc<Db>);
 // ---- Tauri commands -------------------------------------------------------
 
 #[tauri::command]
-async fn list_items(db: State<'_, DbState>, section: String, include_done: bool)
-    -> Result<Vec<Item>, String>
+async fn list_items(
+    db: State<'_, DbState>, section: String, include_done: bool, hidden: HiddenFilter,
+) -> Result<Vec<Item>, String>
 {
-    with_db(db, move |db| db.list(&section, include_done)).await
+    with_db(db, move |db| db.list(&section, include_done, hidden)).await
 }
 
 #[tauri::command]
@@ -78,8 +79,9 @@ async fn delete_item(db: State<'_, DbState>, id: String) -> Result<(), String> {
 }
 
 // ---- Hide commands (items) -----------------------------------------------
-// Soft-archive: hidden=1 keeps the row but `list_items` excludes it. Not logged
-// to `actions` — hide is housekeeping, not meaningful activity.
+// Soft-archive: hidden=1 keeps the row but the default `list_items` filter
+// excludes it. Not logged to `actions` — hide is housekeeping, not meaningful
+// activity.
 
 #[tauri::command]
 async fn hide_item(db: State<'_, DbState>, id: String, duration: String)
@@ -91,11 +93,6 @@ async fn hide_item(db: State<'_, DbState>, id: String, duration: String)
 #[tauri::command]
 async fn unhide_item(db: State<'_, DbState>, id: String) -> Result<(), String> {
     with_db(db, move |db| db.unhide_item(&id)).await
-}
-
-#[tauri::command]
-async fn list_hidden_items(db: State<'_, DbState>) -> Result<Vec<Item>, String> {
-    with_db(db, move |db| db.list_hidden_items()).await
 }
 
 #[tauri::command]
@@ -115,8 +112,8 @@ async fn list_actions(
 // Separate from items. Notes are content (not activity), so no journal logging.
 
 #[tauri::command]
-async fn list_notes(db: State<'_, DbState>) -> Result<Vec<Note>, String> {
-    with_db(db, move |db| db.list_notes()).await
+async fn list_notes(db: State<'_, DbState>, hidden: HiddenFilter) -> Result<Vec<Note>, String> {
+    with_db(db, move |db| db.list_notes(hidden)).await
 }
 
 #[tauri::command]
@@ -144,11 +141,6 @@ async fn hide_note(db: State<'_, DbState>, id: String, duration: String)
 #[tauri::command]
 async fn unhide_note(db: State<'_, DbState>, id: String) -> Result<(), String> {
     with_db(db, move |db| db.unhide_note(&id)).await
-}
-
-#[tauri::command]
-async fn list_hidden_notes(db: State<'_, DbState>) -> Result<Vec<Note>, String> {
-    with_db(db, move |db| db.list_hidden_notes()).await
 }
 
 // ---- Project commands ----------------------------------------------------
@@ -188,6 +180,18 @@ async fn set_reminder(
     db: State<'_, DbState>, id: String, remind_at: Option<String>,
 ) -> Result<(), String> {
     with_db(db, move |db| db.set_reminder(&id, remind_at.as_deref())).await
+}
+
+#[tauri::command]
+async fn set_item_priority(
+    db: State<'_, DbState>, id: String, priority: Option<i64>,
+) -> Result<(), String> {
+    if let Some(p) = priority {
+        if !(1..=3).contains(&p) {
+            return Err(format!("priority must be 1, 2, or 3 (got {p})"));
+        }
+    }
+    with_db(db, move |db| db.set_item_priority(&id, priority)).await
 }
 
 // ---- Timer commands -----------------------------------------------------
@@ -385,12 +389,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_items, create_item, edit_item, complete_item,
             move_item, delete_item, run_sweep,
-            hide_item, unhide_item, list_hidden_items,
+            hide_item, unhide_item,
             list_actions,
             list_notes, create_note, update_note, delete_note,
-            hide_note, unhide_note, list_hidden_notes,
+            hide_note, unhide_note,
             list_projects, create_project, rename_project, delete_project, set_item_project,
-            set_reminder,
+            set_reminder, set_item_priority,
             start_timer, stop_timer, discard_timer, get_active_timer,
             time_totals, session_time_by_day,
             self_update,

@@ -5,7 +5,7 @@
 // All methods hang off the shared `Db` struct but touch only the `notes` table,
 // keeping the two feature areas decoupled at the storage layer.
 
-use crate::db::{now_iso, hidden_until_for, Db};
+use crate::db::{now_iso, hidden_until_for, HiddenFilter, Db};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
@@ -24,11 +24,11 @@ pub struct Note {
 impl Db {
     // ---- Notes ------------------------------------------------------------
 
-    /// All notes ordered by sort_order. Empty body notes are kept (a fresh
-    /// note is the zero-inertia landing surface on first paint).
-    pub fn list_notes(&self) -> anyhow::Result<Vec<Note>> {
+    /// All notes ordered by sort_order. `hidden` picks the ⌘P visibility mode —
+    /// Include/Only render archived notes inline in the notes list.
+    pub fn list_notes(&self, hidden: HiddenFilter) -> anyhow::Result<Vec<Note>> {
         let conn = self.0.lock().unwrap();
-        list_notes_inner(&conn)
+        list_notes_inner(&conn, hidden)
     }
 
     /// Create a new note with the given body at the bottom of the list.
@@ -104,20 +104,6 @@ impl Db {
         Ok(())
     }
 
-    /// All hidden notes, soonest-expiring first then forever-hides.
-    pub fn list_hidden_notes(&self) -> anyhow::Result<Vec<Note>> {
-        let conn = self.0.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, body, sort_order, created_at, updated_at, hidden, hidden_until
-             FROM notes WHERE hidden = 1
-             ORDER BY (hidden_until IS NULL), hidden_until ASC, sort_order, created_at",
-        )?;
-        let rows = stmt.query_map([], note_from_row)?;
-        let mut out = Vec::new();
-        for r in rows { out.push(r?); }
-        Ok(out)
-    }
-
     /// Clear expired time-limited hides. (Also done inline by run_sweep on the
     /// day boundary; this is the standalone path called on launch.) Returns the
     /// number of rows restored.
@@ -134,11 +120,13 @@ impl Db {
     }
 }
 
-fn list_notes_inner(conn: &Connection) -> anyhow::Result<Vec<Note>> {
-    let mut stmt = conn.prepare(
+fn list_notes_inner(conn: &Connection, hidden: HiddenFilter) -> anyhow::Result<Vec<Note>> {
+    let mut sql = String::from(
         "SELECT id, body, sort_order, created_at, updated_at, hidden, hidden_until
-         FROM notes WHERE hidden = 0 AND body != '' ORDER BY sort_order, created_at",
-    )?;
+         FROM notes WHERE body != ''");
+    sql.push_str(hidden.clause());
+    sql.push_str(" ORDER BY sort_order, created_at");
+    let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map([], note_from_row)?;
     let mut out = Vec::new();
     for r in rows { out.push(r?); }

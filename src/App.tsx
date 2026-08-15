@@ -7,17 +7,29 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, formatLiveDuration, parseProjectTag, projectsApi, timersApi, todayStr, type ActiveTimer, type HideDuration, type Item, type Project, type Section } from "./lib";
+import { api, formatLiveDuration, hideExpiry, parseItemTags, projectsApi, timersApi, todayStr, type ActiveTimer, type HideDuration, type HiddenFilter, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import Notes from "./Notes";
 import SectionList from "./components/SectionList";
 import JournalView from "./components/JournalView";
-import HiddenView from "./components/HiddenView";
 import CommandPalette, { type Command } from "./CommandPalette";
 import SearchMenu, { type SearchHit } from "./components/SearchMenu";
 import UpdateOverlay from "./UpdateOverlay";
 
-type View = "list" | "journal" | "hidden";
+type View = "list" | "journal";
+
+// The three ⌘P visibility modes — a filter over the main list, so all three
+// land on the same page: "regular" (default) excludes hidden entries, "all"
+// shows them inline (dimmed, ↺/× actions), "hidden" shows only them.
+// Session-only state — a relaunch starts regular.
+type Visibility = "regular" | "all" | "hidden";
+
+// What each mode asks the list queries for (see HiddenFilter in lib.ts).
+const HIDDEN_FILTER: Record<Visibility, HiddenFilter> = {
+  regular: "exclude",
+  all: "include",
+  hidden: "only",
+};
 
 // Self-update status, accumulated from "update-status" events emitted by the
 // backend's self_update command. `lines` is the streamed build log; `message`
@@ -37,6 +49,10 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [view, setView] = useState<View>("list");
+  const [visibility, setVisibility] = useState<Visibility>("regular");
+  // ⌘P "Show Priority N Only" — narrow the list to one urgency tier; null = off.
+  // Session-only, like visibility.
+  const [priorityFilter, setPriorityFilter] = useState<1 | 2 | 3 | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
@@ -50,15 +66,16 @@ export default function App() {
   // ---- Load -------------------------------------------------------------
 
   const refresh = useCallback(async () => {
+    const hidden = HIDDEN_FILTER[visibility];
     const [today, daily, backlog, projs] = await Promise.all([
-      api.listItems("today", false),
-      api.listItems("daily", false),
-      api.listItems("backlog", false),
+      api.listItems("today", false, hidden),
+      api.listItems("daily", false, hidden),
+      api.listItems("backlog", false, hidden),
       projectsApi.list(),
     ]);
     setItems({ today, daily, backlog });
     setProjects(projs);
-  }, []);
+  }, [visibility]);
 
   useEffect(() => {
     refresh().catch((e) => log.error("initial load failed", e));
@@ -78,10 +95,24 @@ export default function App() {
     timersApi.active().then(setActiveTimer).catch((e) => log.warn("active timer load failed", e));
   }, []);
 
+  // What the user sees: items narrowed to the ⌘P priority filter, if any.
+  // Everything display-shaped (SectionList, search hits, keyboard nav, totals)
+  // reads this; mutations read the full `items`, and DnD indexes map back to
+  // full-list space in handleMoveItem.
+  const displayItems = useMemo<Record<Section, Item[]>>(() => {
+    if (priorityFilter === null) return items;
+    const byTier = (list: Item[]) => list.filter((i) => i.priority === priorityFilter);
+    return {
+      today: byTier(items.today),
+      daily: byTier(items.daily),
+      backlog: byTier(items.backlog),
+    };
+  }, [items, priorityFilter]);
+
   // All currently-visible item ids — drives the per-row cumulative totals fetch.
   const allIds = useMemo(
-    () => [...items.today, ...items.daily, ...items.backlog].map((i) => i.id),
-    [items],
+    () => [...displayItems.today, ...displayItems.daily, ...displayItems.backlog].map((i) => i.id),
+    [displayItems],
   );
 
   const refreshTotals = useCallback(async () => {
@@ -147,12 +178,39 @@ export default function App() {
   }, []);
 
   // ---- Command palette registry -----------------------------------------
-  // The set of commands shown in the ⌘P palette. Navigation + the update
-  // command for now; trivially extensible.
+  // The set of commands shown in the ⌘P palette. The visibility modes and the
+  // priority filters are two groups over the same main list; all of them land
+  // on it, filtered differently.
   const commands: Command[] = useMemo(() => [
-    { id: "view-today", label: "Go to Today", run: () => setView("list") },
+    {
+      id: "view-regular",
+      label: "Show Regular View",
+      hint: "hidden entries tucked away",
+      run: () => { setView("list"); setVisibility("regular"); setPriorityFilter(null); },
+    },
+    {
+      id: "view-all",
+      label: "Show All",
+      hint: "hidden entries shown inline",
+      run: () => { setView("list"); setVisibility("all"); },
+    },
+    {
+      id: "view-hidden",
+      label: "Show Hidden Only",
+      hint: "only hidden tasks + notes",
+      run: () => { setView("list"); setVisibility("hidden"); },
+    },
+    ...([1, 2, 3] as const).map((n) => ({
+      id: `prio-${n}`,
+      label: `Show Priority ${n} Only`,
+      hint: "!".repeat(n),
+      run: () => {
+        setView("list");
+        // Re-running the active tier's command clears the filter.
+        setPriorityFilter((p) => (p === n ? null : n));
+      },
+    })),
     { id: "view-journal", label: "View Journal", run: () => setView("journal") },
-    { id: "view-hidden", label: "View Hidden", run: () => setView("hidden") },
     {
       id: "update",
       label: "Update DayApp",
@@ -180,19 +238,33 @@ export default function App() {
 
   // ---- Mutations --------------------------------------------------------
 
+  // A trailing unmatched `#tag` (e.g. "fix bug #acme" with no "acme" project)
+  // creates the project in place. Same housekeeping path as the # popover's
+  // create field — just triggered by typing the tag at the end of the text.
+  // Returns the new project id, or null when there's nothing to create.
+  const materializeTagProject = async (name?: string): Promise<string | null> => {
+    if (!name) return null;
+    const created = await projectsApi.create(name);
+    setProjects((p) => [...p, created]);
+    return created.id;
+  };
+
   const handleCreate = async (section: Section, raw: string) => {
-    // Resolve a `#tag` → project on capture (e.g. "fix bug #day" → dayapp),
-    // stripping the tag from the text. Project assignment is housekeeping, so
-    // it happens after the item exists — same path as the # popover.
-    const { text, projectId } = parseProjectTag(raw, projects);
+    // Resolve `#tag` → project and `!1..3` → priority on capture (e.g.
+    // "fix bug #day !2" → dayapp project, priority 2), stripping both tokens
+    // from the text. Assignment is housekeeping, so it happens after the item
+    // exists.
+    const { text, projectId, createProjectName, priority } = parseItemTags(raw, projects);
     const item = await api.createItem(text, section);
-    if (projectId) {
-      const assigned = { ...item, projectId };
-      setItems((s) => ({ ...s, [section]: [...s[section], assigned] }));
-      api.setItemProject(item.id, projectId);
-    } else {
-      setItems((s) => ({ ...s, [section]: [...s[section], item] }));
-    }
+    const assignId = projectId ?? (await materializeTagProject(createProjectName));
+    // !0 ("clear") is a no-op at capture — a fresh item has no priority yet.
+    const tier = priority === 0 ? null : priority;
+    const patch: Partial<Item> = {};
+    if (assignId) patch.projectId = assignId;
+    if (tier !== null) patch.priority = tier;
+    setItems((s) => ({ ...s, [section]: [...s[section], { ...item, ...patch }] }));
+    if (assignId) api.setItemProject(item.id, assignId);
+    if (tier !== null) api.setItemPriority(item.id, tier);
   };
 
   const handleComplete = async (id: string, section: Section) => {
@@ -229,14 +301,19 @@ export default function App() {
   };
 
   const handleCommitEdit = async (id: string, raw: string) => {
-    const { text, projectId } = parseProjectTag(raw, projects);
+    const { text, projectId, createProjectName, priority } = parseItemTags(raw, projects);
     setEditingId(null);
     if (!text) return;
-    // Apply the stripped text, and — only if a #tag resolved — override the
-    // project. No tag in the edit leaves any existing assignment alone.
+    // Apply the stripped text, and — only if a token resolved or created a
+    // project / priority — override that field. No tokens leave any existing
+    // values alone; !0 explicitly clears the priority.
+    const assignId = projectId ?? (await materializeTagProject(createProjectName));
+    // !0 maps to null — the explicit clear.
+    const tier = priority === 0 ? null : priority;
     setItems((s) => {
       const patch: Partial<Item> = { text };
-      if (projectId) patch.projectId = projectId;
+      if (assignId) patch.projectId = assignId;
+      if (priority !== null) patch.priority = tier;
       const update = (list: Item[]) => list.map((i) => (i.id === id ? { ...i, ...patch } : i));
       return {
         today: update(s.today),
@@ -245,14 +322,39 @@ export default function App() {
       };
     });
     await api.editItem(id, text);
-    if (projectId) api.setItemProject(id, projectId);
+    if (assignId) api.setItemProject(id, assignId);
+    if (priority !== null) api.setItemPriority(id, tier);
   };
 
-  // Soft-archive a task. Optimistically removed from its section; time-limited
-  // hides auto-restore via the day-boundary sweep, so no timer needed here.
+  // Soft-archive a task. In a view that shows hidden entries the row stays
+  // put, flipped to its dimmed hidden state (expiry computed locally so the
+  // chip is right immediately); in Regular mode it leaves the list. Time-
+  // limited hides auto-restore via the day-boundary sweep.
   const handleHide = async (id: string, section: Section, duration: HideDuration) => {
-    setItems((s) => ({ ...s, [section]: s[section].filter((i) => i.id !== id) }));
+    if (visibility === "regular") {
+      setItems((s) => ({ ...s, [section]: s[section].filter((i) => i.id !== id) }));
+    } else {
+      updateItemField(id, { hidden: true, hiddenUntil: hideExpiry(duration) });
+    }
     await api.hideItem(id, duration);
+  };
+
+  // Restore a hidden row. In hidden-only mode it leaves the view (a restored
+  // row isn't hidden anymore); in Show All it just sheds its dimmed state.
+  const handleUnhide = async (id: string) => {
+    if (visibility === "hidden") {
+      setItems((s) => {
+        const section = (["today", "daily", "backlog"] as Section[]).find(
+          (sec) => s[sec].some((i) => i.id === id),
+        );
+        return section
+          ? { ...s, [section]: s[section].filter((i) => i.id !== id) }
+          : s;
+      });
+    } else {
+      updateItemField(id, { hidden: false });
+    }
+    await api.unhideItem(id);
   };
 
   // Assign (or clear) an item's project. Housekeeping — not journal activity.
@@ -304,8 +406,17 @@ export default function App() {
     refreshTotals();
   }, [refreshTotals]);
 
-  // Optimistic reorder/move for DnD. `onMoveItem` from SectionList.
+  // Optimistic reorder/move for DnD. `newIndex` arrives in display space —
+  // against the (possibly priority-filtered) list the user sees — so translate
+  // it into the full-list index the backend re-indexes against. The anchor is
+  // the row being dropped before, or the last displayed row for an
+  // append-at-end drop; with no filter this is the identity mapping.
   const handleMoveItem = async (id: string, toSection: Section, newIndex: number) => {
+    const display = displayItems[toSection];
+    const anchor = display[newIndex] ?? display[display.length - 1];
+    const fullIndex = anchor
+      ? items[toSection].findIndex((i) => i.id === anchor.id) + (display[newIndex] ? 0 : 1)
+      : items[toSection].length;
     setItems((s) => {
       const fromSection = (["today", "daily", "backlog"] as Section[]).find(
         (sec) => s[sec].some((i) => i.id === id),
@@ -315,27 +426,27 @@ export default function App() {
       if (!moved) return s;
       if (fromSection === toSection) {
         const list = s[fromSection].filter((i) => i.id !== id);
-        list.splice(newIndex, 0, moved);
+        list.splice(fullIndex, 0, moved);
         return { ...s, [fromSection]: list };
       }
       const fromList = s[fromSection].filter((i) => i.id !== id);
       const toList = [...s[toSection]];
-      toList.splice(newIndex, 0, moved);
+      toList.splice(fullIndex, 0, moved);
       return { ...s, [fromSection]: fromList, [toSection]: toList };
     });
-    await api.moveItem(id, toSection, newIndex);
+    await api.moveItem(id, toSection, fullIndex);
   };
 
   // ---- Search -----------------------------------------------------------
-  // Flattened list of all items for ⌘F. Built from live state so the SearchMenu
-  // always reflects what's on screen.
+  // Flattened list of all displayed items for ⌘F. Built from live state so the
+  // SearchMenu always reflects what's on screen.
   const searchHits: SearchHit[] = useMemo(
     () => ([
-      ...items.today.map((item) => ({ item, section: "today" as Section })),
-      ...items.daily.map((item) => ({ item, section: "daily" as Section })),
-      ...items.backlog.map((item) => ({ item, section: "backlog" as Section })),
+      ...displayItems.today.map((item) => ({ item, section: "today" as Section })),
+      ...displayItems.daily.map((item) => ({ item, section: "daily" as Section })),
+      ...displayItems.backlog.map((item) => ({ item, section: "backlog" as Section })),
     ]),
-    [items],
+    [displayItems],
   );
 
   // Jump to a search hit: select it and scroll its row into view. The row is
@@ -351,8 +462,8 @@ export default function App() {
   // ---- Keyboard nav ----------------------------------------------------
 
   const allVisible = useMemo(
-    () => [...items.today, ...items.daily, ...items.backlog],
-    [items],
+    () => [...displayItems.today, ...displayItems.daily, ...displayItems.backlog],
+    [displayItems],
   );
 
   useEffect(() => {
@@ -371,7 +482,9 @@ export default function App() {
         moveSelection(-1);
       } else if (e.key === "Enter" && selectedId) {
         const item = allVisible.find((i) => i.id === selectedId);
-        if (item) { e.preventDefault(); handleComplete(item.id, item.section); }
+        // Archived rows aren't actionable — completing one would silently
+        // vanish it (done + hidden, invisible in every mode). Unhide first.
+        if (item && !item.hidden) { e.preventDefault(); handleComplete(item.id, item.section); }
       } else if (e.key === "e" && selectedId) {
         e.preventDefault();
         setEditingId(selectedId);
@@ -399,9 +512,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        {view !== "list" && (
-          <span className="title">{view === "journal" ? "Journal" : "Hidden"}</span>
-        )}
+        {view === "journal" && <span className="title">Journal</span>}
         <div className="header-right">
           {/* The running timer is always visible here — survives scrolling away
               from the timed row, and doubles as a "current focus" display. Click
@@ -425,21 +536,15 @@ export default function App() {
               >×</button>
             </div>
           )}
-          {view === "list" && (
-            <button
-              className={`icon-btn search-btn${searchOpen ? " active" : ""}`}
-              onClick={() => setSearchOpen(true)}
-              title="Search (⌘F)"
-              aria-label="Search"
-            >⌕</button>
-          )}
+          {/* ◐ filters the main list to hidden-only (same as ⌘P → Show Hidden
+              Only); ✕ returns to regular. Journal keeps its own toggle. */}
           <button
-            className={`icon-btn ${view === "hidden" ? "active" : ""}`}
-            onClick={() => setView(view === "hidden" ? "list" : "hidden")}
-            title={view === "hidden" ? "Back to list" : "View hidden"}
+            className={`icon-btn ${visibility === "hidden" ? "active" : ""}`}
+            onClick={() => setVisibility(visibility === "hidden" ? "regular" : "hidden")}
+            title={visibility === "hidden" ? "Back to list" : "View hidden"}
             aria-label="Toggle hidden"
           >
-            {view === "hidden" ? "✕" : "◐"}
+            {visibility === "hidden" ? "✕" : "◐"}
           </button>
           <button
             className={`icon-btn ${view === "journal" ? "active" : ""}`}
@@ -453,18 +558,25 @@ export default function App() {
       </header>
 
       {/* Single scroll container — the whole body (notes + sections, or the
-          journal/hidden view) scrolls as one page. See AGENTS.md. */}
+          journal) scrolls as one page. See AGENTS.md. */}
       <div className="scroll">
         {view === "list" ? (
           <>
             {/* Notes live above the DnD area so typing/pasting isn't a drag
-                surface. Self-contained: owns its state, API, and persistence. */}
-            <Notes />
+                surface. Self-contained: owns its state, API, and persistence.
+                In hidden-only mode it lists the hidden notes instead. */}
+            <Notes hiddenFilter={HIDDEN_FILTER[visibility]} />
+            {(visibility === "hidden" || priorityFilter !== null) && allVisible.length === 0 && (
+              <div className="empty">
+                {visibility === "hidden" ? "Nothing hidden." : `No priority ${priorityFilter} tasks.`}
+              </div>
+            )}
             <SectionList
-              items={items}
+              items={displayItems}
               projects={projects}
               selectedId={selectedId}
               editingId={editingId}
+              showCapture={visibility !== "hidden"}
               onSelect={setSelectedId}
               onComplete={handleComplete}
               onDelete={handleDelete}
@@ -472,6 +584,7 @@ export default function App() {
               onStartEdit={setEditingId}
               onQuickAdd={handleCreate}
               onHide={handleHide}
+              onUnhide={handleUnhide}
               onSetProject={handleSetProject}
               onSetReminder={handleSetReminder}
               onMoveItem={handleMoveItem}
@@ -481,10 +594,8 @@ export default function App() {
               onToggleTimer={handleToggleTimer}
             />
           </>
-        ) : view === "journal" ? (
-          <JournalView />
         ) : (
-          <HiddenView />
+          <JournalView />
         )}
       </div>
 

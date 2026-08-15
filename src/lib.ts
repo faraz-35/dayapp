@@ -10,6 +10,11 @@ export type Status = "active" | "done";
  *  at the start of the named period's end date (day = tomorrow, etc.). */
 export type HideDuration = "forever" | "day" | "week" | "month";
 
+/** How the list queries treat hidden rows — the three ⌘P visibility modes:
+ *  `exclude` (regular view), `include` (Show All — hidden inline), `only`
+ *  (Show Hidden Only). Mirrors `HiddenFilter` in src-tauri/src/db.rs. */
+export type HiddenFilter = "exclude" | "include" | "only";
+
 export interface Item {
   id: string;
   text: string;
@@ -23,6 +28,7 @@ export interface Item {
   hiddenUntil: string | null;
   projectId: string | null;
   remindAt: string | null;
+  priority: 1 | 2 | 3 | null;
 }
 
 export interface Action {
@@ -39,8 +45,8 @@ export interface Action {
 
 // Rust uses serde(rename_all = "camelCase"), so the camelCase fields match.
 export const api = {
-  listItems: (section: Section, includeDone = false) =>
-    invoke<Item[]>("list_items", { section, includeDone }),
+  listItems: (section: Section, includeDone = false, hidden: HiddenFilter = "exclude") =>
+    invoke<Item[]>("list_items", { section, includeDone, hidden }),
   createItem: (text: string, section: Section) =>
     invoke<Item>("create_item", { text, section }),
   editItem: (id: string, text: string) =>
@@ -52,11 +58,12 @@ export const api = {
   hideItem: (id: string, duration: HideDuration) =>
     invoke<void>("hide_item", { id, duration }),
   unhideItem: (id: string) => invoke<void>("unhide_item", { id }),
-  listHiddenItems: () => invoke<Item[]>("list_hidden_items"),
   setItemProject: (id: string, projectId: string | null) =>
     invoke<void>("set_item_project", { id, projectId }),
   setReminder: (id: string, remindAt: string | null) =>
     invoke<void>("set_reminder", { id, remindAt }),
+  setItemPriority: (id: string, priority: 1 | 2 | 3 | null) =>
+    invoke<void>("set_item_priority", { id, priority }),
   runSweep: () => invoke<number>("run_sweep"),
   listActions: (opts: { since?: string; until?: string; limit?: number } = {}) =>
     invoke<Action[]>("list_actions", {
@@ -151,6 +158,26 @@ export const localDateStr = (d: Date = new Date()) => {
   return `${y}-${m}-${day}`;
 };
 
+/** The `hidden_until` date a hide duration maps to (local ISO YYYY-MM-DD), or
+ *  null for forever. Mirrors `hidden_until_for` in db.rs — used for optimistic
+ *  updates so a just-hidden row's expiry chip is right immediately, without
+ *  waiting for the next refresh to reconcile. */
+export const hideExpiry = (duration: HideDuration): string | null => {
+  if (duration === "forever") return null;
+  const d = new Date();
+  if (duration === "day") d.setDate(d.getDate() + 1);
+  else if (duration === "week") d.setDate(d.getDate() + 7);
+  else {
+    // Calendar month with the day clamped to the target month's length,
+    // matching chrono's checked_add_months (Jan 31 + 1 month = Feb 28/29).
+    const day = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + 1);
+    d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  }
+  return localDateStr(d);
+};
+
 /** Add `days` to today (negative = past), returning local ISO YYYY-MM-DD. */
 export const localDateStrOffset = (days: number) => {
   const d = new Date();
@@ -176,42 +203,124 @@ export const projectColor = (id: string): string => {
   return `hsl(${hue} 65% 68%)`;
 };
 
+/** The combined capture/edit text parser: resolves `#tag` → Project and
+ *  `!1..3` → priority, stripping both from the returned text. The two token
+ *  kinds are independent and composable in either order ("fix bug #acme !2",
+ *  "fix bug !2 #acme", or either alone) — priority tokens are stripped first
+ *  so a trailing `#tag` still satisfies the project-create rule on the
+ *  remaining text. When nothing resolves, both fields are null and callers
+ *  decide whether that means "not set" (on create) or "leave the existing
+ *  value alone" (on edit).
+ *
+ *  See `parseProjectTag` for the project resolution rules; the priority rule
+ *  is: any `!0..3` at a word boundary, the LAST one wins, all are stripped.
+ *  `!0` means "clear the priority" (only meaningful on edit).
+ */
+export function parseItemTags(
+  text: string,
+  projects: Project[],
+): { text: string; projectId: string | null; createProjectName?: string; priority: 0 | 1 | 2 | 3 | null } {
+  const stripped = parsePriorityTag(text);
+  const project = parseProjectTag(stripped.text, projects);
+  return { ...project, priority: stripped.priority };
+}
+
+/** Extract & strip `!0..3` tokens (word-boundary `!` + digit, so "wow!!" and
+ *  "foo!bar" stay literal). The last token's level wins; 0 is the explicit
+ *  clear. Like stripTag, a bare token that would empty the row keeps the text
+ *  intact so the input is never lost — the priority still applies. */
+function parsePriorityTag(text: string): { text: string; priority: 0 | 1 | 2 | 3 | null } {
+  const re = /(?:^|\s)!([0-3])(?=\s|$)/g;
+  const spans: { start: number; end: number; level: 0 | 1 | 2 | 3 }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    spans.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      level: Number(m[1]) as 0 | 1 | 2 | 3,
+    });
+  }
+  if (spans.length === 0) return { text, priority: null };
+  const priority = spans[spans.length - 1].level;
+  let out = "";
+  let pos = 0;
+  for (const s of spans) {
+    out += text.slice(pos, s.start);
+    pos = s.end;
+  }
+  out += text.slice(pos);
+  const normalized = out.replace(/\s+/g, " ").trim();
+  return { text: normalized || text.trim(), priority };
+}
+
 /**
- * Detect a `#tag` in item text and resolve it to a Project by name — so typing
+ * Detect a `#tag` in item text and resolve it to a Project — so typing
  * "fix bug #day" links the item to the "dayapp" project without opening the #
  * popover. This is an input shortcut for the existing Projects axis, *not* a
- * separate tag entity (see AGENTS.md "What NOT to add").
+ * separate tag entity (see AGENTS.md "What NOT to add"). Callers go through
+ * `parseItemTags`, which also handles `!N` priority tokens.
  *
- * Matching is case-insensitive: an exact name match wins; otherwise a *unique*
- * name prefix links (so "#day" → "dayapp" only if no other project name starts
- * with "day"). Ambiguous or unmatched tags are left in the text verbatim.
+ * Two passes, in order:
+ *  1. **Existing match** — case-insensitive exact name win, else a *unique*
+ *     name prefix (so "#day" → "dayapp" only if no other project starts with
+ *     "day"). The first resolvable tag wins; an item carries a single project.
+ *  2. **Create** — if *no* tag matched an existing project, the LAST tag may
+ *     create a brand-new project — but only when it ends the text with nothing
+ *     after it (e.g. "fix bug #acme" bootstraps an "acme" project; "fix bug
+ *     #acme notes" does not). A bare "#acme" that would empty the row keeps the
+ *     text intact so the input is never lost.
  *
- * Only the first resolvable tag is used — an item carries a single project —
- * and that tag is stripped from the returned text. Returns `projectId: null`
- * when nothing resolved; callers decide whether null means "no project" (on
- * create) or "leave the existing assignment alone" (on edit).
+ * Whichever path wins, the winning tag is stripped from the returned text.
+ * `createProjectName` is mutually exclusive with `projectId`; callers create
+ * the project and assign it. When nothing resolved, `projectId` is null and
+ * callers decide whether that means "no project" (on create) or "leave the
+ * existing assignment alone" (on edit).
  */
 export function parseProjectTag(
   text: string,
   projects: Project[],
-): { text: string; projectId: string | null } {
-  if (projects.length === 0) return { text, projectId: null };
+): { text: string; projectId: string | null; createProjectName?: string } {
   // A tag is `#` at a word boundary (start or after whitespace) followed by
   // word chars / hyphens — so "foo#bar" mid-word is not treated as a tag.
   const tagRe = /(?:^|\s)#([\w-]+)/g;
+  const tags: { index: number; fullLen: number; name: string }[] = [];
   let m: RegExpExecArray | null;
   while ((m = tagRe.exec(text)) !== null) {
-    const project = resolveProjectByName(m[1], projects);
-    if (project) {
-      const cleaned = text.slice(0, m.index) + text.slice(m.index + m[0].length);
-      const normalized = cleaned.replace(/\s+/g, " ").trim();
-      // Only strip the tag when something readable remains — a bare "#day"
-      // shouldn't create an empty row. Otherwise keep the tag visible so the
-      // input is never lost, and still assign the project.
-      return { text: normalized || text.trim(), projectId: project.id };
+    tags.push({ index: m.index, fullLen: m[0].length, name: m[1] });
+  }
+
+  // 1) Existing project: first resolvable tag wins. Strip it from the text.
+  for (const t of tags) {
+    const project = resolveProjectByName(t.name, projects);
+    if (project) return stripTag(text, t.index, t.fullLen, project.id);
+  }
+
+  // 2) No existing match: create a project from the last tag, but only when it
+  //    sits at the very end of the text (nothing but whitespace after it).
+  if (tags.length > 0) {
+    const last = tags[tags.length - 1];
+    const end = last.index + last.fullLen;
+    if (text.slice(end).trim() === "") {
+      const cleaned = stripTag(text, last.index, last.fullLen, null);
+      return { ...cleaned, createProjectName: last.name };
     }
   }
+
   return { text, projectId: null };
+}
+
+/** Slice the tag out of `text` and normalise whitespace. Only strip when
+ *  something readable remains — a bare "#day" shouldn't produce an empty row;
+ *  in that case the tag is kept visible so the input is never lost. */
+function stripTag(
+  text: string,
+  index: number,
+  fullLen: number,
+  projectId: string | null,
+): { text: string; projectId: string | null } {
+  const cleaned = text.slice(0, index) + text.slice(index + fullLen);
+  const normalized = cleaned.replace(/\s+/g, " ").trim();
+  return { text: normalized || text.trim(), projectId };
 }
 
 /** Exact (case-insensitive) name match wins; otherwise a unique prefix match.

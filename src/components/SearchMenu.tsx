@@ -1,6 +1,6 @@
 // SearchMenu — ⌘F item search. A floating modal (mirrors the ⌘P command
 // palette): a dim backdrop with a centered card holding the input + a list of
-// matches. ↑/↓ or j/k moves the selection; Enter jumps to the item in the list
+// matches. ↑/↓ moves the selection; Enter jumps to the item in the list
 // (scrolls it into view, selects it) and closes; Esc closes.
 //
 // Deliberately NOT an inline/sticky bar — inline chrome pushes content and
@@ -67,10 +67,10 @@ export default function SearchMenu({
 
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") { e.preventDefault(); onClose(); }
-    else if (e.key === "ArrowDown" || e.key === "j") {
+    else if (e.key === "ArrowDown") {
       e.preventDefault();
       setActive((a) => Math.min(a + 1, filtered.length - 1));
-    } else if (e.key === "ArrowUp" || e.key === "k") {
+    } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive((a) => Math.max(a - 1, 0));
     } else if (e.key === "Enter") {

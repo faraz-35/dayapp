@@ -2,22 +2,86 @@
 // Renders at the top of the main view for minimum inertia. Each note is an
 // auto-growing textarea that autosaves (debounced) and saves on blur.
 //
-// Deliberately isolated from the items/actions feature: own state, own API,
-// own handlers. The parent just mounts <Notes />.
+// Hover reveal (hide/delete buttons) is JS-tracked rather than CSS :hover —
+// see the pointer effect below for why. Deliberately isolated from the
+// items/actions feature: own state, own API, own handlers. The parent passes
+// the ⌘P visibility mode as a HiddenFilter — "include"/"only" render hidden
+// notes inline (dimmed, ↺ to restore) instead of excluding them.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { notesApi, type Note } from "./notesApi";
-import { type HideDuration } from "./lib";
+import { type HideDuration, type HiddenFilter } from "./lib";
 import HideMenu from "./HideMenu";
 
-export default function Notes() {
+export default function Notes({ hiddenFilter }: { hiddenFilter: HiddenFilter }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState("");
+  // The note whose action buttons are revealed. Tracked in JS instead of
+  // CSS :hover — see the pointer effect below.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  // ---- Hover tracking -----------------------------------------------------
+  // WKWebKit's :hover chain goes stale when the layout shifts under a
+  // stationary pointer: the auto-growing note textareas resize on every
+  // keystroke, and WebKit doesn't reliably re-evaluate :hover after those
+  // mutations (or after scrolling), so a note the pointer has already left
+  // keeps showing its hide/delete buttons. Item rows never resize, which is
+  // why they don't hit this. Deriving the hovered note from the real pointer
+  // position is immune: every delivered mousemove recomputes it, and
+  // scroll/input events re-derive it via elementFromPoint for shifts that
+  // happen without any mousemove at all.
+  useEffect(() => {
+    let x = -1;
+    let y = -1; // last delivered pointer position; -1 = never seen
+
+    const idAtPoint = () => {
+      const el = document.elementFromPoint(x, y);
+      return el?.closest(".note")?.getAttribute("data-note-id") ?? null;
+    };
+
+    const onMove = (e: MouseEvent) => {
+      x = e.clientX;
+      y = e.clientY;
+      const id = e.target instanceof Element
+        ? e.target.closest(".note")?.getAttribute("data-note-id") ?? null
+        : null;
+      // Bail out unless the pointer crossed a note boundary, so the list
+      // doesn't re-render on every mousemove.
+      setHoveredId((prev) => (prev === id ? prev : id));
+    };
+
+    // Content moved under a stationary pointer — a scroll, or a textarea
+    // elsewhere in the list auto-resizing on input. No mousemove fires, so
+    // re-derive from the last known position.
+    const reconcile = () => setHoveredId((prev) => {
+      const id = idAtPoint();
+      return prev === id ? prev : id;
+    });
+
+    // Pointer left the webview (window edge, or up into the header's drag
+    // region where mouse events stop being delivered) — no further mousemove
+    // would clear the reveal, so clear it eagerly.
+    const onOut = (e: MouseEvent) => { if (!e.relatedTarget) setHoveredId(null); };
+    const onBlur = () => setHoveredId(null);
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("scroll", reconcile, true);
+    window.addEventListener("input", reconcile);
+    document.addEventListener("mouseout", onOut);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("scroll", reconcile, true);
+      window.removeEventListener("input", reconcile);
+      document.removeEventListener("mouseout", onOut);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
-    const list = await notesApi.list();
+    const list = await notesApi.list(hiddenFilter);
     setNotes(list);
-  }, []);
+  }, [hiddenFilter]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -39,11 +103,21 @@ export default function Notes() {
     await notesApi.delete(id);
   };
 
-  // Soft-archive a note. Optimistically removed; reappears via the Hidden view,
-  // and time-limited hides auto-restore at the day boundary.
+  // Soft-archive a note. In a view that shows hidden entries it stays put,
+  // flipped to its dimmed hidden state; in Regular mode it leaves the list.
+  // Time-limited hides auto-restore at the day boundary.
   const handleHide = async (id: string, duration: HideDuration) => {
-    setNotes((s) => s.filter((n) => n.id !== id));
+    if (hiddenFilter === "exclude") setNotes((s) => s.filter((n) => n.id !== id));
+    else setNotes((s) => s.map((n) => (n.id === id ? { ...n, hidden: true } : n)));
     await notesApi.hide(id, duration);
+  };
+
+  // Restore a hidden note. In hidden-only mode it leaves the view (a restored
+  // note isn't hidden anymore); in Show All it just sheds its dimmed state.
+  const handleUnhide = async (id: string) => {
+    if (hiddenFilter === "only") setNotes((s) => s.filter((n) => n.id !== id));
+    else setNotes((s) => s.map((n) => (n.id === id ? { ...n, hidden: false } : n)));
+    await notesApi.unhide(id);
   };
 
   return (
@@ -52,34 +126,40 @@ export default function Notes() {
         <span className="section-name">Notes</span>
       </div>
 
-      {/* Always-open capture: type + Enter writes a note. No + button. */}
-      <div className="capture">
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              const t = draft.trim();
-              if (t) {
-                handleCreate(t);
-                setDraft("");
+      {/* Always-open capture: type + Enter writes a note. No + button.
+          Suppressed in hidden-only mode — a fresh note isn't hidden, so it
+          would vanish from the view the moment it's created. */}
+      {hiddenFilter !== "only" && (
+        <div className="capture">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                const t = draft.trim();
+                if (t) {
+                  handleCreate(t);
+                  setDraft("");
+                }
               }
-            }
-            if (e.key === "Escape") setDraft("");
-          }}
-          rows={3}
-          spellCheck={false}
-        />
-      </div>
+              if (e.key === "Escape") setDraft("");
+            }}
+            rows={3}
+            spellCheck={false}
+          />
+        </div>
+      )}
 
       {notes.map((note) => (
         <NoteInput
           key={note.id}
           note={note}
+          hovered={hoveredId === note.id}
           onUpdate={handleUpdate}
           onDelete={() => handleDelete(note.id)}
           onHide={(duration) => handleHide(note.id, duration)}
+          onUnhide={() => handleUnhide(note.id)}
         />
       ))}
     </section>
@@ -89,12 +169,14 @@ export default function Notes() {
 // ---- Single note textarea ------------------------------------------------
 
 function NoteInput({
-  note, onUpdate, onDelete, onHide,
+  note, hovered, onUpdate, onDelete, onHide, onUnhide,
 }: {
   note: Note;
+  hovered: boolean;
   onUpdate: (id: string, body: string) => void;
   onDelete: () => void;
   onHide: (duration: HideDuration) => void;
+  onUnhide: () => void;
 }) {
   const [val, setVal] = useState(note.body);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -127,7 +209,10 @@ function NoteInput({
   };
 
   return (
-    <div className="note">
+    <div
+      className={`note${hovered ? " hovered" : ""}${note.hidden ? " hidden" : ""}`}
+      data-note-id={note.id}
+    >
       <textarea
         ref={ref}
         className="note-textarea"
@@ -149,7 +234,18 @@ function NoteInput({
         spellCheck={false}
       />
       <div className="note-actions">
-        <HideMenu onHide={onHide} />
+        {/* Hidden notes swap the ◐ hide menu for ↺ restore, mirroring hidden
+            item rows in Show-All mode. */}
+        {note.hidden ? (
+          <button
+            className="item-action unhide-btn"
+            onClick={onUnhide}
+            title="Unhide note"
+            aria-label="Unhide note"
+          >↺</button>
+        ) : (
+          <HideMenu onHide={onHide} />
+        )}
         {val.trim() && (
           <button
             className="note-delete"

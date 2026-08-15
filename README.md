@@ -70,8 +70,9 @@ Your data in `~/Library/.../dayapp.db` is never touched.
 ## Command palette (⌘P)
 
 VS Code / Linear–style: press **⌘P** anywhere, type to filter, ↑/↓ to move, Enter to run.
-Currently: jump to Today / Journal / Hidden, and Update DayApp. Trivially extensible — add a
-command to the registry in `App.tsx`.
+Currently: the three visibility modes (Show Regular View / Show All / Show Hidden Only),
+priority filters (Show Priority 1/2/3 Only), View Journal, and Update DayApp. Trivially
+extensible — add a command to the registry in `App.tsx`.
 
 ## Where things live
 
@@ -88,7 +89,7 @@ dayapp/
 │   ├── CommandPalette.tsx   ← ⌘P command palette modal
 │   ├── UpdateOverlay.tsx    ← self-update progress modal
 │   ├── components/          ← feature components (SectionList, SectionView, ItemRow,
-│   │                          JournalView, HiddenView, SearchMenu)
+│   │                          JournalView, SearchMenu)
 │   ├── main.tsx             ← React entry
 │   └── index.css            ← dark Linear-flavoured theme
 └── src-tauri/
@@ -128,9 +129,21 @@ dayapp/
 ## Hiding
 
 Not everything in a list matters today. Hover any task or note and click **◐** to
-hide it — forever, or for a day / week / month. Hidden rows leave the main list
-entirely (no faded clutter) and collect in the **Hidden** view, opened from the
-**◐** icon in the header. There each row can be unhidden (↺) or deleted.
+hide it — forever, or for a day / week / month. Hidden rows leave the regular list
+entirely (no faded clutter).
+
+The three visibility commands in the ⌘P palette are all filters over the same main
+page — there is no separate archive screen:
+
+- **Show Regular View** — the default; hidden entries are excluded.
+- **Show All** — hidden tasks appear inline in their sections and hidden notes
+  back in the notes list: dimmed, marked **◐** with the hide's expiry, hover
+  actions reduced to unhide (↺) and delete.
+- **Show Hidden Only** — the main page showing just the hidden entries (the
+  header's **◐** icon is a shortcut for this one). Capture inputs are hidden
+  here, and unhiding a row pops it back out of the view.
+
+The mode is per-session — a relaunch always starts regular.
 
 Time-limited hides auto-restore: `hidden_until` is an ISO date, and the same
 midnight sweep that drops Today items into Backlog also clears any expired hide,
@@ -146,9 +159,35 @@ press Enter to create a new one. Each item shows its project as a small,
 project, so you can group items across sections at a glance. The label fades out
 on hover to make room for the row's action buttons.
 
+You can also assign a project right from the capture field: end the text with a
+`#tag` and it links to the project. Matching is case-insensitive by exact name
+or a unique prefix (`#day` → "dayapp"). If the tag matches **no** existing
+project, a new one is created from it — but only when the tag is the last thing
+typed (`fix bug #acme` creates "acme"; `fix bug #acme notes` does not). The tag
+is stripped from the row once linked. (Tags compose with `!1..3` priority
+tokens — see [Priorities](#priorities).)
+
 Assigning a project is housekeeping — it's **not** logged to the journal (only
 completion/movement is). Deleting a project unassigns its items; the items
 themselves are kept.
+
+## Priorities
+
+End (or start) a task's text with `!1`, `!2`, or `!3` to give it a priority —
+at capture or on any later edit (the token is stripped from the row). The token
+composes with `#tags` in either order: `fix bug #acme !1`, `fix bug !1 #acme`,
+or either one alone. Editing with a `!N` token updates the priority; editing
+without one leaves it alone; `!0` clears it.
+
+Each row shows its tier as bangs on the right — `!`, `!!`, `!!!` (brighter =
+more urgent) — and the **Backlog is sorted by priority**: tier 1 first, no
+priority last, manual drag order within a tier. Today and Daily keep their
+manual order.
+
+**⌘P → Show Priority 1/2/3 Only** filters the whole list down to one tier
+(each command's hint shows its bangs). Re-run the active tier's command — or
+**Show Regular View** — to clear the filter. Priorities are housekeeping, like
+projects: not logged to the journal.
 
 ## Reminders
 

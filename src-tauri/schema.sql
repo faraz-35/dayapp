@@ -19,7 +19,10 @@ CREATE TABLE IF NOT EXISTS items (
     hidden_until        TEXT,
     -- Housekeeping columns (not logged to actions): assignment + scheduled promotion.
     project_id          TEXT,                                    -- FK→projects.id; nullable, no CASCADE enforced inline
-    remind_at           TEXT                                     -- ISO YYYY-MM-DD when a backlog item auto-promotes to today
+    remind_at           TEXT,                                    -- ISO YYYY-MM-DD when a backlog item auto-promotes to today
+    -- Urgency tier 1–3 (NULL = none), set via !1/!2/!3 tokens in the item text.
+    -- Housekeeping like project_id — not logged. The Backlog sorts by it.
+    priority            INTEGER CHECK (priority IS NULL OR priority IN (1, 2, 3))
 );
 
 CREATE INDEX IF NOT EXISTS idx_items_section ON items(section, sort_order);

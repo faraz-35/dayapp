@@ -61,19 +61,29 @@ Two independent feature areas, deliberately decoupled:
 
 ```
 items   id, text, section, status, last_completed_date, sort_order, created_at, updated_at,
-        hidden, hidden_until, project_id, remind_at
+        hidden, hidden_until, project_id, remind_at, priority
 actions id, item_id, item_text, action, from_section, to_section, from_status, to_status, timestamp
 meta    key, value           — currently holds last_sweep_date
 ```
 
 - `section` ∈ `today` | `daily` | `backlog`
 - `status` ∈ `active` | `done`
-- `hidden` ∈ `0` | `1` — soft-archive; `list_*` filters `hidden = 0`. `hidden_until` is NULL
+- `hidden` ∈ `0` | `1` — soft-archive. The list commands take a `HiddenFilter`
+  (`exclude | include | only` — the three ⌘P visibility modes) instead of always
+  filtering `hidden = 0`; in `include`/`only` modes archived rows render inline in
+  their sections (dimmed, ◐ expiry chip, ↺/× actions only, not draggable).
+  `hidden_until` is NULL
   (forever) or an ISO date cleared by the midnight sweep. Hide/unhide is **not** logged to
   `actions` — it's housekeeping, not activity.
 - `project_id` — optional assignment to a `projects` row (housekeeping; **not** logged). Shown
   as a color-coded label on the far right of each item row (deterministic hue per project id).
   Deleting a project nulls the FK (items kept).
+- `priority` ∈ `1..3` | NULL — urgency tier, set via a `!1`/`!2`/`!3` token in the capture or
+  edit text (`parseItemTags` in `lib.ts` strips it; composable with `#tag` in either order;
+  last token wins; no token on edit leaves the value alone; `!0` clears). Housekeeping —
+  **not** logged. Rows show it as bangs (`!` `!!` `!!!`, brighter = more urgent). The Backlog
+  is sorted by it (priority first, then manual order — DnD reorders within a tier);
+  Today/Daily stay manual.
 - `remind_at` — ISO `YYYY-MM-DD` on which a backlog item auto-promotes to `today`. The
   promotion is logged as a `moved` action (backlog→today) and `remind_at` is cleared so it
   fires once. Date-granular, fires on launch (no cron / no macOS notification).
@@ -197,7 +207,6 @@ dayapp/
 │       ├── SectionView.tsx         ← one section (head + capture input + sortable items + dropzone)
 │       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput
 │       ├── JournalView.tsx         ← the journal: actions log + per-task time, grouped by day
-│       ├── HiddenView.tsx          ← soft-archive view: unhide/delete hidden items + notes
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump)
 └── src-tauri/
     ├── src/
@@ -228,7 +237,6 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionView.tsx` | one section's header + capture input + sortable items + dropzone | DnD sensors/handlers |
 | `ItemRow.tsx` | one row's render + ▶/⏸ timer control + `EditInput` | DnD wiring (from `useSortable` via parent) |
 | `JournalView.tsx` | fetching + filtering + grouping the actions log + per-task time totals | — |
-| `HiddenView.tsx` | listing/unhiding/deleting hidden items + notes | — |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump | the hit list (passed in from `App`) |
 
 ---
@@ -250,7 +258,7 @@ separately" bug.
 .app       display:flex column; height:100%; overflow:hidden   ← the shell, never scrolls
   .header  flex-shrink:0                                       ← pinned
   .scroll   flex:1; overflow-y:auto; min-height:0              ← THE ONE scroll container
-    Notes / SectionList / JournalView / HiddenView              ← in-flow, no own scroll
+    Notes / SectionList / JournalView                           ← in-flow, no own scroll
 ```
 
 `.notes`, `.sections`, `.journal`, `.hidden-view` must **not** set `overflow`,
@@ -372,8 +380,19 @@ Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spac
 | `t` | start/stop timer on selected (toggles; starting stops any other) |
 | `⌫` / `Delete` | delete selected |
 | single-click | select + enter edit mode (caret at end, not full-select) |
-| `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
+| `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, …) |
 | `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump |
+
+**Visibility modes (⌘P):** `Show Regular View` (default — hidden entries excluded),
+`Show All` (hidden entries inline, dimmed, ↺/× actions), `Show Hidden Only` (only hidden
+entries). All three render the same main page (Notes + sections) — they're filters, not
+separate views; capture inputs are suppressed in hidden-only mode, and unhiding there pops
+the row out. The mode lives in `App.tsx` as `visibility` state, session-only; the header ◐
+button toggles hidden-only.
+
+**Priority filter (⌘P):** `Show Priority 1/2/3 Only` narrows the main list to one tier
+(`displayItems` in `App.tsx`; DnD indexes map back to full-list space in `handleMoveItem`).
+Re-running the active tier's command clears it; `Show Regular View` resets everything.
 
 The keyboard handler **ignores events when an `<input>`/`<textarea>` is focused** so typing
 into Notes or edit fields isn't hijacked.
@@ -382,6 +401,11 @@ into Notes or edit fields isn't hijacked.
 - Auto-growing `<textarea>` (height driven by JS, `resize: none`, no internal scrollbar).
 - Debounced autosave (600ms) + save-on-blur.
 - Delete button appears on hover, only when there's content.
+- The hover reveal (hide/delete buttons) keys off a JS-tracked `.hovered` class
+  (pointer effect in `Notes.tsx`), **not** CSS `:hover` — WKWebKit's `:hover` chain
+  goes stale when the auto-growing textareas resize under a stationary pointer,
+  leaving buttons stuck on a note the pointer already left. Item rows don't
+  resize, which is why they can keep plain `:hover`. Don't "simplify" notes back.
 - An always-open capture field sits at the top of Notes: type + Enter creates a
   note. (Replaced the old `+` button + seed empty note.)
 
@@ -389,9 +413,10 @@ into Notes or edit fields isn't hijacked.
 
 - No light theme. No `prefers-color-scheme`.
 - No second accent colour. No status colours per section.
-- No priorities, tags, or arbitrary due-date fields. (Projects are a first-class
-  filter axis; reminders are a date-granular promotion; timers are a measurement layer —
-  these are the deliberate scope expansions. Don't pile on more organising metadata on top.)
+- No tags or arbitrary due-date fields. (Projects are a first-class filter axis; reminders
+  are a date-granular promotion; timers are a measurement layer; priorities are a `!1..3`
+  text token + Backlog sort — these are the deliberate scope expansions. Don't pile on more
+  organising metadata on top.)
 - No time-tracking reports / billable hours / charts. The timer's payoff is the per-row
   cumulative + the Journal's per-day, per-task totals — not an analytics surface.
 - No journal surface / blank-page daily note. The log IS the journal.

@@ -96,9 +96,6 @@ button {
 }
 .icon-btn:hover { background: var(--bg-hover); color: var(--text); }
 .icon-btn.active { color: var(--accent); }
-/* The ⌕ search glyph renders smaller than the other header glyphs at the same
-   font-size (it's a thin-line symbol), so give it a dedicated larger size. */
-.icon-btn.search-btn { font-size: 20px; }
 
 /* ---- Search (⌘F) — floating modal ---------------------------------- */
 /* Mirrors the ⌘P command palette: a fixed dim backdrop + a centered card. NOT
@@ -550,7 +547,11 @@ button {
   justify-content: center;
   transition: opacity 0.08s ease, background 0.08s ease, color 0.08s ease;
 }
-.note:hover .note-delete { opacity: 1; }
+/* The reveal keys off a JS-tracked .hovered class (set by the pointer effect
+   in Notes.tsx), not :hover — WKWebKit's :hover chain goes stale when the
+   auto-growing textareas resize under a stationary pointer, leaving buttons
+   stuck on a note the pointer already left. */
+.note.hovered .note-delete { opacity: 1; }
 .note-delete:hover { background: var(--bg-hover); color: var(--danger); }
 
 /* Two corner buttons (hide + delete) sit side by side. */
@@ -566,7 +567,7 @@ button {
 /* The HideMenu trigger inherits .item-action's hover-reveal, but a note isn't an
    .item, so reveal it on .note hover explicitly. */
 .note-actions .item-action { opacity: 0; }
-.note:hover .note-actions .item-action { opacity: 1; }
+.note.hovered .note-actions .item-action { opacity: 1; }
 
 /* ---- Hide menu (shared by item rows + notes) -------------------------- */
 
@@ -641,6 +642,18 @@ button {
   transition: opacity 0.08s ease;
 }
 .item:hover .item-meta { opacity: 0; }
+
+/* Priority bangs (!, !!, !!!) — the row's urgency tier, set via !1/!2/!3
+   tokens in the text. Brighter = more urgent; the Backlog is sorted by it. */
+.priority-label {
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.priority-label.p1 { color: var(--text); }
+.priority-label.p2 { color: var(--text-dim); }
+.priority-label.p3 { color: var(--text-faint); }
 
 /* Per-project label. Color is set inline per project (deterministic hue) so the
    eye can group items across sections at a glance. */
@@ -756,52 +769,29 @@ button {
 }
 .timer-chip-discard:hover { color: var(--danger); background: var(--bg-hover); }
 
-/* ---- Hidden view ------------------------------------------------------ */
-
-.hidden-view {
-  padding: 8px 16px 32px;
-}
-
-.hidden-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
-}
-.hidden-row:hover { background: var(--bg-hover); }
-/* Actions reveal on hover, mirroring item rows. */
-.hidden-row .item-action { opacity: 0; }
-.hidden-row:hover .item-action { opacity: 1; }
-
-.hidden-badge {
-  font-size: 10px;
-  color: var(--text-faint);
-  flex-shrink: 0;
-  width: 86px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.hidden-badge.dated { color: var(--accent); }
-
-.hidden-text {
-  flex: 1;
-  font-size: 13px;
-  color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.hidden-text.note-preview {
-  white-space: pre-wrap;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
+/* ---- Hidden entries inline (⌘P → Show All / Show Hidden Only) --------- */
+/* Hidden entries render inline in their sections: dimmed text, a ◐ chip
+   carrying the hide's expiry, an inert checkbox, no drag; hover reveals
+   only ↺ unhide + × delete. */
 
 .unhide-btn:hover { color: var(--accent); }
+
+.item.hidden .item-text { color: var(--text-faint); }
+.item.hidden .item-check,
+.item.hidden:hover .item-check {
+  border-color: var(--text-faint);
+  opacity: 0.6;
+  cursor: default;
+}
+.item.hidden:hover .grip { opacity: 0; }
+.hidden-chip {
+  font-size: 11px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.note.hidden .note-textarea { color: var(--text-faint); }
+.note.hidden .note-textarea:focus { color: var(--text); }
+
 
 /* ---- Command palette (⌘P) --------------------------------------------- */
 

@@ -30,8 +30,8 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
 ];
 
 export default function SectionList({
-  items, projects, selectedId, editingId,
-  onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide,
+  items, projects, selectedId, editingId, showCapture,
+  onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
   onSetProject, onSetReminder, onMoveItem,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
@@ -39,6 +39,9 @@ export default function SectionList({
   projects: Project[];
   selectedId: string | null;
   editingId: string | null;
+  /** Capture inputs are hidden in hidden-only mode — a fresh entry isn't
+   *  hidden, so it would vanish from the view the moment it's created. */
+  showCapture: boolean;
   onSelect: (id: string) => void;
   onComplete: (id: string, section: Section) => void;
   onDelete: (id: string, section: Section) => void;
@@ -46,6 +49,7 @@ export default function SectionList({
   onStartEdit: (id: string) => void;
   onQuickAdd: (section: Section, text: string) => void;
   onHide: (id: string, section: Section, duration: HideDuration) => void;
+  onUnhide: (id: string) => void;
   onSetProject: (id: string, projectId: string | null) => void;
   onSetReminder: (id: string, remindAt: string | null) => void;
   onMoveItem: (id: string, toSection: Section, newIndex: number) => void;
@@ -123,6 +127,7 @@ export default function SectionList({
             projects={projects}
             selectedId={selectedId}
             editingId={editingId}
+            showCapture={showCapture}
             onSelect={onSelect}
             onComplete={onComplete}
             onDelete={onDelete}
@@ -130,6 +135,7 @@ export default function SectionList({
             onStartEdit={onStartEdit}
             onQuickAdd={onQuickAdd}
             onHide={onHide}
+            onUnhide={onUnhide}
             onSetProject={onSetProject}
             onSetReminder={onSetReminder}
             activeTimerId={activeTimerId}

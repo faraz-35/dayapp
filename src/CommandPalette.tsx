@@ -2,7 +2,7 @@
 // commands with arrow-key navigation. The command set is passed in by the
 // parent so the palette stays a dumb, reusable surface.
 //
-// Keys: ↑/↓ or j/k to move, Enter to run, Esc to close. Clicking a row runs
+// Keys: ↑/↓ to move, Enter to run, Esc to close. Clicking a row runs
 // it. The list filters by label (case-insensitive substring) and auto-selects
 // the first match.
 
@@ -65,10 +65,10 @@ export default function CommandPalette({
 
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") { e.preventDefault(); onClose(); }
-    else if (e.key === "ArrowDown" || e.key === "j") {
+    else if (e.key === "ArrowDown") {
       e.preventDefault();
       setActive((a) => Math.min(a + 1, filtered.length - 1));
-    } else if (e.key === "ArrowUp" || e.key === "k") {
+    } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive((a) => Math.max(a - 1, 0));
     } else if (e.key === "Enter") {

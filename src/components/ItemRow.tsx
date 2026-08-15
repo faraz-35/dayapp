@@ -2,6 +2,10 @@
 // and the hover-revealed action buttons (edit / project / reminder / hide /
 // delete). Drag handle is the ⠿ grip; DnD is wired by the parent via useSortable.
 //
+// Hidden rows (⌘P → Show All / Show Hidden Only) render inline but archived:
+// dimmed text, an inert checkbox, a ◐ chip carrying the hide's expiry, no drag
+// handle, and their only actions are unhide (↺) and delete.
+//
 // Single click selects AND enters edit mode; the checkbox/buttons all
 // stopPropagation so they keep working without triggering edit.
 
@@ -15,7 +19,7 @@ import ReminderMenu from "../ReminderMenu";
 
 export default function ItemRow({
   item, project, selected, editing,
-  onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide,
+  onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide, onUnhide,
   onSetProject, onSetReminder, onToggleTimer, isTiming, elapsedSec, totalSec,
 }: {
   item: Item;
@@ -28,6 +32,7 @@ export default function ItemRow({
   onCommitEdit: (text: string) => void;
   onStartEdit: () => void;
   onHide: (duration: HideDuration) => void;
+  onUnhide: () => void;
   onSetProject: (projectId: string | null) => void;
   onSetReminder: (remindAt: string | null) => void;
   onToggleTimer: () => void;
@@ -46,17 +51,23 @@ export default function ItemRow({
     <div
       ref={setNodeRef}
       data-item-id={item.id}
-      className={`item${done ? " done" : ""}${selected ? " selected" : ""}${isDragging ? " dragging" : ""}`}
+      className={`item${done ? " done" : ""}${item.hidden ? " hidden" : ""}${selected ? " selected" : ""}${isDragging ? " dragging" : ""}`}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       onClick={() => { onSelect(item.id); if (!editing) onStartEdit(); }}
       {...attributes}
     >
-      <span className="grip" {...listeners} title="Drag">⠿</span>
+      {/* The grip keeps its slot on hidden rows (so columns stay aligned) but
+          carries no drag listeners — archived rows aren't reorderable. */}
+      <span
+        className="grip"
+        {...(item.hidden ? {} : listeners)}
+        title={item.hidden ? undefined : "Drag"}
+      >⠿</span>
 
       <button
         className={`item-check${done ? " checked" : ""}`}
-        onClick={(e) => { e.stopPropagation(); if (!done) onComplete(); }}
-        title={doneToday ? "Completed for today" : "Mark done"}
+        onClick={(e) => { e.stopPropagation(); if (!done && !item.hidden) onComplete(); }}
+        title={item.hidden ? "Hidden — hover for ↺ unhide" : doneToday ? "Completed for today" : "Mark done"}
         aria-label="Mark done"
       />
 
@@ -69,8 +80,24 @@ export default function ItemRow({
       {/* Right-aligned metadata (time + project label + reminder). Resting state
           shows this; on hover it yields to the action buttons. Suppressed while
           timing — the live elapsed then lives in the action cluster instead. */}
-      {!editing && !isTiming && (totalSec > 0 || project || item.remindAt) && (
+      {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || item.priority != null) && (
         <div className="item-meta">
+          {item.priority != null && (
+            <span
+              className={`priority-label p${item.priority}`}
+              title={`Priority ${item.priority}`}
+            >{"!".repeat(item.priority)}</span>
+          )}
+          {item.hidden && (
+            <span
+              className="hidden-chip"
+              title={item.hiddenUntil
+                ? `Hidden until ${item.hiddenUntil}`
+                : "Hidden forever — hover for ↺ unhide"}
+            >
+              ◐ {item.hiddenUntil ? `until ${formatReminder(item.hiddenUntil)}` : "forever"}
+            </span>
+          )}
           {totalSec > 0 && (
             <span className="time-label" title="Time tracked">⏱ {formatDuration(totalSec)}</span>
           )}
@@ -92,25 +119,47 @@ export default function ItemRow({
       {!editing && (
         <>
           {/* Live elapsed shows only on the running row, always visible (not
-              hover-gated) so the active timer is identifiable at a glance. */}
+              hover-gated) so the active timer is identifiable at a glance. A
+              hidden row only ever shows the stop form — it can't start one. */}
           {isTiming && (
             <span className="timer-live" title="Elapsed">{formatLiveDuration(elapsedSec)}</span>
           )}
-          <button
-            className={`item-action timer-btn${isTiming ? " timing" : ""}`}
-            onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
-            title={isTiming ? "Stop timer" : "Start timer"}
-            aria-label={isTiming ? "Stop timer" : "Start timer"}
-          >{isTiming ? "⏸" : "▶"}</button>
-          <ProjectMenu projectId={item.projectId} onAssign={onSetProject} />
-          <ReminderMenu remindAt={item.remindAt} onSet={onSetReminder} />
-          <HideMenu onHide={onHide} />
-          <button
-            className="item-action danger"
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            title="Delete"
-            aria-label="Delete"
-          >×</button>
+          {(isTiming || !item.hidden) && (
+            <button
+              className={`item-action timer-btn${isTiming ? " timing" : ""}`}
+              onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
+              title={isTiming ? "Stop timer" : "Start timer"}
+              aria-label={isTiming ? "Stop timer" : "Start timer"}
+            >{isTiming ? "⏸" : "▶"}</button>
+          )}
+          {item.hidden ? (
+            <>
+              <button
+                className="item-action unhide-btn"
+                onClick={(e) => { e.stopPropagation(); onUnhide(); }}
+                title="Unhide"
+                aria-label="Unhide"
+              >↺</button>
+              <button
+                className="item-action danger"
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                title="Delete"
+                aria-label="Delete"
+              >×</button>
+            </>
+          ) : (
+            <>
+              <ProjectMenu projectId={item.projectId} onAssign={onSetProject} />
+              <ReminderMenu remindAt={item.remindAt} onSet={onSetReminder} />
+              <HideMenu onHide={onHide} />
+              <button
+                className="item-action danger"
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                title="Delete"
+                aria-label="Delete"
+              >×</button>
+            </>
+          )}
         </>
       )}
     </div>
