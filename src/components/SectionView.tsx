@@ -2,13 +2,14 @@
 // Renders: header (label + count), always-open capture input, sortable item
 // rows, and a droppable empty zone so the section accepts drops even when empty.
 // In the Backlog (sorted P1 → P3 → unmarked) tier changes between neighbours
-// render as labeled hairline dividers, making the existing sort legible.
+// render as hairline dividers labeled with the tier's signal bars, making the
+// existing sort legible.
 
 import { Fragment, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { type HideDuration, type Item, type Project, type Section } from "../lib";
-import ItemRow from "./ItemRow";
+import ItemRow, { PriorityBars } from "./ItemRow";
 
 export default function SectionView({
   section, label, hint, items, projects, selectedId, editingId, showCapture,
@@ -75,17 +76,19 @@ export default function SectionView({
         {items.map((item, idx) => {
           const timing = item.id === activeTimerId;
           // Backlog only: the section is sorted P1 → P3 → unmarked, so a tier
-          // change between neighbours becomes a labeled separator (a bare
-          // hairline before the unmarked tail). Divider state comes purely
-          // from the rendered order — filters that drop tiers just remove
-          // their boundaries — and they're inert: not sortable, not droppable.
+          // change between neighbours becomes a hairline separator labeled
+          // with the entering tier's signal bars (a bare hairline before the
+          // unmarked tail). Rows in the Backlog carry no bars — the dividers
+          // are the tier signal there. Divider state comes purely from the
+          // rendered order — filters that drop tiers just remove their
+          // boundaries — and they're inert: not sortable, not droppable.
           const tierChange =
             section === "backlog" && idx > 0 && items[idx - 1].priority !== item.priority;
           return (
             <Fragment key={item.id}>
               {tierChange && (
                 <div className={`tier-divider${item.priority == null ? " bare" : ""}`}>
-                  {item.priority != null && <span className="tier-label">P{item.priority}</span>}
+                  {item.priority != null && <PriorityBars priority={item.priority} />}
                 </div>
               )}
               <ItemRow

@@ -50,10 +50,12 @@ export default function ItemRow({
     item.section === "daily" && item.lastCompletedDate === localDateStr();
   const done = item.status === "done" || doneToday;
 
-  // Priority renders as signal bars — filled count = urgency (P1 = 3 filled,
-  // P3 = 1), so the most urgent rows carry the most visual mass, matching the
-  // Backlog's tier-first sort.
-  const priorityFilled = item.priority != null ? 4 - item.priority : 0;
+  // Backlog rows carry no bars — the section's tier dividers label the groups
+  // there — so priority feeds the row's metadata only outside the Backlog.
+  const priorityBars =
+    item.priority != null && item.section !== "backlog" ? (
+      <PriorityBars priority={item.priority} />
+    ) : null;
 
   return (
     <div
@@ -101,19 +103,9 @@ export default function ItemRow({
           while its actions are on screen); time / reminder yield to the
           buttons. Suppressed while timing — the live elapsed then lives in the
           action cluster instead. */}
-      {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || item.priority != null) && (
+      {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars) && (
         <div className="item-meta">
-          {item.priority != null && (
-            <span
-              className="priority-bars"
-              title={`Priority ${item.priority}`}
-              aria-label={`Priority ${item.priority}`}
-            >
-              {[0, 1, 2].map((i) => (
-                <span key={i} className={`bar${i < priorityFilled ? " filled" : ""}`} />
-              ))}
-            </span>
-          )}
+          {priorityBars}
           {item.hidden && (
             <span
               className="hidden-chip"
@@ -189,6 +181,25 @@ export default function ItemRow({
         </>
       )}
     </div>
+  );
+}
+
+// The tier's signal bars: filled count = urgency (P1 = 3 filled, P3 = 1), so
+// the most urgent tier carries the most visual mass. Shown on Today/Daily
+// rows; in the Backlog the tier dividers use it as their label instead — rows
+// there stay clean, the groups carry the tier.
+export function PriorityBars({ priority }: { priority: 1 | 2 | 3 }) {
+  const filled = 4 - priority;
+  return (
+    <span
+      className="priority-bars"
+      title={`Priority ${priority}`}
+      aria-label={`Priority ${priority}`}
+    >
+      {[0, 1, 2].map((i) => (
+        <span key={i} className={`bar${i < filled ? " filled" : ""}`} />
+      ))}
+    </span>
   );
 }
 

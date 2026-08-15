@@ -190,14 +190,13 @@ composes with `#tags` in either order: `fix bug #acme !1`, `fix bug !1 #acme`,
 or either one alone. Editing with a `!N` token updates the priority; editing
 without one leaves it alone; `!0` clears it.
 
-Each row shows its tier as three small **signal bars** on the right — `▮▮▮` =
-priority 1, `▮▮▯` = 2, `▮▯▯` = 3 — so more filled bars means more urgent. The
-**Backlog is sorted by priority**: tier 1 first, no priority last, manual drag
-order within a tier. Tier boundaries in the Backlog render as hairline
-dividers (labeled `P2` / `P3`; a bare hairline before the unprioritized tail),
-so the groups read structurally — and a drag across a divider snaps back to
-its tier, which the dividers now make visible. Today and Daily keep their
-manual order, with the bars as the only priority signal.
+Today and Daily rows show the tier as three small **signal bars** on the right —
+`▮▮▮` = priority 1, `▮▮▯` = 2, `▮▯▯` = 3 — more filled bars means more urgent.
+The **Backlog is sorted by priority** — tier 1 first, no priority last, manual
+drag order within a tier — and its rows carry no bars: each tier boundary is a
+hairline divider labeled with the entering tier's bars (a bare hairline before
+the unprioritized tail), so the groups read structurally and a drag across a
+divider snapping back to its tier is visible, not surprising.
 
 **⌘P → Show Priority 1/2/3 Only** filters the whole list down to one tier
 (each command's hint shows its bars). Re-run the active tier's command — or

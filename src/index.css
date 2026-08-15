@@ -682,8 +682,9 @@ button {
 
 /* Priority signal bars — the row's urgency tier, set via !1/!2/!3 tokens in
    the text. Filled count = urgency (P1 = 3 filled … P3 = 1), filled in the one
-   accent, empty slots a faint track. The Backlog sorts + groups by tier (see
-   .tier-divider below). Like the project label, stays visible on hover. */
+   accent, empty slots a faint track. On Today/Daily rows (stays visible on
+   hover, like the project label); in the Backlog the tier dividers below use
+   it as their label — rows there carry no bars. */
 .priority-bars {
   display: inline-flex;
   gap: 2px;
@@ -699,15 +700,15 @@ button {
 .priority-bars .bar.filled { background: var(--accent); }
 
 /* Priority tier dividers (Backlog only). The section sorts P1 → P3 → unmarked,
-   so each tier boundary renders as a hairline with a centered micro-label
-   (P2 / P3 …); the unmarked tail gets a bare hairline. Sub-header level —
-   quieter than the section heads. Dividers appear only between consecutive
-   items whose tiers differ, so absent tiers leave no trace. */
+   so each tier boundary renders as a hairline whose label is the entering
+   tier's signal bars; the unmarked tail gets a bare hairline. Sub-header
+   level — quieter than the section heads. Dividers appear only between
+   consecutive items whose tiers differ, so absent tiers leave no trace. */
 .tier-divider {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 4px 8px;
+  margin: 6px 8px;
 }
 .tier-divider::before,
 .tier-divider::after {
@@ -717,11 +718,6 @@ button {
   background: var(--border);
 }
 .tier-divider.bare::after { content: none; }
-.tier-divider .tier-label {
-  font-size: 9px;
-  color: var(--text-faint);
-  letter-spacing: 0.08em;
-}
 
 /* Per-project label. Color is set inline per project (deterministic hue) so the
    eye can group items across sections at a glance. */

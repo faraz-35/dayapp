@@ -87,13 +87,13 @@ meta    key, value           — currently holds last_sweep_date
 - `priority` ∈ `1..3` | NULL — urgency tier, set via a `!1`/`!2`/`!3` token in the capture or
   edit text (`parseItemTags` in `lib.ts` strips it; composable with `#tag` in either order;
   last token wins; no token on edit leaves the value alone; `!0` clears). Housekeeping —
-  **not** logged. Rows show it as signal bars (`▮▮▮` `▮▮▯` `▮▯▯` — filled count =
-urgency, so P1 carries the most visual mass; filled bars use the accent, empty slots
-a faint track). The Backlog is sorted by it (priority first, then manual order — DnD
-reorders within a tier) and tier boundaries there render as labeled hairline dividers
-(`P2`/`P3`; bare hairline before the unprioritized tail — derived purely from the
-rendered order in `SectionView.tsx`, so filters that drop tiers drop their dividers);
-Today/Daily stay manual.
+  **not** logged. Shown as signal bars (`▮▮▮` `▮▮▯` `▮▯▯` — filled count = urgency, so
+  P1 carries the most visual mass; filled bars use the accent, empty slots a faint track)
+  on Today/Daily rows only; Backlog rows are clean. The Backlog is sorted by it (priority
+  first, then manual order — DnD reorders within a tier) and tier boundaries there render
+  as hairline dividers whose label is the entering tier's bars (bare hairline before the
+  unprioritized tail — derived purely from the rendered order in `SectionView.tsx`, so
+  filters that drop tiers drop their dividers); Today/Daily stay manual.
 - `remind_at` — ISO `YYYY-MM-DD` on which a backlog item auto-promotes to `today`. The
   promotion is logged as a `moved` action (backlog→today) and `remind_at` is cleared so it
   fires once. Date-granular, fires on launch (no cron / no macOS notification).
@@ -215,7 +215,7 @@ dayapp/
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + capture input + sortable items + dropzone; Backlog tier dividers)
-│       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput
+│       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput + shared PriorityBars
 │       ├── JournalView.tsx         ← the journal: actions log + per-task time, grouped by day
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
 └── src-tauri/
@@ -364,8 +364,9 @@ below 455px of width a media query hides the masthead.
 **Item rows:**
 - Resting: the checkbox circle + text, plus any right-aligned metadata (priority signal
   bars, `⏱` cumulative time, project label, reminder chip). Rows with no priority / tracked
-  time / project / reminder show only checkbox + text. In the Backlog, tier boundaries
-  between neighbours render as `.tier-divider` hairlines (Backlog only — never Today/Daily).
+  time / project / reminder show only checkbox + text — and Backlog rows never show bars:
+  tier boundaries between neighbours render as `.tier-divider` hairlines labeled with the
+  tier's bars (Backlog only — never Today/Daily).
 - Hover: row bg → `--bg-hover`; grip (⠿) + ▶ timer + project/reminder/hide + delete (×) buttons
   fade in. The priority bars + project label stay visible (the row's identity, wanted while its
   actions are on screen); the time / reminder / hidden metadata fades out. Checkbox circle
