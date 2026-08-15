@@ -591,8 +591,12 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        {/* The list view carries the brand; the journal view its own title. */}
-        <span className="title">{view === "journal" ? "Journal" : "Faraz’s Day"}</span>
+        {/* The list view carries the brand; the journal view its own title.
+            While a timer runs, the masthead steps aside — the chip can reach
+            the center on a 480px window. */}
+        <span className={`title${activeTimer ? " title-yields" : ""}`}>
+          {view === "journal" ? "Journal" : "Faraz’s Day"}
+        </span>
         <div className="header-right">
           {/* The running timer is always visible here — survives scrolling away
               from the timed row, and doubles as a "current focus" display. Click
