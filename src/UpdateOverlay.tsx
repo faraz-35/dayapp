@@ -56,7 +56,7 @@ export default function UpdateOverlay({
         {phase === "restarting" && (
           <div className="overlay-message">
             <span className="spinner" />
-            <span>Build complete — restarting Faraz’s Day…</span>
+            <span>Build complete — restarting DayApp…</span>
           </div>
         )}
 

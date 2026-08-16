@@ -347,11 +347,14 @@ keyboard-first.** Every choice below is intentional.
 
 Typography: `-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif`.
 Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spacing.
-The one serif surface is the centered header masthead (the "Faraz's Day" brand, or
+The one serif surface is the centered header masthead (the "Live @ Faraz" brand, or
 "Journal" in the journal view): `ui-serif` (New York) italic at 14px, Didot/Georgia
-fallbacks. It is always rendered, even while a timer runs — the timer chip shows only
-a pulse + elapsed (task name in its tooltip) so the two coexist on the 480px window;
-below 455px of width a media query hides the masthead.
+fallbacks. The brand rotates like a station ident — "Faraz" is home, and every 2
+minutes it steps out to a random word from `MASTHEAD_THEMES` in `App.tsx`
+(growth/money/journey/learn, never the same one twice in a row) and back, each swap
+fading in (`title-in`). It is always rendered, even while a timer runs — the timer chip
+shows only a pulse + elapsed (task name in its tooltip) so the two coexist on the 480px
+window; below 455px of width a media query hides the masthead.
 
 ### Spacing & shape
 

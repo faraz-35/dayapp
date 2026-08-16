@@ -7,7 +7,7 @@
 // and a single `.scroll` wrapper scrolls the whole body. Never add a second
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, timersApi, type ActiveTimer, type HideDuration, type HiddenFilter, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import Notes from "./Notes";
@@ -40,6 +40,10 @@ const ZOOM_MAX = 1.6;
 const ZOOM_STEP = 0.1;
 const clampZoom = (z: number) =>
   Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
+
+// Masthead brand rotation: the "Live @ " words the header steps out to, one
+// picked at random every 2 minutes before returning to "Faraz" (home).
+const MASTHEAD_THEMES = ["growth", "money", "journey", "learn"] as const;
 
 // Self-update status, accumulated from "update-status" events emitted by the
 // backend's self_update command. `lines` is the streamed build log; `message`
@@ -81,6 +85,12 @@ export default function App() {
     const saved = Number(localStorage.getItem("dayapp-zoom"));
     return Number.isFinite(saved) && saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;
   });
+  // The masthead brand word after "Live @ " — "Faraz" is home. Session-only:
+  // a launch always starts at home.
+  const [liveAt, setLiveAt] = useState("Faraz");
+  // The theme shown before the current home stretch — the next pick avoids it,
+  // so the rotation shuffles rather than dice-rolls repeats.
+  const lastTheme = useRef("");
 
   // ---- Load -------------------------------------------------------------
 
@@ -125,6 +135,21 @@ export default function App() {
     document.documentElement.style.zoom = String(zoom);
     localStorage.setItem("dayapp-zoom", String(zoom));
   }, [zoom]);
+
+  // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
+  // runs in every view; the journal title simply ignores it.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setLiveAt((word) => {
+        if (word !== "Faraz") return "Faraz";
+        const pool = MASTHEAD_THEMES.filter((t) => t !== lastTheme.current);
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        lastTheme.current = pick;
+        return pick;
+      });
+    }, 120_000);
+    return () => clearInterval(id);
+  }, []);
 
   // What the user sees: items narrowed by the ⌘P priority tier and/or the ⌘F
   // project filter, if any. Everything display-shaped (SectionList, search
@@ -254,7 +279,7 @@ export default function App() {
     { id: "view-journal", label: "View Journal", run: () => setView("journal") },
     {
       id: "update",
-      label: "Update Faraz’s Day",
+      label: "Update DayApp",
       hint: "rebuild from source",
       run: startUpdate,
     },
@@ -592,11 +617,16 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        {/* The list view carries the brand; the journal view its own title.
-            Always rendered — the timer chip carries no task-name text (tooltip
-            only), so the two coexist on the 480px window. Below ~455px the
-            media query in index.css hides the masthead. */}
-        <span className="title">{view === "journal" ? "Journal" : "Faraz’s Day"}</span>
+        {/* The list view carries the brand — "Live @ Faraz" is home, and every
+            2 minutes it steps out to a random MASTHEAD_THEMES word and back
+            (keyed so each swap fades in; see title-in in index.css). The
+            journal view carries its own title. Always rendered — the timer
+            chip carries no task-name text (tooltip only), so the two coexist
+            on the 480px window. Below ~455px the media query in index.css
+            hides the masthead. */}
+        <span className="title" key={view === "journal" ? "journal" : liveAt}>
+          {view === "journal" ? "Journal" : `Live @ ${liveAt}`}
+        </span>
         <div className="header-right">
           {/* The running timer is always visible here — survives scrolling away
               from the timed row, and doubles as a "current focus" display.

@@ -84,6 +84,14 @@ button {
   letter-spacing: 0.01em;
   color: var(--text-dim);
   white-space: nowrap;
+  animation: title-in 0.12s ease;
+}
+
+/* The masthead word is keyed in App.tsx (the Live @ brand rotation, or a view
+   switch), so every swap remounts and fades the new word in — a quiet ident,
+   not a jump. */
+@keyframes title-in {
+  from { opacity: 0; }
 }
 
 /* Below ~455px the trimmed timer chip and the centered masthead can't both
