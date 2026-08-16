@@ -116,6 +116,7 @@ dayapp/
 | `Enter` | complete selected (on a crossed Today row: un-complete) |
 | `e` | edit selected |
 | `t` | start/stop timer on selected (toggles; starting stops any other) |
+| `n` | minimize / expand notes — the collapsed bar shows the first line of the first note; expanding puts the caret in the capture field (also restored by clicking the bar; persists across launches) |
 | `⌫` / `Delete` | delete selected |
 | single-click | select + edit (caret at end) |
 | drag handle (⠿) | drag between sections |

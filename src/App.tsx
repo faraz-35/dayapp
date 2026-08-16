@@ -81,6 +81,12 @@ export default function App() {
     const saved = Number(localStorage.getItem("dayapp-zoom"));
     return Number.isFinite(saved) && saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;
   });
+  // Notes minimized to its one-line preview (`n`, or the ⌃ button on the
+  // notes head). Owned here because the keybinding is; the flag is persisted
+  // like zoom — a display preference, not a session-only filter.
+  const [notesMinimized, setNotesMinimized] = useState(
+    () => localStorage.getItem("dayapp-notes-min") === "1",
+  );
 
   // ---- Load -------------------------------------------------------------
 
@@ -125,6 +131,10 @@ export default function App() {
     document.documentElement.style.zoom = String(zoom);
     localStorage.setItem("dayapp-zoom", String(zoom));
   }, [zoom]);
+
+  useEffect(() => {
+    localStorage.setItem("dayapp-notes-min", notesMinimized ? "1" : "0");
+  }, [notesMinimized]);
 
   // What the user sees: items narrowed by the ⌘P priority tier and/or the ⌘F
   // project filter, if any. Everything display-shaped (SectionList, search
@@ -574,6 +584,12 @@ export default function App() {
       } else if (e.key === "t" && selectedId) {
         const item = allVisible.find((i) => i.id === selectedId);
         if (item) { e.preventDefault(); handleToggleTimer(item.id); }
+      } else if (e.key === "n") {
+        // Toggle the notes surface between full and its one-line preview.
+        // Expanding focuses the capture field (handled in Notes), so `n` from
+        // anywhere is also the fastest path to writing a note.
+        e.preventDefault();
+        setNotesMinimized((m) => !m);
       }
     };
     window.addEventListener("keydown", handler);
@@ -649,8 +665,14 @@ export default function App() {
           <>
             {/* Notes live above the DnD area so typing/pasting isn't a drag
                 surface. Self-contained: owns its state, API, and persistence.
-                In hidden-only mode it lists the hidden notes instead. */}
-            <Notes hiddenFilter={HIDDEN_FILTER[visibility]} />
+                In hidden-only mode it lists the hidden notes instead.
+                Minimized folds it to a one-line preview (`n` / the ⌃ head
+                button); expanding focuses its capture field. */}
+            <Notes
+              hiddenFilter={HIDDEN_FILTER[visibility]}
+              minimized={notesMinimized}
+              onToggleMinimized={() => setNotesMinimized((m) => !m)}
+            />
             {(visibility === "hidden" || priorityFilter !== null || projectFilter !== null) && allVisible.length === 0 && (
               <div className="empty">
                 {visibility === "hidden"

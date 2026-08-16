@@ -326,7 +326,9 @@ keyboard-first.** Every choice below is intentional.
    introduce a second accent.
 6. **Dark, always dark.** No light theme, no `prefers-color-scheme` switching. `color-scheme: dark`.
 7. **Zero inertia for capture.** The lowest-friction surface (Notes) renders first, above
-   everything else. There is always a ready textarea.
+   everything else. There is always a ready textarea — unless the user has minimized Notes
+   to its one-line preview, in which case one click on the bar (or `n`) expands it with the
+   caret already in the capture field.
 
 ### Colour tokens (from `index.css` — use these, do not hardcode hex)
 
@@ -402,6 +404,7 @@ below 455px of width a media query hides the masthead.
 | `Enter` | complete selected (toggles a crossed Today row back to active) |
 | `e` | edit selected |
 | `t` | start/stop timer on selected (toggles; starting stops any other) |
+| `n` | minimize / expand notes (expanding focuses the capture field, caret at end) |
 | `⌫` / `Delete` | delete selected |
 | single-click | select + enter edit mode (caret at end, not full-select) |
 | `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, …) |
@@ -441,6 +444,14 @@ into Notes or edit fields isn't hijacked.
   resize, which is why they can keep plain `:hover`. Don't "simplify" notes back.
 - An always-open capture field sits at the top of Notes: type + Enter creates a
   note. (Replaced the old `+` button + seed empty note.)
+- Minimizable to a single line: the ⌃ button on the notes head (hover-revealed)
+  or `n` folds the whole surface to the `NOTES` label + the first line of the
+  first note (dimmed, ellipsized). The collapsed bar is one big click target —
+  expanding focuses the capture field with the caret at end, so minimized →
+  writing is one click. The flag lives in `App.tsx` (the `n` keybinding's home)
+  and persists in localStorage (`dayapp-notes-min`), like zoom — a display
+  preference, not a session-only filter. The head never resizes under the
+  pointer, so its hover reveal can use plain CSS `:hover` (unlike note rows).
 
 ### What NOT to add (explicit non-goals)
 

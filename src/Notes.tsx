@@ -7,13 +7,24 @@
 // items/actions feature: own state, own API, own handlers. The parent passes
 // the ⌘P visibility mode as a HiddenFilter — "include"/"only" render hidden
 // notes inline (dimmed, ↺ to restore) instead of excluding them.
+//
+// The surface can be minimized to one line (the NOTES label + the first line
+// of the first note). The minimized flag itself lives in App (the `n`
+// keybinding toggles it); expanding focuses the capture field, so the hop
+// from minimized back to writing is a single click.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { notesApi, type Note } from "./notesApi";
 import { type HideDuration, type HiddenFilter } from "./lib";
 import HideMenu from "./HideMenu";
 
-export default function Notes({ hiddenFilter }: { hiddenFilter: HiddenFilter }) {
+export default function Notes({
+  hiddenFilter, minimized, onToggleMinimized,
+}: {
+  hiddenFilter: HiddenFilter;
+  minimized: boolean;
+  onToggleMinimized: () => void;
+}) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState("");
   // The note whose action buttons are revealed. Tracked in JS instead of
@@ -120,11 +131,57 @@ export default function Notes({ hiddenFilter }: { hiddenFilter: HiddenFilter }) 
     await notesApi.unhide(id);
   };
 
+  // The collapsed bar's content: the first non-empty line of the first note
+  // in the rendered list — a preview of what expanding would show.
+  const preview = useMemo(() => {
+    for (const n of notes) {
+      const line = n.body.split("\n").find((l) => l.trim().length > 0);
+      if (line) return line.trim();
+    }
+    return null;
+  }, [notes]);
+
+  // Expanding puts the caret at the end of the capture field — minimized →
+  // writing is one click. Skipped on mount so a fresh launch doesn't steal
+  // focus from j/k nav. (No capture in hidden-only mode; then just expand.)
+  const captureRef = useRef<HTMLTextAreaElement>(null);
+  const wasMinimized = useRef(minimized);
+  useEffect(() => {
+    if (wasMinimized.current && !minimized) {
+      const el = captureRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+    }
+    wasMinimized.current = minimized;
+  }, [minimized]);
+
   return (
     <section className="notes">
-      <div className="section-head">
-        <span className="section-name">Notes</span>
-      </div>
+      {minimized ? (
+        /* The whole collapsed surface is the expand control: one click (or
+           `n`) opens Notes with the capture field focused. */
+        <button
+          className="notes-collapsed"
+          onClick={onToggleMinimized}
+          title="Expand notes (n)"
+        >
+          <span className="section-name">Notes</span>
+          {preview && <span className="notes-collapsed-preview">{preview}</span>}
+          <span className="notes-collapsed-chevron" aria-hidden="true">⌄</span>
+        </button>
+      ) : (
+        <div className="section-head notes-head">
+          <span className="section-name">Notes</span>
+          <button
+            className="notes-minimize"
+            onClick={onToggleMinimized}
+            title="Minimize notes (n)"
+            aria-label="Minimize notes"
+          >⌃</button>
+        </div>
+      )}
 
       {/* Always-open capture: type + Enter writes a note. No + button.
           Suppressed in hidden-only mode — a fresh note isn't hidden, so it
@@ -132,6 +189,7 @@ export default function Notes({ hiddenFilter }: { hiddenFilter: HiddenFilter }) 
       {hiddenFilter !== "only" && (
         <div className="capture">
           <textarea
+            ref={captureRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
