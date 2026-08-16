@@ -319,16 +319,16 @@ keyboard-first.** Every choice below is intentional.
    a visible button to be discoverable, reconsider whether it needs a button or a keybinding.
 2. **Reveal actions on hover, not by default.** Icon-only buttons appear on row hover and
    carry a `title` tooltip. Resting state shows only content. This keeps the list scannable.
-3. **Keyboard-first.** DnD exists, but `j`/`k`/`Enter`/`e`/`⌫` are the primary path. A
-   feature that's mouse-only is incomplete.
+3. **Keyboard-first, but not keyboard-everything.** DnD exists, but `j`/`k`/`Enter`/`e`/`⌫`
+   are the primary path. A feature that's mouse-only is incomplete — but minor actions get
+   small hover buttons, not dedicated keybinds. Keybindings are for the frequent core
+   (nav, complete, edit, timer); ⌘P is the one door to the rest.
 4. **Dense rows, single-line text, ellipsis.** This is a list, not a document.
 5. **One accent colour.** `#7b8cff` means "active/selected/completed/done-today." Do not
    introduce a second accent.
 6. **Dark, always dark.** No light theme, no `prefers-color-scheme` switching. `color-scheme: dark`.
 7. **Zero inertia for capture.** The lowest-friction surface (Notes) renders first, above
-   everything else. There is always a ready textarea — unless the user has minimized Notes
-   to its one-line preview, in which case one click on the bar (or `n`) expands it with the
-   caret already in the capture field.
+   everything else. There is always a ready textarea.
 
 ### Colour tokens (from `index.css` — use these, do not hardcode hex)
 
@@ -404,7 +404,6 @@ below 455px of width a media query hides the masthead.
 | `Enter` | complete selected (toggles a crossed Today row back to active) |
 | `e` | edit selected |
 | `t` | start/stop timer on selected (toggles; starting stops any other) |
-| `n` | minimize / expand notes (expanding focuses the capture field, caret at end) |
 | `⌫` / `Delete` | delete selected |
 | single-click | select + enter edit mode (caret at end, not full-select) |
 | `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, …) |
@@ -444,14 +443,14 @@ into Notes or edit fields isn't hijacked.
   resize, which is why they can keep plain `:hover`. Don't "simplify" notes back.
 - An always-open capture field sits at the top of Notes: type + Enter creates a
   note. (Replaced the old `+` button + seed empty note.)
-- Minimizable to a single line: the ⌃ button on the notes head (hover-revealed)
-  or `n` folds the whole surface to the `NOTES` label + the first line of the
-  first note (dimmed, ellipsized). The collapsed bar is one big click target —
-  expanding focuses the capture field with the caret at end, so minimized →
-  writing is one click. The flag lives in `App.tsx` (the `n` keybinding's home)
-  and persists in localStorage (`dayapp-notes-min`), like zoom — a display
-  preference, not a session-only filter. The head never resizes under the
-  pointer, so its hover reveal can use plain CSS `:hover` (unlike note rows).
+- Each note card collapses **in place**: the ⌃ button in its hover actions folds it to
+  one line (its first non-empty line, ellipsized) — same card, just shorter, no layout
+  swap. The collapsed card is one big click target: expanding focuses its textarea with
+  the caret at end, so collapsed → editing is one click. Its hover actions remain (⌄ ◐ ×;
+  action clicks stopPropagation so they don't double as the expand click). Collapsed ids
+  persist in localStorage (`dayapp-notes-collapsed`), pruned on delete — a display
+  preference, like zoom. Deliberately **no keybinding**: minor actions get small buttons,
+  not keys (see principle 3).
 
 ### What NOT to add (explicit non-goals)
 

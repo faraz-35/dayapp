@@ -8,25 +8,35 @@
 // the ⌘P visibility mode as a HiddenFilter — "include"/"only" render hidden
 // notes inline (dimmed, ↺ to restore) instead of excluding them.
 //
-// The surface can be minimized to one line (the NOTES label + the first line
-// of the first note). The minimized flag itself lives in App (the `n`
-// keybinding toggles it); expanding focuses the capture field, so the hop
-// from minimized back to writing is a single click.
+// Each note card can be collapsed to a single line — its first non-empty
+// line. The card shrinks in place (same look, just shorter; no layout
+// swap), and the collapsed card is one big click target: expanding focuses
+// its textarea with the caret at the end, so collapsed → editing is one
+// click. Which notes are collapsed persists in localStorage; deliberately
+// no keybinding — a minor action gets a small button (⌃ in the card's hover
+// actions), not a key.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { notesApi, type Note } from "./notesApi";
 import { type HideDuration, type HiddenFilter } from "./lib";
 import HideMenu from "./HideMenu";
 
-export default function Notes({
-  hiddenFilter, minimized, onToggleMinimized,
-}: {
-  hiddenFilter: HiddenFilter;
-  minimized: boolean;
-  onToggleMinimized: () => void;
-}) {
+// Collapsed-note ids, persisted like the UI zoom — a display preference.
+// localStorage only: collapse is UI state, not content, so the notes table
+// stays untouched.
+const COLLAPSED_KEY = "dayapp-notes-collapsed";
+
+export default function Notes({ hiddenFilter }: { hiddenFilter: HiddenFilter }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState("");
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]");
+      return new Set(Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : []);
+    } catch {
+      return new Set();
+    }
+  });
   // The note whose action buttons are revealed. Tracked in JS instead of
   // CSS :hover — see the pointer effect below.
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -109,8 +119,19 @@ export default function Notes({
     await notesApi.update(id, body);
   }, []);
 
+  // Collapse/expand a note card in place. Persisted so a relaunch keeps the
+  // list as compact as the user left it.
+  const toggleCollapse = (id: string) => {
+    const next = new Set(collapsedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setCollapsedIds(next);
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
+  };
+
   const handleDelete = async (id: string) => {
     setNotes((s) => s.filter((n) => n.id !== id));
+    // Prune the dead id so the persisted collapse set doesn't accumulate.
+    if (collapsedIds.has(id)) toggleCollapse(id);
     await notesApi.delete(id);
   };
 
@@ -131,57 +152,11 @@ export default function Notes({
     await notesApi.unhide(id);
   };
 
-  // The collapsed bar's content: the first non-empty line of the first note
-  // in the rendered list — a preview of what expanding would show.
-  const preview = useMemo(() => {
-    for (const n of notes) {
-      const line = n.body.split("\n").find((l) => l.trim().length > 0);
-      if (line) return line.trim();
-    }
-    return null;
-  }, [notes]);
-
-  // Expanding puts the caret at the end of the capture field — minimized →
-  // writing is one click. Skipped on mount so a fresh launch doesn't steal
-  // focus from j/k nav. (No capture in hidden-only mode; then just expand.)
-  const captureRef = useRef<HTMLTextAreaElement>(null);
-  const wasMinimized = useRef(minimized);
-  useEffect(() => {
-    if (wasMinimized.current && !minimized) {
-      const el = captureRef.current;
-      if (el) {
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
-      }
-    }
-    wasMinimized.current = minimized;
-  }, [minimized]);
-
   return (
     <section className="notes">
-      {minimized ? (
-        /* The whole collapsed surface is the expand control: one click (or
-           `n`) opens Notes with the capture field focused. */
-        <button
-          className="notes-collapsed"
-          onClick={onToggleMinimized}
-          title="Expand notes (n)"
-        >
-          <span className="section-name">Notes</span>
-          {preview && <span className="notes-collapsed-preview">{preview}</span>}
-          <span className="notes-collapsed-chevron" aria-hidden="true">⌄</span>
-        </button>
-      ) : (
-        <div className="section-head notes-head">
-          <span className="section-name">Notes</span>
-          <button
-            className="notes-minimize"
-            onClick={onToggleMinimized}
-            title="Minimize notes (n)"
-            aria-label="Minimize notes"
-          >⌃</button>
-        </div>
-      )}
+      <div className="section-head">
+        <span className="section-name">Notes</span>
+      </div>
 
       {/* Always-open capture: type + Enter writes a note. No + button.
           Suppressed in hidden-only mode — a fresh note isn't hidden, so it
@@ -189,7 +164,6 @@ export default function Notes({
       {hiddenFilter !== "only" && (
         <div className="capture">
           <textarea
-            ref={captureRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -214,6 +188,8 @@ export default function Notes({
           key={note.id}
           note={note}
           hovered={hoveredId === note.id}
+          collapsed={collapsedIds.has(note.id)}
+          onToggleCollapse={() => toggleCollapse(note.id)}
           onUpdate={handleUpdate}
           onDelete={() => handleDelete(note.id)}
           onHide={(duration) => handleHide(note.id, duration)}
@@ -227,10 +203,12 @@ export default function Notes({
 // ---- Single note textarea ------------------------------------------------
 
 function NoteInput({
-  note, hovered, onUpdate, onDelete, onHide, onUnhide,
+  note, hovered, collapsed, onToggleCollapse, onUpdate, onDelete, onHide, onUnhide,
 }: {
   note: Note;
   hovered: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onUpdate: (id: string, body: string) => void;
   onDelete: () => void;
   onHide: (duration: HideDuration) => void;
@@ -240,6 +218,18 @@ function NoteInput({
   const ref = useRef<HTMLTextAreaElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestBody = useRef(note.body);
+
+  // Expanding puts the caret at the end of the textarea — the collapsed card
+  // is a one-click path back to editing. Skipped on mount.
+  const wasCollapsed = useRef(collapsed);
+  useEffect(() => {
+    if (wasCollapsed.current && !collapsed) {
+      ref.current?.focus();
+      ref.current?.setSelectionRange(val.length, val.length);
+    }
+    wasCollapsed.current = collapsed;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collapsed]);
 
   // Keep local state in sync if the note changes externally.
   useEffect(() => {
@@ -268,30 +258,50 @@ function NoteInput({
 
   return (
     <div
-      className={`note${hovered ? " hovered" : ""}${note.hidden ? " hidden" : ""}`}
+      className={`note${collapsed ? " collapsed" : ""}${hovered ? " hovered" : ""}${note.hidden ? " hidden" : ""}`}
       data-note-id={note.id}
+      // The collapsed card is one big click target: expand + caret at end.
+      onClick={collapsed ? onToggleCollapse : undefined}
+      title={collapsed ? "Expand note" : undefined}
     >
-      <textarea
-        ref={ref}
-        className="note-textarea"
-        value={val}
-        onChange={(e) => {
-          setVal(e.target.value);
-          autosize();
-          scheduleSave(e.target.value);
-        }}
-        onBlur={() => {
-          if (saveTimer.current) {
-            clearTimeout(saveTimer.current);
-            saveTimer.current = null;
-          }
-          // Save immediately on blur.
-          onUpdate(note.id, val);
-        }}
-        placeholder="Write or paste anything…"
-        spellCheck={false}
-      />
-      <div className="note-actions">
+      {collapsed ? (
+        <div className="note-preview">
+          {val.split("\n").find((l) => l.trim().length > 0)?.trim() ?? ""}
+        </div>
+      ) : (
+        <textarea
+          ref={ref}
+          className="note-textarea"
+          value={val}
+          onChange={(e) => {
+            setVal(e.target.value);
+            autosize();
+            scheduleSave(e.target.value);
+          }}
+          onBlur={() => {
+            if (saveTimer.current) {
+              clearTimeout(saveTimer.current);
+              saveTimer.current = null;
+            }
+            // Save immediately on blur.
+            onUpdate(note.id, val);
+          }}
+          placeholder="Write or paste anything…"
+          spellCheck={false}
+        />
+      )}
+      <div
+        className="note-actions"
+        // Action clicks must not fall through to the collapsed card's
+        // expand-on-click — only its content area expands.
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          className="item-action"
+          onClick={onToggleCollapse}
+          title={collapsed ? "Expand note" : "Collapse note"}
+          aria-label={collapsed ? "Expand note" : "Collapse note"}
+        >{collapsed ? "⌄" : "⌃"}</button>
         {/* Hidden notes swap the ◐ hide menu for ↺ restore, mirroring hidden
             item rows in Show-All mode. */}
         {note.hidden ? (
