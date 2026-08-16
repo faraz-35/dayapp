@@ -219,11 +219,24 @@ function NoteInput({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestBody = useRef(note.body);
 
+  // Grow the textarea to fit content (no internal scrollbar for short notes).
+  const autosize = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(el.scrollHeight, 28)}px`;
+  };
+
   // Expanding puts the caret at the end of the textarea — the collapsed card
-  // is a one-click path back to editing. Skipped on mount.
+  // is a one-click path back to editing. The textarea (re)mounts with the
+  // expand (it's swapped for the preview div while collapsed), and the []
+  // mount effect below ran at the note's original mount, not the textarea's —
+  // so size it here or it opens at the browser default ~2 rows until the
+  // first keystroke. Skipped on mount itself.
   const wasCollapsed = useRef(collapsed);
   useEffect(() => {
     if (wasCollapsed.current && !collapsed) {
+      autosize();
       ref.current?.focus();
       ref.current?.setSelectionRange(val.length, val.length);
     }
@@ -240,14 +253,6 @@ function NoteInput({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.body]);
-
-  // Grow the textarea to fit content (no internal scrollbar for short notes).
-  const autosize = () => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.max(el.scrollHeight, 28)}px`;
-  };
 
   useEffect(() => { autosize(); }, []);
 
