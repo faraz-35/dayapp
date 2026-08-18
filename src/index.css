@@ -1128,6 +1128,12 @@ button {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  /* Native bar safety: zero unless the platform lays out edge-to-edge and
+     reports insets (viewport-fit=cover); the Android build also pins
+     targetSdk 34 so the system manages the top gap natively. */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 .mobile-header {
   flex-shrink: 0;
@@ -1272,6 +1278,7 @@ button {
   justify-content: center;
   gap: 10px;
   padding: 24px;
+  padding-top: calc(24px + env(safe-area-inset-top, 0px));
 }
 .mobile-setup .mobile-brand { font-size: 18px; }
 .mobile-setup-sub {

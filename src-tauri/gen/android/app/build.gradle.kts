@@ -20,7 +20,12 @@ android {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "com.farazshah.dayapp"
         minSdk = 24
-        targetSdk = 36
+        // 34, not 36: SDK 35+ forces edge-to-edge (the webview draws under the
+        // status bar) and the v35 opt-out flag is ignored at targetSdk 36.
+        // 34 keeps the system managing the top inset; the bars are themed to
+        // the app bg in themes.xml. Personal sideload — Play's target-API
+        // rules don't apply. The CSS safe-area padding stays as a fallback.
+        targetSdk = 34
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }

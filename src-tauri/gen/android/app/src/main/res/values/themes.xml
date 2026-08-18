@@ -1,6 +1,10 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.dayapp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <!-- Always dark: match the webview bg so the status/nav bar area and
+             any launch flash blend with the app (the CSS bg, 0e0f11). -->
+        <item name="android:statusBarColor">@color/app_bg</item>
+        <item name="android:navigationBarColor">@color/app_bg</item>
+        <item name="android:windowBackground">@color/app_bg</item>
     </style>
 </resources>
