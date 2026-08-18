@@ -160,7 +160,10 @@ architecture — don't grow this one into it.
 - **Auth**: `meta.sync_repo` / `sync_branch` / `sync_token`; empty token falls back to
   `gh auth token` (zero-config on a machine with the gh CLI). The phone stores its own
   fine-grained PAT (Contents rw, that repo only) in localStorage. Configure via
-  ⌘P → "Mobile: Configure Sync…" (`MobileSyncSettings.tsx`).
+  ⌘P → "Mobile: Configure Sync…" (`MobileSyncSettings.tsx`). The APK itself is
+  distributed from the **public** `faraz-35/dayapp-mobile` repo's Releases (authless
+  download — the binary carries no secrets); keep release uploads signed with the same
+  debug keystore so they install as updates.
 - Logic lives in `src-tauri/src/sync.rs`; the phone UI is `src/MobileView.tsx`
   (renders when the webview UA is Android — same bundle as desktop).
 

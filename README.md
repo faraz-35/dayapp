@@ -275,13 +275,17 @@ Mac app ──(pull captures.json, ingest each as a real item)◀─────
 2. On github.com → Settings → Developer settings → **Fine-grained tokens**,
    create a token with **Contents: read & write** scoped to *only* the sync
    repo. The phone needs it (it can't reach your keyring).
-3. Install the APK (from the repo's Releases — phone browser must be signed
-   into GitHub since the repo is private), open it once, and paste repo +
-   token. Done.
+3. Install the APK — no sign-in needed: download it from
+   [faraz-35/dayapp-mobile releases](https://github.com/faraz-35/dayapp-mobile/releases/latest)
+   (a public distribution repo; the app holds no secrets). Open it once and
+   paste repo + token. Done.
 
 **APK:** `npm run tauri android build -- --target aarch64 --apk` (needs
 Android SDK + NDK + JDK 17+). The signed APK lands under
-`src-tauri/gen/android/app/build/outputs/apk/`.
+`src-tauri/gen/android/app/build/outputs/apk/`. Distribute it as a Release on
+the public [`faraz-35/dayapp-mobile`](https://github.com/faraz-35/dayapp-mobile)
+repo (authless download), signed with the debug keystore — keep using the same
+keystore so updates install over the top.
 
 ## Remote access (SSH / zcode)
 
