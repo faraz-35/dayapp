@@ -71,7 +71,8 @@ Your data in `~/Library/.../dayapp.db` is never touched.
 
 VS Code / Linear–style: press **⌘P** anywhere, type to filter, ↑/↓ to move, Enter to run.
 Currently: the three visibility modes (Show Regular View / Show All / Show Hidden Only),
-priority filters (Show Priority 1/2/3 Only), View Journal, and Update DayApp. Trivially
+priority filters (Show Priority 1/2/3 Only), the mobile sync commands (Deploy Task List
+Now / Pull Captures Now / Configure Sync…), View Journal, and Update DayApp. Trivially
 extensible — add a command to the registry in `App.tsx`.
 
 ## Where things live
@@ -88,18 +89,22 @@ dayapp/
 │   ├── ReminderMenu.tsx     ← ◷ reminder-date popover
 │   ├── CommandPalette.tsx   ← ⌘P command palette modal
 │   ├── UpdateOverlay.tsx    ← self-update progress modal
+│   ├── MobileView.tsx       ← Android client: read-only list + capture bar
+│   ├── MobileSyncSettings.tsx ← ⌘P sync-config modal (repo/branch/token)
 │   ├── components/          ← feature components (SectionList, SectionView, ItemRow,
 │   │                          JournalView, SearchMenu)
 │   ├── main.tsx             ← React entry
 │   └── index.css            ← dark Linear-flavoured theme
 └── src-tauri/
     ├── src/
-    │   ├── lib.rs           ← Tauri commands + setup (runs sweep + reminders on launch)
+    │   ├── lib.rs           ← Tauri commands + setup (sweeps, sync loop on launch)
     │   ├── db.rs            ← DB layer: items, actions, sweep, hide, reminders, completions
     │   ├── notes.rs         ← notes DB logic
     │   ├── projects.rs      ← projects DB logic + item.project_id assignment
     │   ├── timers.rs        ← timer sessions: start/stop/discard/totals/per-day
-    │   └── main.rs          ← binary entrypoint
+    │   ├── sync.rs          ← mobile sync: tasks.json export/deploy + capture inbox pull
+    │   ├── cli.rs           ← headless --list/--add/--complete/--start for remote access
+    │   └── main.rs          ← binary entrypoint (GUI, or CLI when given flags)
     ├── schema.sql           ← items + actions + meta + notes + projects + sessions
     ├── Cargo.toml
     └── tauri.conf.json
@@ -235,10 +240,69 @@ per-task breakdown. Time tracking is **not** logged to `actions`; sessions live
 in their own `sessions` table and are layered into the journal as a separate
 dimension. Completing or deleting a running item stops its timer first.
 
+## Mobile (Android)
+
+The phone is a **read-only mirror + capture inbox** over a private GitHub repo
+(e.g. `faraz-35/dayapp-sync`) — GitHub is the always-up transport, and the Mac
+stays the single writer of the database. There is no server to run and no
+device-to-device sync.
+
+```
+Mac app ──(tasks.json export, every minute when changed + ⌘P on demand)──▶ private repo
+Phone   ──(fetch tasks.json; appends captures to captures.json)──────────▶ same repo
+Mac app ──(pull captures.json, ingest each as a real item)◀──────────────┘
+```
+
+- **Deploy** exports the task list to `tasks.json`. A background loop pushes it
+  once a minute whenever it changed (so CLI writes reach the phone too), and
+  ⌘P → **Mobile: Deploy Task List Now** force-pushes.
+- **Capture from the phone**: type in the bottom bar (Today/Backlog toggle),
+  hit ↵. Captures queue in `captures.json` and appear in the app within a
+  minute of it being open — through the normal create path, so `#tag` and
+  `!1..3` tokens work from the phone too. ⌘P → **Mobile: Pull Captures Now**
+  drains the inbox immediately; a pull also runs on launch and every minute.
+  Captures made while the Mac is closed wait in the inbox (shown dimmed under
+  "Queued" on the phone) and land on the next open.
+- The phone renders day rollovers itself (daily grey-out, done-today
+  retirement are render-time date comparisons), so a stale export still looks
+  right after midnight. The last fetched list stays on screen offline.
+
+**Setup (one time):**
+
+1. ⌘P → **Mobile: Configure Sync…** — set the repo (`owner/name`) and branch.
+   Leave the token empty and the desktop uses your `gh auth token` (zero
+   config on the Mac).
+2. On github.com → Settings → Developer settings → **Fine-grained tokens**,
+   create a token with **Contents: read & write** scoped to *only* the sync
+   repo. The phone needs it (it can't reach your keyring).
+3. Install the APK (from the repo's Releases — phone browser must be signed
+   into GitHub since the repo is private), open it once, and paste repo +
+   token. Done.
+
+**APK:** `npm run tauri android build -- --target aarch64 --apk` (needs
+Android SDK + NDK + JDK 17+). The signed APK lands under
+`src-tauri/gen/android/app/build/outputs/apk/`.
+
+## Remote access (SSH / zcode)
+
+The same binary is a tiny CLI for checking and triggering tasks from a remote
+session — it opens the same db (WAL + busy-timeout make the two processes
+safe together) and force-deploys after writes so the phone sees them fast:
+
+```bash
+dayapp --list [today|daily|backlog]   # print tasks (▶ = timer running, ✓ = done)
+dayapp --add "call bank #money !1" --to backlog   # note: text is stored raw (no token parsing here)
+dayapp --complete "call bank"         # id prefix or unique text substring
+dayapp --start "ship mobile build"    # start the single active timer
+dayapp --deploy                       # force-push tasks.json now
+dayapp --sync-pull-peek               # peek at the phone's pending captures
+```
+
 ## Not yet built (intentional)
 
 - Global hotkey to toggle the window (Phase 2)
 - Menu bar presence (Phase 2)
 - Undo toast on destructive ops (Phase 1)
 - Agent query tool — read-only bridge for external skills to query the DB (Phase 3)
-- Sync / cloud. Local SQLite only.
+- Completing/editing tasks from the phone (mobile stays capture + read; interactive
+  mobile is the hosted-API tier, see AGENTS.md)

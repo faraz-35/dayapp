@@ -8,7 +8,7 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, timersApi, type ActiveTimer, type HideDuration, type HiddenFilter, type Item, type Project, type Section } from "./lib";
+import { api, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type HideDuration, type HiddenFilter, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import Notes from "./Notes";
 import SectionList from "./components/SectionList";
@@ -16,6 +16,8 @@ import JournalView from "./components/JournalView";
 import CommandPalette, { type Command } from "./CommandPalette";
 import SearchMenu, { type SearchHit } from "./components/SearchMenu";
 import UpdateOverlay from "./UpdateOverlay";
+import MobileView from "./MobileView";
+import MobileSyncSettings from "./MobileSyncSettings";
 
 type View = "list" | "journal";
 
@@ -54,7 +56,17 @@ export type UpdateStatus = {
   message: string;
 };
 
+// The Android build runs the same webview bundle but renders the mobile
+// client instead of the desktop shell — a read-only mirror of the list plus
+// the capture inbox (see MobileView.tsx and AGENTS.md "Mobile sync").
+const IS_MOBILE = /android/i.test(navigator.userAgent);
+
 export default function App() {
+  if (IS_MOBILE) return <MobileView />;
+  return <DayApp />;
+}
+
+function DayApp() {
   const [items, setItems] = useState<Record<Section, Item[]>>({
     today: [],
     daily: [],
@@ -73,6 +85,15 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [syncSettingsOpen, setSyncSettingsOpen] = useState(false);
+  // Transient feedback pill for palette-triggered flows (deploy/pull results).
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number>(0);
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 2600);
+  }, []);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null);
   const [timeTotals, setTimeTotals] = useState<Record<string, number>>({});
@@ -91,6 +112,10 @@ export default function App() {
   // The theme shown before the current home stretch — the next pick avoids it,
   // so the rotation shuffles rather than dice-rolls repeats.
   const lastTheme = useRef("");
+  // Pull-and-ingest the mobile capture inbox. Assigned after handleCreate is
+  // defined (it ingests through the normal create path so #tag/!N tokens
+  // parse); the ref lets the 60s tick call the freshest closure.
+  const ingestRef = useRef<() => Promise<number>>(async () => 0);
 
   // ---- Load -------------------------------------------------------------
 
@@ -113,10 +138,21 @@ export default function App() {
     refresh().catch((e) => log.error("initial load failed", e));
     // Re-check the day boundary while the app stays open. If local time crosses
     // midnight, run the sweep so Today items fall to Backlog without a relaunch.
+    // The same tick drains the phone's capture inbox, so a capture made while
+    // walking lands within a minute of the Mac app being open.
     const tick = setInterval(() => {
       api.runSweep().then(refresh).catch((e) => log.warn("sweep tick failed", e));
+      ingestRef.current()
+        .then((n) => { if (n > 0) refresh(); })
+        .catch((e) => log.warn("sync: capture pull failed", e));
     }, 60_000);
-    return () => clearInterval(tick);
+    // One pull shortly after launch (captures queued while the app was closed).
+    const first = setTimeout(() => {
+      ingestRef.current()
+        .then((n) => { if (n > 0) refresh(); })
+        .catch((e) => log.warn("sync: capture pull failed", e));
+    }, 4_000);
+    return () => { clearInterval(tick); clearTimeout(first); };
   }, [refresh]);
 
   // The active timer persists across app restarts (its open session row is the
@@ -276,6 +312,35 @@ export default function App() {
         setPriorityFilter((p) => (p === n ? null : n));
       },
     })),
+    {
+      id: "mobile-deploy",
+      label: "Mobile: Deploy Task List Now",
+      hint: "push to GitHub",
+      run: () => {
+        syncApi.deploy(true)
+          .then((m) => { log.info(`sync: deploy — ${m}`); showToast(`Deploy: ${m}`); })
+          .catch((e) => { log.error("sync: deploy failed", e); showToast(`Deploy failed: ${e}`); });
+      },
+    },
+    {
+      id: "mobile-pull",
+      label: "Mobile: Pull Captures Now",
+      hint: "ingest from phone",
+      run: () => {
+        ingestRef.current()
+          .then((n) => {
+            if (n > 0) refresh();
+            showToast(n ? `Ingested ${n} capture${n === 1 ? "" : "s"}` : "No new captures");
+          })
+          .catch((e) => { log.error("sync: pull failed", e); showToast(`Pull failed: ${e}`); });
+      },
+    },
+    {
+      id: "mobile-configure",
+      label: "Mobile: Configure Sync…",
+      hint: "repo + token",
+      run: () => setSyncSettingsOpen(true),
+    },
     { id: "view-journal", label: "View Journal", run: () => setView("journal") },
     {
       id: "update",
@@ -283,7 +348,7 @@ export default function App() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate]);
+  ], [startUpdate, refresh, showToast]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -341,6 +406,20 @@ export default function App() {
     setItems((s) => ({ ...s, [section]: [...s[section], { ...item, ...patch }] }));
     if (assignId) api.setItemProject(item.id, assignId);
     if (tier !== null) api.setItemPriority(item.id, tier);
+  };
+
+  // Drain the phone's capture inbox: each entry goes through handleCreate (so
+  // `#tag`/`!N` tokens parse exactly like desktop capture), then its id is
+  // recorded in meta — the guard that makes double-ingest impossible.
+  ingestRef.current = async () => {
+    const caps = await syncApi.pull();
+    if (caps.length === 0) return 0;
+    log.info(`sync: ingesting ${caps.length} mobile capture(s)`);
+    for (const c of caps) {
+      await handleCreate(c.section === "today" ? "today" : "backlog", c.text);
+    }
+    await syncApi.markIngested(caps.map((c) => c.id));
+    return caps.length;
   };
 
   const handleComplete = async (id: string, section: Section) => {
@@ -738,6 +817,11 @@ export default function App() {
         status={updateStatus}
         onDismiss={() => setUpdateStatus(null)}
       />
+      <MobileSyncSettings
+        open={syncSettingsOpen}
+        onClose={() => setSyncSettingsOpen(false)}
+      />
+      {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }

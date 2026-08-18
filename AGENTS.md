@@ -38,6 +38,10 @@ writes itself), not fight it.
 - **DnD:** `@dnd-kit` (core + sortable + utilities).
 - **DB location:** `~/Library/Application Support/com.farazshah.dayapp/dayapp.db`
   (driven by the `identifier` in `tauri.conf.json`).
+- **Mobile (Android APK):** built and shipped 2026-08 — a read-only mirror +
+  capture inbox over a private GitHub repo (`faraz-35/dayapp-sync`), not a sync
+  engine. The Mac app is the single writer of the database; see "Mobile sync"
+  under Data model before touching anything in that area.
 
 ### Stack rules (do not break these)
 
@@ -132,6 +136,43 @@ clears `remind_at`, and logs a `moved` action. No new action enum — reusing `m
 the `actions` CHECK constraint untouched. Date-granular and fires only when the app is open
 (no background daemon); setting a reminder is **not** logged.
 
+### Mobile sync (GitHub file transport — one writer, no merge)
+
+The Android APK is a **mirror + inbox**, not a peer. A private GitHub repo holds two
+files and nothing else: `tasks.json` (the Mac's export; deployed by `sync.rs`) and
+`captures.json` (the phone's inbox; drained by the Mac). The Mac app is the **only**
+writer of the database — the phone never holds state, so no sync/merge logic exists
+anywhere. If mobile ever needs real-time mutation, that's a hosted-API tier, a different
+architecture — don't grow this one into it.
+
+- **Deploy** (`sync::deploy`): builds the export in one pass and pushes when its sha256
+  differs from `meta.sync_last_push_hash`. A sleeping thread in `lib.rs` setup runs it
+  every 60s (it also sees CLI writes — both processes share the db file), and ⌘P
+  "Mobile: Deploy Task List Now" force-pushes. The export carries raw dates; the phone
+  derives day rollovers with the same render-time comparisons the desktop uses, so a
+  stale export still renders correctly.
+- **Capture inbox**: the phone appends `{id, text, section, at}` to `captures.json`.
+  `pull_captures` returns entries whose ids aren't in `meta.sync_ingested_ids`; the
+  **frontend** ingests them through the normal create path (so `#tag`/`!N` parse) and
+  calls `mark_ingested`, which records the ids first (the double-ingest guard, capped
+  at 500) and then rewrites the file without them, best-effort. Pull runs on launch,
+  every 60s, and via ⌘P.
+- **Auth**: `meta.sync_repo` / `sync_branch` / `sync_token`; empty token falls back to
+  `gh auth token` (zero-config on a machine with the gh CLI). The phone stores its own
+  fine-grained PAT (Contents rw, that repo only) in localStorage. Configure via
+  ⌘P → "Mobile: Configure Sync…" (`MobileSyncSettings.tsx`).
+- Logic lives in `src-tauri/src/sync.rs`; the phone UI is `src/MobileView.tsx`
+  (renders when the webview UA is Android — same bundle as desktop).
+
+### CLI (remote access)
+
+The binary doubles as a headless CLI (`--list`, `--add`, `--complete`, `--start`,
+`--deploy`, `--sync-pull-peek`) for SSH/zcode sessions — see `cli.rs`. It opens the
+same db the GUI holds: WAL + `busy_timeout(5s)` make the two processes safe together,
+and the GUI's 60s deploy loop picks up CLI writes. `--add` stores text **raw** (token
+parsing lives in the frontend); a remote trigger for `t`-style actions goes through
+`--complete`/`--start`, which honour the timer rules (completing stops a running timer).
+
 ### Timers (per-task time tracking — NOT logged)
 
 ```
@@ -175,7 +216,11 @@ a detached helper.
 **What to log (the convention):**
 - **Lifecycle events at INFO:** app start/ready, DB open, migrations (`migrate: adding column …`),
   the daily sweep (`sweep: N today item(s) fell to backlog`), the unhide sweep, the reminder
-  promotion sweep (`reminders: N backlog item(s) promoted to today`).
+  promotion sweep (`reminders: N backlog item(s) promoted to today`), mobile-sync state
+  changes (`sync: deployed tasks.json (N items)`, `sync: configured repo …`, frontend
+  `sync: ingesting N mobile capture(s)`). Steady-state "no changes" deploys are silent by
+  design; deploy failures log at WARN once per distinct message (the 60s loop must not
+  spam the log during an outage).
 - **Every external-flow step at INFO:** the `self_update` command logs each phase (starting
   build → build succeeded → spawning swap helper → exiting app). This is the critical path
   to debug update failures.
@@ -213,6 +258,8 @@ dayapp/
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
 │   ├── CommandPalette.tsx          ← ⌘P modal: filter + keyboard nav
 │   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
+│   ├── MobileView.tsx              ← Android client: read-only list + capture bar (GitHub fetch, renders when UA is Android)
+│   ├── MobileSyncSettings.tsx      ← ⌘P sync-config modal (repo/branch/token + validate-by-deploy)
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + capture input + sortable items + dropzone; Backlog tier dividers)
@@ -226,7 +273,9 @@ dayapp/
     │   ├── notes.rs                ← notes DB logic (methods on Db, touches only notes table)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
-    │   └── main.rs                 ← binary entrypoint
+    │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API)
+    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--add/--complete/--start/--deploy/--sync-pull-peek
+    │   └── main.rs                 ← binary entrypoint (GUI, or cli::run when given flags)
     ├── schema.sql                  ← items + actions + meta + notes + projects + sessions
     ├── Cargo.toml
     ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target
@@ -467,7 +516,6 @@ into Notes or edit fields isn't hijacked.
   cumulative + the Journal's per-day, per-task totals — not an analytics surface.
 - No journal surface / blank-page daily note. The log IS the journal.
 - No agent writes (read-only bridge, planned Phase 3).
-- No sync/cloud. Local SQLite only.
 - Do not log Notes, Projects, reminder-setting, or timer sessions to `actions`.
 - Do not add multi-select / bulk edit. This is a focused single-action tool.
 

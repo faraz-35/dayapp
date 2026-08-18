@@ -74,6 +74,9 @@ impl Db {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(path)?;
+        // The CLI (dayapp --list/--add/--complete) opens the same file while the
+        // GUI is running — wait out each other's write locks instead of erroring.
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;     // crash-safe, fast
         conn.pragma_update(None, "foreign_keys", "ON")?;
         Self::migrate(&conn)?;
@@ -494,6 +497,28 @@ impl Db {
                AND (last_completed_date IS NULL OR last_completed_date != ?1)",
             params![today_iso()])?;
         Ok(n)
+    }
+
+    // ---- Meta ----------------------------------------------------------------
+    // Generic key/value bag on the meta table (last_sweep_date, mobile-sync
+    // config and guards). Sync-specific semantics live in sync.rs; these are
+    // the raw accessors.
+
+    pub fn meta_get(&self, key: &str) -> anyhow::Result<Option<String>> {
+        let conn = self.0.lock().unwrap();
+        let v = conn.query_row(
+            "SELECT value FROM meta WHERE key = ?1", params![key], |r| r.get(0),
+        ).optional()?;
+        Ok(v)
+    }
+
+    pub fn meta_set(&self, key: &str, value: &str) -> anyhow::Result<()> {
+        let conn = self.0.lock().unwrap();
+        conn.execute(
+            "INSERT INTO meta(key,value) VALUES(?1,?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![key, value])?;
+        Ok(())
     }
 
     // ---- Log queries -----------------------------------------------------

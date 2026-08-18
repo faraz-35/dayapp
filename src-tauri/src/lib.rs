@@ -4,12 +4,15 @@
 mod db;
 mod notes;
 mod projects;
+mod sync;
 mod timers;
+pub mod cli;
 
 use db::{Db, HiddenFilter, Item, Action};
 use notes::Note;
 use projects::Project;
 use std::sync::Arc;
+use sync::{Capture, SyncConfig, SyncStatus};
 use timers::{ActiveTimer, DayTaskTime};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
@@ -238,6 +241,42 @@ async fn session_time_by_day(
     with_db(db, move |db| db.session_time_by_day(since.as_deref(), until.as_deref())).await
 }
 
+// ---- Mobile sync commands -----------------------------------------------
+// GitHub-file transport for the Android client: deploy exports tasks.json;
+// pull fetches the phone's capture inbox for the frontend to ingest through
+// the normal create path (token parsing); mark_ingested records the guard ids.
+// See sync.rs for the invariants.
+
+#[tauri::command]
+async fn sync_get_config(db: State<'_, DbState>) -> Result<SyncConfig, String> {
+    with_db(db, move |db| Ok(db.sync_config())).await
+}
+
+#[tauri::command]
+async fn sync_set_config(db: State<'_, DbState>, config: SyncConfig) -> Result<(), String> {
+    with_db(db, move |db| db.sync_set_config(&config)).await
+}
+
+#[tauri::command]
+async fn sync_deploy(db: State<'_, DbState>, force: bool) -> Result<String, String> {
+    with_db(db, move |db| sync::deploy(&db, force).map(|o| o.describe())).await
+}
+
+#[tauri::command]
+async fn sync_pull_captures(db: State<'_, DbState>) -> Result<Vec<Capture>, String> {
+    with_db(db, move |db| sync::pull_captures(&db)).await
+}
+
+#[tauri::command]
+async fn sync_mark_ingested(db: State<'_, DbState>, ids: Vec<String>) -> Result<(), String> {
+    with_db(db, move |db| sync::mark_ingested(&db, &ids)).await
+}
+
+#[tauri::command]
+async fn sync_status(db: State<'_, DbState>) -> Result<SyncStatus, String> {
+    with_db(db, move |db| Ok(db.sync_status())).await
+}
+
 // ---- Self-update ---------------------------------------------------------
 //
 // In-app "rebuild and relaunch" — no Terminal, no dragging. Runs the build in
@@ -392,7 +431,37 @@ pub fn run() {
             // (idempotent) so it runs on every launch, independent of the day sweep.
             let rp = db.promote_due_reminders()?;
             if rp > 0 { log::info!("reminders: {rp} backlog item(s) promoted to today"); }
-            app.manage(DbState(Arc::new(db)));
+            let db = Arc::new(db);
+            // One-way export loop: push tasks.json once a minute when it
+            // changed. A plain sleeping thread is enough (single user, one
+            // cycle/min); it also picks up writes made by the CLI, since both
+            // processes share the db file. Failures log once per distinct
+            // message so a persistent outage doesn't spam the log.
+            {
+                let loop_db = db.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(15));
+                    let mut last_err = String::new();
+                    loop {
+                        match sync::deploy(&loop_db, false) {
+                            Ok(sync::DeployOutcome::Pushed(n)) => {
+                                log::info!("sync: deployed tasks.json ({n} items)");
+                                last_err.clear();
+                            }
+                            Ok(_) => last_err.clear(),
+                            Err(e) => {
+                                let msg = format!("{e:#}");
+                                if msg != last_err {
+                                    log::warn!("sync: deploy failed: {msg}");
+                                    last_err = msg;
+                                }
+                            }
+                        }
+                        std::thread::sleep(std::time::Duration::from_secs(60));
+                    }
+                });
+            }
+            app.manage(DbState(db));
             log::info!("DayApp ready");
             Ok(())
         })
@@ -407,6 +476,8 @@ pub fn run() {
             set_reminder, set_item_priority,
             start_timer, stop_timer, discard_timer, get_active_timer,
             time_totals, session_time_by_day,
+            sync_get_config, sync_set_config, sync_deploy,
+            sync_pull_captures, sync_mark_ingested, sync_status,
             self_update,
         ])
         .run(tauri::generate_context!())

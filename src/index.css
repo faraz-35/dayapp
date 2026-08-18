@@ -1030,5 +1030,273 @@ button {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ---- Toast (transient feedback pill) ------------------------------------ */
+/* Shows deploy/pull results from palette commands. Fixed at the bottom,
+   auto-hides; purely informational, never blocks. */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text);
+  z-index: 120;                     /* above every floating surface */
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  max-width: 80%;
+  text-align: center;
+  animation: title-in 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+
+/* ---- Mobile sync settings (⌘P → Configure Sync…) ------------------------ */
+/* The same floating-surface pattern as the palette: dim backdrop + centered
+   card, mounted at the end of .app — never an inline sibling. */
+.sync-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 105;                     /* above search (90), below update (110) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+.sync-card {
+  width: 88%;
+  max-width: 380px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sync-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.sync-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sync-field span {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.sync-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+.sync-result { font-size: 12px; }
+.sync-result.ok { color: var(--accent); }
+.sync-result.err { color: var(--danger); }
+.sync-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+.sync-save {
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text);
+  font-size: 12px;
+  border: 1px solid var(--border);
+}
+.sync-save:hover { border-color: var(--accent); color: var(--accent); }
+.sync-save:disabled { opacity: 0.5; }
+
+/* ---- Mobile (Android client) -------------------------------------------- */
+/* Same shell contract as desktop: header pinned, ONE scroll container
+   (.mobile-scroll), capture bar pinned at the bottom. Rows reuse the desktop
+   .item language read-only — no hover affordances exist on touch. */
+
+.mobile {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.mobile-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 10px;
+}
+.mobile-brand {
+  font-family: ui-serif, "New York", Didot, Georgia, serif;
+  font-style: italic;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+.mobile-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mobile-synced {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.mobile-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 4px 10px 20px;
+}
+.mobile-section {
+  margin-bottom: 22px;
+}
+.mobile-section .section-name {
+  display: block;
+  padding: 0 8px 6px;
+}
+/* Read-only rows: slightly taller for fingers. */
+.mobile .item { min-height: 34px; }
+.mobile-error {
+  margin: 4px 8px 10px;
+  font-size: 12px;
+  color: var(--danger);
+  line-height: 1.4;
+}
+.mobile-hint {
+  padding: 24px 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-style: italic;
+  text-align: center;
+}
+
+/* Queued captures (written to the inbox, not yet ingested by the Mac). */
+.mobile-queued {
+  margin-bottom: 22px;
+}
+.mobile-queued .section-name {
+  display: block;
+  padding: 0 8px 6px;
+}
+.item.queued .item-text { color: var(--text-dim); font-style: italic; }
+.item-check.pending {
+  border-style: dashed;
+  border-color: var(--accent);
+  opacity: 0.7;
+}
+.mobile-queued-sec {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+/* Pinned capture bar. Today/Backlog segmented control + the line-input
+   language of the desktop capture field. */
+.mobile-capture {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border);
+}
+.mobile-seg {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.mobile-seg button {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 7px 10px;
+  color: var(--text-faint);
+}
+.mobile-seg button.on {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+.mobile-capture input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 2px 5px;
+}
+.mobile-capture input:focus { border-color: var(--accent); }
+.mobile-capture input::placeholder { color: var(--text-faint); }
+.mobile-send {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 15px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+.mobile-send:disabled { opacity: 0.4; }
+
+/* First-run setup: the same centered card language as the desktop modals. */
+.mobile-setup {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+}
+.mobile-setup .mobile-brand { font-size: 18px; }
+.mobile-setup-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.mobile-setup .menu-input { width: 100%; max-width: 320px; }
+.mobile-setup-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  text-align: center;
+  max-width: 320px;
+}
+.mobile-connect {
+  margin-top: 8px;
+  padding: 8px 24px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 13px;
+}
+.mobile-connect:disabled { opacity: 0.5; }
+
 
 

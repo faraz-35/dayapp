@@ -127,6 +127,42 @@ export const timersApi = {
     }),
 };
 
+// ---- Mobile sync ----------------------------------------------------------
+// GitHub-file transport for the Android client (see src-tauri/src/sync.rs).
+// The Mac is the single writer: deploy pushes tasks.json; pull drains the
+// phone's captures.json inbox for ingestion through the normal create path.
+
+export interface SyncConfig {
+  repo: string;           // "owner/name" of the private data repo
+  branch: string;         // "main"
+  token: string | null;   // PAT; null → the backend falls back to `gh auth token`
+}
+
+export interface SyncStatus {
+  configured: boolean;
+  repo: string;
+  branch: string;
+  lastPushAt: string | null;
+  lastPullAt: string | null;
+}
+
+export interface SyncCapture {
+  id: string;
+  text: string;
+  section: "today" | "backlog";
+  at: string;
+}
+
+export const syncApi = {
+  getConfig: () => invoke<SyncConfig>("sync_get_config"),
+  setConfig: (config: SyncConfig) => invoke<void>("sync_set_config", { config }),
+  /** Force-push the export; resolves with a human-readable outcome. */
+  deploy: (force: boolean) => invoke<string>("sync_deploy", { force }),
+  pull: () => invoke<SyncCapture[]>("sync_pull_captures"),
+  markIngested: (ids: string[]) => invoke<void>("sync_mark_ingested", { ids }),
+  status: () => invoke<SyncStatus>("sync_status"),
+};
+
 /** Compact cumulative duration: "1h 23m", "42m", "45s". */
 export const formatDuration = (seconds: number): string => {
   const s = Math.max(0, Math.floor(seconds));
