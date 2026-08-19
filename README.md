@@ -71,9 +71,9 @@ Your data in `~/Library/.../dayapp.db` is never touched.
 
 VS Code / Linear–style: press **⌘P** anywhere, type to filter, ↑/↓ to move, Enter to run.
 Currently: the three visibility modes (Show Regular View / Show All / Show Hidden Only),
-priority filters (Show Priority 1/2/3 Only), the mobile sync commands (Deploy Task List
-Now / Pull Captures Now / Configure Sync…), View Journal, and Update DayApp. Trivially
-extensible — add a command to the registry in `App.tsx`.
+priority filters (Show Priority 1/2/3 Only), Show/Hide Goals, the mobile sync commands
+(Deploy Task List Now / Pull Captures Now / Configure Sync…), View Journal, and Update
+DayApp. Trivially extensible — add a command to the registry in `App.tsx`.
 
 ## Where things live
 
@@ -83,6 +83,7 @@ dayapp/
 │   ├── App.tsx              ← shell: state, effects, keyboard handlers, header, view switching
 │   ├── lib.ts               ← typed Tauri invoke wrappers + types + date/color helpers
 │   ├── Notes.tsx            ← free-form notes (own state + API)
+│   ├── Goals.tsx            ← goals: horizon groups + capture + achieve (own state)
 │   ├── notesApi.ts          ← notes invoke wrappers
 │   ├── HideMenu.tsx         ← shared ◐ hide-duration popover
 │   ├── ProjectMenu.tsx      ← # assign/clear/create project popover
@@ -101,11 +102,12 @@ dayapp/
     │   ├── db.rs            ← DB layer: items, actions, sweep, hide, reminders, completions
     │   ├── notes.rs         ← notes DB logic
     │   ├── projects.rs      ← projects DB logic + item.project_id assignment
+    │   ├── goals.rs         ← goals DB logic: horizons, achieve, project link
     │   ├── timers.rs        ← timer sessions: start/stop/discard/totals/per-day
     │   ├── sync.rs          ← mobile sync: tasks.json export/deploy + capture inbox pull
-    │   ├── cli.rs           ← headless --list/--add/--complete/--start for remote access
+    │   ├── cli.rs           ← headless --list/--add/--complete/--start/--goals for remote access
     │   └── main.rs          ← binary entrypoint (GUI, or CLI when given flags)
-    ├── schema.sql           ← items + actions + meta + notes + projects + sessions
+    ├── schema.sql           ← items + actions + meta + notes + projects + goals + sessions
     ├── Cargo.toml
     └── tauri.conf.json
 ```
@@ -211,6 +213,35 @@ Backlog whose items all share one tier renders undivided.
 **Show Regular View** — to clear the filter. Priorities are housekeeping, like
 projects: not logged to the journal.
 
+## Goals
+
+Goals are the identity layer above the task sections — statements of direction
+at three horizons, the top of the app's timescale stack (timers track seconds,
+items track days, goals span months → never). The section sits between Notes
+and Today, grouped in reading order:
+
+- **Timeless** — a direction, never done ("be a better person"). These rows
+  show ∞ instead of a checkbox: a timeless goal can't be achieved, only
+  revised (click to edit) or deleted.
+- **Long term** — years ("become a better entrepreneur").
+- **Short term** — months ("get a job"). The default horizon: a plain capture
+  lands here.
+
+Capture takes a leading horizon word — `timeless be a better person`,
+`long better entrepreneur #hustle` (the `#tag` project link works exactly like
+item capture). The same parse applies on edit: a horizon word moves the goal
+between groups, no word leaves the tier alone. Goals link to projects
+optionally (hover **#**), showing the same color-coded label as items.
+
+Checking a short/long goal marks it **achieved** — it moves to a dim
+"Achieved" group at the bottom carrying its month ("Aug 2026"), and clicking
+the checkbox undoes it. Achievements are kept, never swept.
+
+**⌘P → Show/Hide Goals** toggles the whole section off and on (persisted
+across launches). Goals are content like notes/projects — **not** logged to
+the journal; the created/achieved dates live on each goal row, which is what
+makes them clean agent context (`dayapp --goals`, below).
+
 ## Reminders
 
 A reminder schedules a backlog item to auto-promote to Today on a future date.
@@ -308,6 +339,7 @@ dayapp --list [today|daily|backlog]   # print tasks (▶ = timer running, ✓ = 
 dayapp --add "call bank #money !1" --to backlog   # note: text is stored raw (no token parsing here)
 dayapp --complete "call bank"         # id prefix or unique text substring
 dayapp --start "ship mobile build"    # start the single active timer
+dayapp --goals                        # print goals grouped by horizon (achieved last)
 dayapp --deploy                       # force-push tasks.json now
 dayapp --sync-pull-peek               # peek at the phone's pending captures
 ```

@@ -875,6 +875,44 @@ button {
 .note.hidden .note-textarea { color: var(--text-faint); }
 .note.hidden .note-textarea:focus { color: var(--text); }
 
+/* ---- Goals (identity layer between Notes and the sections) -------------- */
+/* Horizon groups (Timeless / Long term / Short term, achieved last) separated
+   by the same hairline dividers the Backlog's tier groups use — the label is
+   text here instead of signal bars. Rows reuse the .item language minus the
+   grip: no DnD, goals are a calm static list. */
+
+.goals {
+  /* In-flow block like .notes — .scroll owns scroll. */
+  padding: 4px 8px 0;
+  margin-bottom: 22px;
+}
+
+/* Divider label — sub-header level, quieter than .section-name, the same role
+   the signal bars play in the Backlog's tier dividers. */
+.tier-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* The timeless slot where short/long rows carry their checkbox: ∞ marks a
+   direction that never completes. Same 15px width so goal rows align. */
+.goal-eternal {
+  width: 15px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Only the goals capture carries a placeholder (it teaches the horizon token);
+   the section inputs stay line-only. */
+.capture input::placeholder { color: var(--text-faint); }
+
 
 /* ---- Command palette (⌘P) --------------------------------------------- */
 

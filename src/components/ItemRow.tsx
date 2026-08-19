@@ -213,8 +213,8 @@ export function PriorityBars({ priority }: { priority: 1 | 2 | 3 | null }) {
 
 // Controlled input that commits on Enter/blur, cancels on Escape.
 // Focus lands at the end of the text (not a full select) so a click-to-edit
-// appends naturally, like the notes textareas.
-function EditInput({
+// appends naturally, like the notes textareas. Shared with Goals.tsx.
+export function EditInput({
   initial, onCommit,
 }: {
   initial: string;

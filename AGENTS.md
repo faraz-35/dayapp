@@ -128,6 +128,41 @@ hide) — **never** logged to `actions`. `items.project_id` is the nullable FK (
 cascade; deleting a project runs `UPDATE items SET project_id = NULL`). Logic lives in
 `src-tauri/src/projects.rs`; the popover is `src/ProjectMenu.tsx`.
 
+### Goals (the identity layer — NOT logged)
+
+```
+goals    id, text, horizon, status, project_id, sort_order, created_at, updated_at, achieved_at
+```
+
+Statements of direction at three horizons — the top of the app's timescale stack
+(timers = seconds, items = days, goals = months → never). Goals give the daily
+list its "why" and are prime agent context, but they are **content, not
+activity**: never written to `actions`; the lifecycle dates (`created_at`,
+`achieved_at`) live on the row, which is what the planned read-only agent
+bridge reads. Not exported to the phone (mobile is a task mirror).
+
+- `horizon` ∈ `timeless` | `long` | `short` — grouped and displayed in that
+  order (constitution → career → now) under hairline dividers labeled with the
+  horizon names (the same divider pattern as the Backlog's tiers). Set via a
+  leading horizon word in the capture/edit text (`parseGoalText` in `lib.ts`
+  strips it, default `short` on capture; no word on edit leaves the tier
+  alone); composes with `#tag` project tokens like item capture.
+- `status` ∈ `active` | `achieved` — short/long goals carry a checkbox;
+  achieving stamps `achieved_at` (month-granular display, e.g. "Aug 2026") and
+  moves the row to the dim "Achieved" group at the bottom, where the checkbox
+  undoes it. **Timeless goals can never be achieved** — a direction, not a
+  destination (`achieve_goal` rejects them); their slot renders ∞ and their
+  only exit is × (delete).
+- `project_id` — optional link to a `projects` row (housekeeping, **not**
+  logged; deleting a project nulls it, same as items).
+- The section renders between Notes and the task sections; **⌘P → Show/Hide
+  Goals** toggles it completely (persisted in localStorage
+  `dayapp-goals-visible`, default on — a display preference like zoom, not a
+  session filter). Goals don't take part in the item
+  visibility/priority/project filters, and there's no DnD — a calm static list.
+- Logic lives in `src-tauri/src/goals.rs`; the UI is `src/Goals.tsx`; the CLI
+  prints them grouped by horizon via `dayapp --goals`.
+
 ### Reminders (scheduled promotion via sweep — logged as `moved`)
 
 `items.remind_at` holds an ISO date. On app launch (`setup`, un-gated, idempotent),
@@ -170,11 +205,13 @@ architecture — don't grow this one into it.
 ### CLI (remote access)
 
 The binary doubles as a headless CLI (`--list`, `--add`, `--complete`, `--start`,
-`--deploy`, `--sync-pull-peek`) for SSH/zcode sessions — see `cli.rs`. It opens the
+`--goals`, `--deploy`, `--sync-pull-peek`) for SSH/zcode sessions — see `cli.rs`. It opens the
 same db the GUI holds: WAL + `busy_timeout(5s)` make the two processes safe together,
 and the GUI's 60s deploy loop picks up CLI writes. `--add` stores text **raw** (token
 parsing lives in the frontend); a remote trigger for `t`-style actions goes through
 `--complete`/`--start`, which honour the timer rules (completing stops a running timer).
+`--goals` is read-only — the agent-context view of the identity layer, grouped
+timeless → long → short with achieved last.
 
 ### Timers (per-task time tracking — NOT logged)
 
@@ -250,12 +287,13 @@ dayapp/
 │   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
 ├── src/
 │   ├── App.tsx                     ← shell only: state, effects, keyboard handlers, header, view switching, timer chip
-│   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + projectColor/formatReminder/formatDuration
+│   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + goalsApi/parseGoalText + projectColor/formatReminder/formatDuration
 │   ├── notesApi.ts                 ← notes typed API wrapper
 │   ├── log.ts                      ← prefixed console logger (webview side)
 │   ├── main.tsx                    ← React entry
 │   ├── index.css                   ← the dark theme + all component styles
 │   ├── Notes.tsx                   ← self-contained notes component (own state + persistence)
+│   ├── Goals.tsx                   ← goals: horizon groups + capture + achieve (own state; between Notes and the sections)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
@@ -275,11 +313,12 @@ dayapp/
     │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, reminders, completions + Db struct
     │   ├── notes.rs                ← notes DB logic (methods on Db, touches only notes table)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
+    │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
     │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API)
-    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--add/--complete/--start/--deploy/--sync-pull-peek
+    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--add/--complete/--start/--goals/--deploy/--sync-pull-peek
     │   └── main.rs                 ← binary entrypoint (GUI, or cli::run when given flags)
-    ├── schema.sql                  ← items + actions + meta + notes + projects + sessions
+    ├── schema.sql                  ← items + actions + meta + notes + projects + goals + sessions
     ├── Cargo.toml
     ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target
     └── capabilities/default.json
@@ -296,9 +335,10 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | File | Owns | Does NOT own |
 |---|---|---|
 | `App.tsx` | state (incl. the active timer), effects, keyboard handlers, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
+| `Goals.tsx` | goals state + capture + horizon groups + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
 | `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + capture input + sortable items + dropzone (+ Backlog tier dividers) | DnD sensors/handlers |
-| `ItemRow.tsx` | one row's render + ▶/⏸ timer control + `EditInput` | DnD wiring (from `useSortable` via parent) |
+| `ItemRow.tsx` | one row's render + ▶/⏸ timer control + the shared `EditInput`/`PriorityBars` | DnD wiring (from `useSortable` via parent) |
 | `JournalView.tsx` | fetching + filtering + grouping the actions log + per-task time totals | — |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
@@ -321,10 +361,10 @@ separately" bug.
 .app       display:flex column; height:100%; overflow:hidden   ← the shell, never scrolls
   .header  flex-shrink:0                                       ← pinned
   .scroll   flex:1; overflow-y:auto; min-height:0              ← THE ONE scroll container
-    Notes / SectionList / JournalView                           ← in-flow, no own scroll
+    Notes / Goals / SectionList / JournalView                   ← in-flow, no own scroll
 ```
 
-`.notes`, `.sections`, `.journal`, `.hidden-view` must **not** set `overflow`,
+`.notes`, `.goals`, `.sections`, `.journal`, `.hidden-view` must **not** set `overflow`,
 `max-height`, `flex: 1`, or `min-height: 0` — they are plain in-flow blocks
 inside `.scroll`. If you ever need a region to scroll independently, you are
 changing the architecture: update this section and justify why.
@@ -507,19 +547,35 @@ into Notes or edit fields isn't hijacked.
   preference, like zoom. Deliberately **no keybinding**: minor actions get small buttons,
   not keys (see principle 3).
 
+**Goals:**
+- The identity layer between Notes and the task sections: horizon groups in the order
+  Timeless / Long term / Short term, each introduced by a `.tier-divider` hairline
+  labeled with the horizon's name (the Backlog's tier-divider pattern, text label
+  instead of bars; empty groups render no divider). Achieved goals collapse into a dim
+  "Achieved" group at the bottom — they never delete on their own.
+- Capture takes a leading horizon word (`timeless be a better person`, `long better
+  entrepreneur #hustle`); plain text defaults to short. Same parse on edit — no word
+  leaves the tier alone. The placeholder carries the syntax (the one capture input
+  allowed a placeholder).
+- Rows are the `.item` language minus the grip: no DnD, no timer, no hide, no priority.
+  Short/long rows carry a checkbox (achieve / unachieve, month-granular date on the
+  achieved row); timeless rows show ∞ in that slot and can only be edited or deleted (×).
+  Single-click enters edit; hover reveals # project assign + × delete — the same
+  `ProjectMenu` items use. ⌘P → Show/Hide Goals toggles the whole section (persisted).
+
 ### What NOT to add (explicit non-goals)
 
 - No light theme. No `prefers-color-scheme`.
 - No second accent colour. No status colours per section.
 - No tags or arbitrary due-date fields. (Projects are a first-class filter axis; reminders
   are a date-granular promotion; timers are a measurement layer; priorities are a `!1..3`
-  text token + Backlog sort — these are the deliberate scope expansions. Don't pile on more
-  organising metadata on top.)
+  text token + Backlog sort; goals are the horizon layer above the sections — these are
+  the deliberate scope expansions. Don't pile on more organising metadata on top.)
 - No time-tracking reports / billable hours / charts. The timer's payoff is the per-row
   cumulative + the Journal's per-day, per-task totals — not an analytics surface.
 - No journal surface / blank-page daily note. The log IS the journal.
 - No agent writes (read-only bridge, planned Phase 3).
-- Do not log Notes, Projects, reminder-setting, or timer sessions to `actions`.
+- Do not log Notes, Projects, Goals, reminder-setting, or timer sessions to `actions`.
 - Do not add multi-select / bulk edit. This is a focused single-action tool.
 
 ---

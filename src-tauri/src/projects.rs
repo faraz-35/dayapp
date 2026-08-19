@@ -71,14 +71,19 @@ impl Db {
         Ok(())
     }
 
-    /// Delete a project and null the assignment on any items that referenced it.
-    /// The items themselves are kept. Not logged to actions (housekeeping).
+    /// Delete a project and null the assignment on any items/goals that
+    /// referenced it. The rows themselves are kept. Not logged to actions
+    /// (housekeeping).
     pub fn delete_project(&self, id: &str) -> anyhow::Result<()> {
         let conn = self.0.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
         tx.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
         tx.execute(
             "UPDATE items SET project_id = NULL WHERE project_id = ?1",
+            params![id],
+        )?;
+        tx.execute(
+            "UPDATE goals SET project_id = NULL WHERE project_id = ?1",
             params![id],
         )?;
         tx.commit()?;

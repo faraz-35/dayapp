@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type HideDuration, type HiddenFilter, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import Notes from "./Notes";
+import Goals from "./Goals";
 import SectionList from "./components/SectionList";
 import JournalView from "./components/JournalView";
 import CommandPalette, { type Command } from "./CommandPalette";
@@ -139,6 +140,11 @@ function DayApp() {
     const saved = Number(localStorage.getItem("dayapp-zoom"));
     return Number.isFinite(saved) && saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;
   });
+  // Whether the Goals section renders at all (⌘P → Show/Hide Goals). A
+  // display preference like zoom, so it persists; default on.
+  const [goalsVisible, setGoalsVisible] = useState(
+    () => localStorage.getItem("dayapp-goals-visible") !== "0",
+  );
   // The masthead brand word after "Live @ " — "Faraz" is home. Session-only:
   // a launch always starts at home.
   const [liveAt, setLiveAt] = useState("Faraz");
@@ -204,6 +210,10 @@ function DayApp() {
     document.documentElement.style.zoom = String(zoom);
     localStorage.setItem("dayapp-zoom", String(zoom));
   }, [zoom]);
+
+  useEffect(() => {
+    localStorage.setItem("dayapp-goals-visible", goalsVisible ? "1" : "0");
+  }, [goalsVisible]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the journal title simply ignores it.
@@ -346,6 +356,14 @@ function DayApp() {
       },
     })),
     {
+      id: "toggle-goals",
+      // One command whose label reflects the current state — running it
+      // always flips. Persists (localStorage), unlike the filters above.
+      label: goalsVisible ? "Hide Goals" : "Show Goals",
+      hint: "the goals section",
+      run: () => setGoalsVisible((v) => !v),
+    },
+    {
       id: "mobile-deploy",
       label: "Mobile: Deploy Task List Now",
       hint: "push to GitHub",
@@ -381,7 +399,7 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast]);
+  ], [startUpdate, refresh, showToast, goalsVisible]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -820,6 +838,15 @@ function DayApp() {
                 surface. Self-contained: owns its state, API, and persistence.
                 In hidden-only mode it lists the hidden notes instead. */}
             <Notes hiddenFilter={HIDDEN_FILTER[visibility]} />
+            {/* Goals — the identity layer between Notes and the task sections:
+                horizon statements (timeless / long / short) that give the list
+                its "why". Self-contained like Notes, outside the DnD area;
+                ⌘P → Show/Hide Goals toggles it completely (persisted). Goals
+                don't take part in the item visibility/priority/project
+                filters — they're a separate surface, shown as-is. */}
+            {goalsVisible && (
+              <Goals projects={projects} onCreateProject={handleCreateProject} />
+            )}
             {(visibility === "hidden" || priorityFilter !== null || projectFilter !== null) && allVisible.length === 0 && (
               <div className="empty">
                 {visibility === "hidden"

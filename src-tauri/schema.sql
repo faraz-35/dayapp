@@ -84,6 +84,30 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE INDEX IF NOT EXISTS idx_projects_order ON projects(sort_order, created_at);
 
+-- Goals: the identity layer above the task sections — statements of direction
+-- at three horizons: short (months, completable), long (years, completable),
+-- timeless (a direction, never achieved — only revised or deleted). The timescale
+-- stack tops out here: timers (seconds) → items (days) → goals (months → never).
+-- Goals give the daily list its "why" and are prime agent context, but they are
+-- content, not activity: like notes/projects they are NOT logged to `actions` —
+-- the lifecycle dates (created_at / achieved_at) live on the row itself.
+-- project_id is the optional link to a project (nullable, no CASCADE enforced
+-- inline; deleting a project nulls it).
+CREATE TABLE IF NOT EXISTS goals (
+    id          TEXT PRIMARY KEY,                          -- ULID
+    text        TEXT NOT NULL,
+    horizon     TEXT NOT NULL CHECK (horizon IN ('short','long','timeless')),
+    status      TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active','achieved')),
+    project_id  TEXT,                                      -- FK→projects.id
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    achieved_at TEXT                                        -- NULL unless status='achieved'
+);
+
+CREATE INDEX IF NOT EXISTS idx_goals_order ON goals(sort_order, created_at);
+
 -- Timer sessions: per-task time tracking. A session is an interval of focused
 -- work on one item: ▶ opens a row (ended_at NULL), ⏸ fills ended_at +
 -- duration_secs. Exactly one row may be open at a time (the single active

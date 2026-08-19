@@ -4,6 +4,7 @@
 //   dayapp --add "text" [--to backlog]      create (today|daily|backlog; default backlog)
 //   dayapp --complete "query"               complete (stops its timer first)
 //   dayapp --start "query"                  start the single active timer
+//   dayapp --goals                          print goals grouped by horizon
 //   dayapp --deploy                         force-push tasks.json now (read-only)
 //   dayapp --sync-pull-peek                 print the phone's pending captures
 //
@@ -16,6 +17,7 @@
 // frontend). Tokens typed here stay literal until edited in the GUI.
 
 use crate::db::{Db, HiddenFilter, Item};
+use crate::goals::{Goal, HORIZONS};
 use crate::sync::{self, DeployOutcome};
 
 pub fn run(args: Vec<String>) -> i32 {
@@ -39,10 +41,11 @@ pub fn run(args: Vec<String>) -> i32 {
         "--start" => with_query(&db, &rest, |db, item| {
             db.start_timer(&item.id).map(|_| ())
         }),
+        "--goals" => goals(&db),
         "--deploy" => sync::deploy(&db, true).map(|o| println!("{}", o.describe())),
         "--sync-pull-peek" => peek(&db),
         "--help" | "-h" => {
-            println!("usage: dayapp --list [today|daily|backlog] | --add \"text\" [--to backlog] | --complete <query> | --start <query> | --deploy | --sync-pull-peek");
+            println!("usage: dayapp --list [today|daily|backlog] | --add \"text\" [--to backlog] | --complete <query> | --start <query> | --goals | --deploy | --sync-pull-peek");
             Ok(())
         }
         _ => Err(anyhow::anyhow!("unknown command \"{cmd}\" — try --help")),
@@ -57,8 +60,44 @@ pub fn run(args: Vec<String>) -> i32 {
 }
 
 fn usage() -> i32 {
-    eprintln!("usage: dayapp --list [section] | --add \"text\" [--to backlog] | --complete <query> | --start <query> | --deploy | --sync-pull-peek");
+    eprintln!("usage: dayapp --list [section] | --add \"text\" [--to backlog] | --complete <query> | --start <query> | --goals | --deploy | --sync-pull-peek");
     1
+}
+
+/// Print goals grouped by horizon, the way the GUI shows them (timeless →
+/// long → short, achieved last). Read-only — this is the agent-context view of
+/// the identity layer.
+fn goals(db: &Db) -> anyhow::Result<()> {
+    let all = db.list_goals()?;
+    if all.is_empty() {
+        println!("no goals");
+        return Ok(());
+    }
+    let active = |h: &str| {
+        all.iter()
+            .filter(|g| g.horizon == h && g.status == "active")
+            .collect::<Vec<&Goal>>()
+    };
+    for horizon in HORIZONS {
+        let group = active(horizon);
+        if group.is_empty() { continue; }
+        println!("{horizon}:");
+        for g in group {
+            println!("  {}", g.text);
+        }
+    }
+    let done: Vec<&Goal> = all.iter().filter(|g| g.status == "achieved").collect();
+    if !done.is_empty() {
+        println!("achieved:");
+        for g in done {
+            // now_iso timestamps are local RFC3339; the date prefix is enough
+            // for a goal's achievement record.
+            let day = g.achieved_at.as_deref().and_then(|a| a.split('T').next()).unwrap_or("");
+            let when = if day.is_empty() { String::new() } else { format!(" ({day})") };
+            println!("  ✓ {}{when}", g.text);
+        }
+    }
+    Ok(())
 }
 
 /// Print the phone's pending captures without ingesting them — a read-only

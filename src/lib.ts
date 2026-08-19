@@ -91,6 +91,72 @@ export const projectsApi = {
   delete: (id: string) => invoke<void>("delete_project", { id }),
 };
 
+// ---- Goals ----------------------------------------------------------------
+// The identity layer above the task sections: statements of direction at three
+// horizons — short (months, completable), long (years, completable), timeless
+// (a direction, never achieved). Goals are content, not activity — like
+// notes/projects they are NOT logged to `actions`; the lifecycle dates
+// (createdAt / achievedAt) live on the row. See src-tauri/src/goals.rs.
+
+export const GOAL_HORIZONS = ["short", "long", "timeless"] as const;
+export type GoalHorizon = (typeof GOAL_HORIZONS)[number];
+
+export interface Goal {
+  id: string;
+  text: string;
+  horizon: GoalHorizon;
+  status: "active" | "achieved";
+  projectId: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  achievedAt: string | null;
+}
+
+export const goalsApi = {
+  list: () => invoke<Goal[]>("list_goals"),
+  create: (text: string, horizon: GoalHorizon, projectId: string | null) =>
+    invoke<Goal>("create_goal", { text, horizon, projectId }),
+  edit: (id: string, text: string, horizon: GoalHorizon | null) =>
+    invoke<void>("edit_goal", { id, text, horizon }),
+  setProject: (id: string, projectId: string | null) =>
+    invoke<void>("set_goal_project", { id, projectId }),
+  achieve: (id: string) => invoke<void>("achieve_goal", { id }),
+  unachieve: (id: string) => invoke<void>("unachieve_goal", { id }),
+  delete: (id: string) => invoke<void>("delete_goal", { id }),
+};
+
+/** The goals capture/edit parser: a leading horizon word (short / long /
+ *  timeless, case-insensitive) picks the tier and is stripped, then the normal
+ *  `#tag` project rules apply to the remainder ("long better entrepreneur
+ *  #hustle" → long horizon, "better entrepreneur", hustle project). When the
+ *  word is the whole input it stays literal so the input is never lost — the
+ *  same rule stripTag applies. `horizon` is null when no token was present;
+ *  callers decide whether that means "short" (on create) or "leave the tier
+ *  alone" (on edit), mirroring parseItemTags. */
+export function parseGoalText(
+  text: string,
+  projects: Project[],
+): { text: string; horizon: GoalHorizon | null; projectId: string | null; createProjectName?: string } {
+  const trimmed = text.trim();
+  const words = trimmed.split(/\s+/);
+  const first = words[0]?.toLowerCase() ?? "";
+  if (words.length > 1 && (GOAL_HORIZONS as readonly string[]).includes(first)) {
+    const project = parseProjectTag(words.slice(1).join(" "), projects);
+    return { horizon: first as GoalHorizon, ...project };
+  }
+  const project = parseProjectTag(trimmed, projects);
+  return { horizon: null, ...project };
+}
+
+/** Month-granular display for a goal's achievedAt timestamp ("Aug 2026") —
+ *  goal achievements are season-scale events, not day-scale rows. */
+export const formatGoalAchieved = (iso: string): string => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+};
+
 // ---- Timers --------------------------------------------------------------
 // Per-task time tracking. A session is an interval of focused work on one
 // item; exactly one may be open at a time (the single active timer). Sessions

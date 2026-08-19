@@ -2,6 +2,7 @@
 // DB work (rusqlite is sync) is dispatched to a blocking thread so the UI stays fluid.
 
 mod db;
+mod goals;
 mod notes;
 mod projects;
 mod sync;
@@ -9,6 +10,7 @@ mod timers;
 pub mod cli;
 
 use db::{Db, HiddenFilter, Item, Action};
+use goals::Goal;
 use notes::Note;
 use projects::Project;
 use std::sync::Arc;
@@ -200,6 +202,56 @@ async fn set_item_priority(
         }
     }
     with_db(db, move |db| db.set_item_priority(&id, priority)).await
+}
+
+// ---- Goal commands -------------------------------------------------------
+// The identity layer: horizon-scoped goals (short / long / timeless) above the
+// task sections, optionally linked to a project. Like notes/projects they are
+// content, not activity — lifecycle dates live on the row, nothing is logged
+// to `actions`.
+
+#[tauri::command]
+async fn list_goals(db: State<'_, DbState>) -> Result<Vec<Goal>, String> {
+    with_db(db, move |db| db.list_goals()).await
+}
+
+#[tauri::command]
+async fn create_goal(
+    db: State<'_, DbState>, text: String, horizon: String, project_id: Option<String>,
+) -> Result<Goal, String>
+{
+    with_db(db, move |db| db.create_goal(&text, &horizon, project_id.as_deref())).await
+}
+
+#[tauri::command]
+async fn edit_goal(
+    db: State<'_, DbState>, id: String, text: String, horizon: Option<String>,
+) -> Result<(), String>
+{
+    with_db(db, move |db| db.edit_goal(&id, &text, horizon.as_deref())).await
+}
+
+#[tauri::command]
+async fn set_goal_project(
+    db: State<'_, DbState>, id: String, project_id: Option<String>,
+) -> Result<(), String>
+{
+    with_db(db, move |db| db.set_goal_project(&id, project_id.as_deref())).await
+}
+
+#[tauri::command]
+async fn achieve_goal(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    with_db(db, move |db| db.achieve_goal(&id)).await
+}
+
+#[tauri::command]
+async fn unachieve_goal(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    with_db(db, move |db| db.unachieve_goal(&id)).await
+}
+
+#[tauri::command]
+async fn delete_goal(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    with_db(db, move |db| db.delete_goal(&id)).await
 }
 
 // ---- Timer commands -----------------------------------------------------
@@ -474,6 +526,8 @@ pub fn run() {
             hide_note, unhide_note,
             list_projects, create_project, rename_project, delete_project, set_item_project,
             set_reminder, set_item_priority,
+            list_goals, create_goal, edit_goal, set_goal_project,
+            achieve_goal, unachieve_goal, delete_goal,
             start_timer, stop_timer, discard_timer, get_active_timer,
             time_totals, session_time_by_day,
             sync_get_config, sync_set_config, sync_deploy,
