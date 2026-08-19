@@ -574,6 +574,15 @@ npx tauri icon path/to/icon-1024.png
 npm run tauri build
 ```
 
+`tauri icon` also refreshes the Android launcher icons in `src-tauri/gen/android`
+(the full-logo raster + the adaptive-icon foreground, which is the squircle
+edge-to-edge so launchers mask it into their own shape), but it **resets the
+adaptive background colour to `#fff`** — after every run, set
+`ic_launcher_background` back to `#0e0f11` in both
+`src-tauri/gen/android/app/src/main/res/values/ic_launcher_background.xml` and
+`src-tauri/icons/android/values/ic_launcher_background.xml` (the app bg, so the
+dark logo never flashes a white layer under launcher parallax effects).
+
 ### Toolchain note
 
 A recent Rust is required (edition 2024, pulled transitively by tauri-build deps). If you
