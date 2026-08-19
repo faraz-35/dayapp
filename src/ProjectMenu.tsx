@@ -6,30 +6,29 @@
 // create-and-assign a new project. The menu closes on selection, Escape, or an
 // outside click. All pointer events stopPropagation so opening it never selects
 // a row, starts a drag, or focuses a note textarea.
+//
+// The list and creation come from the parent (App's projects state): the row's
+// project label renders from that same state, so a project created here must
+// land there immediately — not at the next 60s refresh — or the just-assigned
+// row stays unlabeled for seconds.
 
 import { useEffect, useRef, useState } from "react";
-import { projectsApi, type Project } from "./lib";
+import { type Project } from "./lib";
 import { usePopoverFlip } from "./usePopoverFlip";
 
 export default function ProjectMenu({
-  projectId, onAssign,
+  projects, projectId, onAssign, onCreateProject,
 }: {
+  projects: Project[];
   projectId: string | null;
   onAssign: (projectId: string | null) => void;
+  onCreateProject: (name: string) => Promise<Project>;
 }) {
   const [open, setOpen] = useState(false);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [draft, setDraft] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const flip = usePopoverFlip(open, ref, menuRef);
-
-  // Load projects on first open. Cheap (personal-scale list) and keeps the
-  // menu fresh if projects changed elsewhere without a full app refresh.
-  useEffect(() => {
-    if (!open) return;
-    projectsApi.list().then(setProjects).catch(() => setProjects([]));
-  }, [open]);
 
   // Close on outside click or Escape.
   useEffect(() => {
@@ -58,7 +57,7 @@ export default function ProjectMenu({
     const name = draft.trim();
     if (!name) return;
     try {
-      const p = await projectsApi.create(name);
+      const p = await onCreateProject(name);
       assign(p.id);
     } catch {
       // leave menu open on failure so the user can retry

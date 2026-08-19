@@ -47,6 +47,39 @@ const clampZoom = (z: number) =>
 // picked at random every 2 minutes before returning to "Faraz" (home).
 const MASTHEAD_THEMES = ["growth", "money", "journey", "learn"] as const;
 
+// The Backlog's display order, mirroring the backend's ORDER BY (db.rs list):
+// priority first (unmarked last), then manual order. Optimistic updates that
+// touch priority or ordering must re-apply it — the tier dividers in
+// SectionView read the rendered order, so a row left out of tier splits one
+// tier group into two dividers until the next 60s refresh re-syncs. sortOrder
+// is kept truthful optimistically (settleBacklogDrop), so this comparator is exact
+// against what a refresh returns.
+const sortBacklog = (list: Item[]) =>
+  [...list].sort(
+    (a, b) =>
+      (a.priority ?? 99) - (b.priority ?? 99) ||
+      a.sortOrder - b.sortOrder ||
+      a.createdAt.localeCompare(b.createdAt),
+  );
+
+// Re-apply the Backlog's ordering after an optimistic drop. move_item
+// re-indexes sort_order 0..N across the section over the tier-sorted sequence
+// with the dropped row inserted at the target index — reproduce exactly that
+// indexing (and the display order it implies), so the optimistic list is what
+// the next refresh returns and sortBacklog's comparator stays truthful for
+// later creates/edits. `spliced` is the destination list with the moved row
+// already spliced in at `fullIndex`.
+const settleBacklogDrop = (spliced: Item[], movedId: string, fullIndex: number) => {
+  const moved = spliced.find((i) => i.id === movedId);
+  if (!moved) return spliced;
+  // The destination minus the moved row is still in its tier-sorted order
+  // (the invariant above), so re-inserting at fullIndex rebuilds the same
+  // sequence the backend indexes over.
+  const seq = spliced.filter((i) => i.id !== movedId);
+  seq.splice(Math.min(fullIndex, seq.length), 0, moved);
+  return sortBacklog(seq.map((i, idx) => (i.sortOrder === idx ? i : { ...i, sortOrder: idx })));
+};
+
 // Self-update status, accumulated from "update-status" events emitted by the
 // backend's self_update command. `lines` is the streamed build log; `message`
 // is populated only on error.
@@ -379,15 +412,24 @@ function DayApp() {
 
   // ---- Mutations --------------------------------------------------------
 
+  // Create a project and land it in state immediately. Both creation paths —
+  // the # popover's inline field and a trailing `#tag` in capture/edit text —
+  // go through this, because the row's project label renders from this state:
+  // a project missing from it would leave the just-assigned row unlabeled
+  // until the next 60s refresh.
+  const handleCreateProject = async (name: string): Promise<Project> => {
+    const created = await projectsApi.create(name);
+    setProjects((p) => [...p, created]);
+    return created;
+  };
+
   // A trailing unmatched `#tag` (e.g. "fix bug #acme" with no "acme" project)
   // creates the project in place. Same housekeeping path as the # popover's
   // create field — just triggered by typing the tag at the end of the text.
   // Returns the new project id, or null when there's nothing to create.
   const materializeTagProject = async (name?: string): Promise<string | null> => {
     if (!name) return null;
-    const created = await projectsApi.create(name);
-    setProjects((p) => [...p, created]);
-    return created.id;
+    return (await handleCreateProject(name)).id;
   };
 
   const handleCreate = async (section: Section, raw: string) => {
@@ -403,7 +445,15 @@ function DayApp() {
     const patch: Partial<Item> = {};
     if (assignId) patch.projectId = assignId;
     if (tier !== null) patch.priority = tier;
-    setItems((s) => ({ ...s, [section]: [...s[section], { ...item, ...patch }] }));
+    setItems((s) => ({
+      ...s,
+      // A backlog capture with a !N token must land in its tier group right
+      // away — appended at the end it would render under the wrong divider
+      // until the next refresh.
+      [section]: section === "backlog"
+        ? sortBacklog([...s.backlog, { ...item, ...patch }])
+        : [...s[section], { ...item, ...patch }],
+    }));
     if (assignId) api.setItemProject(item.id, assignId);
     if (tier !== null) api.setItemPriority(item.id, tier);
   };
@@ -494,7 +544,10 @@ function DayApp() {
       return {
         today: update(s.today),
         daily: update(s.daily),
-        backlog: update(s.backlog),
+        // A priority token can move the row across tiers — re-apply the tier
+        // ordering so it lands in its group immediately (identity when the
+        // priority didn't change and the list is already sorted).
+        backlog: sortBacklog(update(s.backlog)),
       };
     });
     await api.editItem(id, text);
@@ -603,12 +656,19 @@ function DayApp() {
       if (fromSection === toSection) {
         const list = s[fromSection].filter((i) => i.id !== id);
         list.splice(fullIndex, 0, moved);
-        return { ...s, [fromSection]: list };
+        return {
+          ...s,
+          [fromSection]: toSection === "backlog" ? settleBacklogDrop(list, id, fullIndex) : list,
+        };
       }
       const fromList = s[fromSection].filter((i) => i.id !== id);
       const toList = [...s[toSection]];
       toList.splice(fullIndex, 0, moved);
-      return { ...s, [fromSection]: fromList, [toSection]: toList };
+      return {
+        ...s,
+        [fromSection]: fromList,
+        [toSection]: toSection === "backlog" ? settleBacklogDrop(toList, id, fullIndex) : toList,
+      };
     });
     await api.moveItem(id, toSection, fullIndex);
   };
@@ -784,6 +844,7 @@ function DayApp() {
               onHide={handleHide}
               onUnhide={handleUnhide}
               onSetProject={handleSetProject}
+              onCreateProject={handleCreateProject}
               onSetReminder={handleSetReminder}
               onMoveItem={handleMoveItem}
               activeTimerId={activeTimer?.itemId ?? null}

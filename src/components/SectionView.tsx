@@ -14,7 +14,7 @@ import ItemRow, { PriorityBars } from "./ItemRow";
 export default function SectionView({
   section, label, hint, items, projects, selectedId, editingId, showCapture,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
-  onSetProject, onSetReminder, activeTimerId, liveElapsed, timeTotals, onToggleTimer,
+  onSetProject, onCreateProject, onSetReminder, activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
   section: Section;
   label: string;
@@ -33,6 +33,7 @@ export default function SectionView({
   onHide: (id: string, section: Section, duration: HideDuration) => void;
   onUnhide: (id: string) => void;
   onSetProject: (id: string, projectId: string | null) => void;
+  onCreateProject: (name: string) => Promise<Project>;
   onSetReminder: (id: string, remindAt: string | null) => void;
   activeTimerId: string | null;
   liveElapsed: number;
@@ -101,7 +102,7 @@ export default function SectionView({
               )}
               <ItemRow
                 item={item}
-                project={projects.find((p) => p.id === item.projectId) ?? null}
+                projects={projects}
                 selected={item.id === selectedId}
                 editing={item.id === editingId}
                 onSelect={onSelect}
@@ -112,6 +113,7 @@ export default function SectionView({
                 onHide={(duration) => onHide(item.id, section, duration)}
                 onUnhide={() => onUnhide(item.id)}
                 onSetProject={(projectId) => onSetProject(item.id, projectId)}
+                onCreateProject={onCreateProject}
                 onSetReminder={(remindAt) => onSetReminder(item.id, remindAt)}
                 onToggleTimer={() => onToggleTimer(item.id)}
                 isTiming={timing}

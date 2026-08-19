@@ -32,7 +32,7 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
 export default function SectionList({
   items, projects, selectedId, editingId, showCapture,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
-  onSetProject, onSetReminder, onMoveItem,
+  onSetProject, onCreateProject, onSetReminder, onMoveItem,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
   items: Record<Section, Item[]>;
@@ -51,6 +51,7 @@ export default function SectionList({
   onHide: (id: string, section: Section, duration: HideDuration) => void;
   onUnhide: (id: string) => void;
   onSetProject: (id: string, projectId: string | null) => void;
+  onCreateProject: (name: string) => Promise<Project>;
   onSetReminder: (id: string, remindAt: string | null) => void;
   onMoveItem: (id: string, toSection: Section, newIndex: number) => void;
   activeTimerId: string | null;
@@ -137,6 +138,7 @@ export default function SectionList({
             onHide={onHide}
             onUnhide={onUnhide}
             onSetProject={onSetProject}
+            onCreateProject={onCreateProject}
             onSetReminder={onSetReminder}
             activeTimerId={activeTimerId}
             liveElapsed={liveElapsed}

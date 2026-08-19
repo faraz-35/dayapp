@@ -21,12 +21,12 @@ import ProjectMenu from "../ProjectMenu";
 import ReminderMenu from "../ReminderMenu";
 
 export default function ItemRow({
-  item, project, selected, editing,
+  item, projects, selected, editing,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide, onUnhide,
-  onSetProject, onSetReminder, onToggleTimer, isTiming, elapsedSec, totalSec,
+  onSetProject, onCreateProject, onSetReminder, onToggleTimer, isTiming, elapsedSec, totalSec,
 }: {
   item: Item;
-  project: Project | null;
+  projects: Project[];
   selected: boolean;
   editing: boolean;
   onSelect: (id: string) => void;
@@ -37,6 +37,7 @@ export default function ItemRow({
   onHide: (duration: HideDuration) => void;
   onUnhide: () => void;
   onSetProject: (projectId: string | null) => void;
+  onCreateProject: (name: string) => Promise<Project>;
   onSetReminder: (remindAt: string | null) => void;
   onToggleTimer: () => void;
   isTiming: boolean;
@@ -49,6 +50,7 @@ export default function ItemRow({
   const doneToday =
     item.section === "daily" && item.lastCompletedDate === localDateStr();
   const done = item.status === "done" || doneToday;
+  const project = projects.find((p) => p.id === item.projectId) ?? null;
 
   // Backlog rows carry no bars — the section's tier dividers label the groups
   // there — so priority feeds the row's metadata only outside the Backlog.
@@ -167,7 +169,12 @@ export default function ItemRow({
             </>
           ) : (
             <>
-              <ProjectMenu projectId={item.projectId} onAssign={onSetProject} />
+              <ProjectMenu
+                projects={projects}
+                projectId={item.projectId}
+                onAssign={onSetProject}
+                onCreateProject={onCreateProject}
+              />
               <ReminderMenu remindAt={item.remindAt} onSet={onSetReminder} />
               <HideMenu onHide={onHide} />
               <button
