@@ -12,7 +12,7 @@ import { type HideDuration, type Item, type Project, type Section } from "../lib
 import ItemRow, { PriorityBars } from "./ItemRow";
 
 export default function SectionView({
-  section, label, hint, items, projects, selectedId, editingId, showCapture,
+  section, label, hint, items, projects, selectedId, editingId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
   onSetProject, onCreateProject, onSetReminder, activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
@@ -23,7 +23,6 @@ export default function SectionView({
   projects: Project[];
   selectedId: string | null;
   editingId: string | null;
-  showCapture: boolean;
   onSelect: (id: string) => void;
   onComplete: (id: string, section: Section) => void;
   onDelete: (id: string, section: Section) => void;
@@ -61,22 +60,18 @@ export default function SectionView({
       </div>
 
       {/* Always-open capture at the top of the section: type + Enter to add.
-          No button, no click-to-reveal — the input itself is the affordance.
-          Suppressed in hidden-only mode, where a new (non-hidden) item would
-          vanish from the view on creation. */}
-      {showCapture && (
-        <div className="capture">
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); submit(); }
-              else if (e.key === "Escape") setDraft("");
-            }}
-            spellCheck={false}
-          />
-        </div>
-      )}
+          No button, no click-to-reveal — the input itself is the affordance. */}
+      <div className="capture">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); submit(); }
+            else if (e.key === "Escape") setDraft("");
+          }}
+          spellCheck={false}
+        />
+      </div>
 
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
         {items.map((item, idx) => {

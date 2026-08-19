@@ -79,8 +79,9 @@ meta    key, value           — currently holds last_sweep_date
 - `last_completed_date` — set on every completion (daily's greyed-reset keys off it;
   today's sweep retirement uses it to keep same-day completions safe).
 - `hidden` ∈ `0` | `1` — soft-archive. The list commands take a `HiddenFilter`
-  (`exclude | include | only` — the three ⌘P visibility modes) instead of always
-  filtering `hidden = 0`; in `include`/`only` modes archived rows render inline in
+  (`exclude | include` — ⌘P → Show/Hide Hidden Tasks; `only` remains in the enum's
+  vocabulary but no command uses it since the hidden-only mode was retired) instead of
+  always filtering `hidden = 0`; in `include` mode archived rows render inline in
   their sections (dimmed, ◐ expiry chip, ↺/× actions only, not draggable).
   `hidden_until` is NULL
   (forever) or an ISO date cleared by the midnight sweep. Hide/unhide is **not** logged to
@@ -164,7 +165,8 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
 - The section renders at the very top of the main page, above Notes — the
   identity layer sits over everything; **⌘P → Show/Hide Goals** toggles it
   completely (persisted in localStorage `dayapp-goals-visible`, default on — a
-  display preference like zoom, not a session filter). Goals don't take part
+  display preference like zoom). **Show Default View hides it** — the default
+  working view is the plain task list. Goals don't take part
   in the item visibility/priority/project filters, and there's no DnD — a calm
   static list.
 - Logic lives in `src-tauri/src/goals.rs`; the UI is `src/Goals.tsx`; the CLI
@@ -513,24 +515,26 @@ window; below 455px of width a media query hides the masthead.
 | `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` flips it to the project filter picker |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets) — CSS `zoom` on `<html>`, persisted in localStorage (`dayapp-zoom`); scales every px dimension together, so the design's proportions hold at any size |
 
-**Visibility modes (⌘P):** `Show Regular View` (default — hidden entries excluded),
-`Show All` (hidden entries inline, dimmed, ↺/× actions), `Show Hidden Only` (only hidden
-entries). All three render the same main page (Notes + sections) — they're filters, not
-separate views; capture inputs are suppressed in hidden-only mode, and unhiding there pops
-the row out. The mode lives in `App.tsx` as `visibility` state, session-only; the header ◐
-button toggles hidden-only.
+**Show/Hide toggles (⌘P):** every layout surface is an independent, persisted toggle
+whose label reflects its state — `Goals`, `Notes`, `Today`/`Daily`/`Backlog` sections,
+`Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
+dimmed, ↺/× actions), and the `Priority 1/2/3` filters. All persist in localStorage
+(display preferences, like zoom). The header ◐ button toggles both hidden surfaces at
+once. There is no hidden-only mode and no separate archive screen — inline-or-excluded
+is the whole visibility story.
 
-**Priority filter (⌘P):** `Show Priority 1/2/3 Only` narrows the main list to one tier
+**Priority filter (⌘P):** `Show/Hide Priority 1/2/3` narrows the main list to one tier
 (`displayItems` in `App.tsx`; DnD indexes map back to full-list space in `handleMoveItem`).
-Re-running the active tier's command clears it.
+Re-running the active tier's command clears it; the tier persists across launches.
 
 **Project filter (⌘F `#`):** typing a leading `#` in the ⌘F search flips the hit list to the
 projects (color dot + name, narrowed by the text after the `#`); picking one narrows the main
 list to that project, picking the already-active one clears it (the same toggle rule as the
 priority tiers). Same `displayItems` pipeline — it composes with the priority tier.
 
-**Show Regular View is the universal reset:** it clears the visibility mode, priority tier,
-and project filter together — one command always restores the plain unfiltered list.
+**Show Default View is the universal reset:** hidden entries excluded, priority tier and
+project filter cleared, all three sections + Notes shown — and Goals hidden (the default
+working view is the plain task list). One command always restores it.
 
 The keyboard handler **ignores events when an `<input>`/`<textarea>` is focused** so typing
 into Notes or edit fields isn't hijacked.

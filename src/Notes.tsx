@@ -4,9 +4,9 @@
 //
 // Hover reveal (hide/delete buttons) is JS-tracked rather than CSS :hover —
 // see the pointer effect below for why. Deliberately isolated from the
-// items/actions feature: own state, own API, own handlers. The parent passes
-// the ⌘P visibility mode as a HiddenFilter — "include"/"only" render hidden
-// notes inline (dimmed, ↺ to restore) instead of excluding them.
+// items/actions feature: own state, own API, own handlers. The parent passes a
+// HiddenFilter — "include" (⌘P → Show Hidden Notes) renders hidden notes
+// inline (dimmed, ↺ to restore) instead of excluding them.
 //
 // Each note card can be collapsed to a single line — its first non-empty
 // line. The card shrinks in place (same look, just shorter; no layout

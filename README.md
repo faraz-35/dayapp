@@ -70,10 +70,10 @@ Your data in `~/Library/.../dayapp.db` is never touched.
 ## Command palette (⌘P)
 
 VS Code / Linear–style: press **⌘P** anywhere, type to filter, ↑/↓ to move, Enter to run.
-Currently: the three visibility modes (Show Regular View / Show All / Show Hidden Only),
-priority filters (Show Priority 1/2/3 Only), Show/Hide Goals, the mobile sync commands
-(Deploy Task List Now / Pull Captures Now / Configure Sync…), View Journal, and Update
-DayApp. Trivially extensible — add a command to the registry in `App.tsx`.
+Currently: Show Default View (the universal reset), the Show/Hide toggles — Goals, Notes,
+Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3 — the mobile sync
+commands (Deploy Task List Now / Pull Captures Now / Configure Sync…), View Journal, and
+Update DayApp. Trivially extensible — add a command to the registry in `App.tsx`.
 
 ## Where things live
 
@@ -138,23 +138,18 @@ dayapp/
 ## Hiding
 
 Not everything in a list matters today. Hover any task or note and click **◐** to
-hide it — forever, or for a day / week / month. Hidden rows leave the regular list
-entirely (no faded clutter).
+hide it — forever, or for a day / week / month. Hidden rows leave the list
+entirely (no faded clutter) until you toggle them back in:
 
-The three visibility commands in the ⌘P palette are all filters over the same main
-page — there is no separate archive screen:
-
-- **Show Regular View** — the default; hidden entries are excluded. This is
-  also the universal reset: it clears the priority and project filters too,
-  so one command always brings back the plain list.
-- **Show All** — hidden tasks appear inline in their sections and hidden notes
-  back in the notes list: dimmed, marked **◐** with the hide's expiry, hover
-  actions reduced to unhide (↺) and delete.
-- **Show Hidden Only** — the main page showing just the hidden entries (the
-  header's **◐** icon is a shortcut for this one). Capture inputs are hidden
-  here, and unhiding a row pops it back out of the view.
-
-The mode is per-session — a relaunch always starts regular.
+- **⌘P → Show Hidden Tasks / Show Hidden Notes** — two independent toggles.
+  When on, hidden entries render inline where they live: dimmed, marked **◐**
+  with the hide's expiry, hover actions reduced to unhide (↺) and delete. The
+  header's **◐** icon toggles both at once.
+- All the Show/Hide toggles (these, Goals, Notes, the Today / Daily / Backlog
+  sections, and the Priority tiers) persist across launches.
+- **⌘P → Show Default View** is the universal reset: hidden entries excluded,
+  filters cleared, all sections + Notes shown — and Goals hidden, restoring
+  the plain task list.
 
 Time-limited hides auto-restore: `hidden_until` is an ISO date, and the same
 midnight sweep that drops Today items into Backlog also clears any expired hide,
@@ -183,7 +178,7 @@ To focus on one project's work, press **⌘F and type `#`**: the search list
 becomes your projects (keep typing after the `#` to narrow it), each shown with
 its color dot. Pick one — ↑/↓ + Enter or a click — and the main list shows only
 that project's tasks. The filtered project is marked **filtered** in the list;
-picking it again clears the filter, as does **⌘P → Show Regular View**. The
+picking it again clears the filter, as does **⌘P → Show Default View**. The
 filter composes with the priority tiers and lasts for the session only.
 
 Assigning a project is housekeeping — it's **not** logged to the journal (only
@@ -208,10 +203,10 @@ structurally, no divider can be mistaken for the capture input, and a drag
 across a divider snapping back to its tier is visible, not surprising. A
 Backlog whose items all share one tier renders undivided.
 
-**⌘P → Show Priority 1/2/3 Only** filters the whole list down to one tier
-(each command's hint shows its bars). Re-run the active tier's command — or
-**Show Regular View** — to clear the filter. Priorities are housekeeping, like
-projects: not logged to the journal.
+**⌘P → Show/Hide Priority 1/2/3** filters the whole list down to one tier
+(each command's hint shows its bars; the toggle persists across launches).
+Re-run the active tier's command — or **Show Default View** — to clear the
+filter. Priorities are housekeeping, like projects: not logged to the journal.
 
 ## Goals
 
@@ -238,7 +233,8 @@ Checking a short/long goal marks it **achieved** — it moves to a dim
 the checkbox undoes it. Achievements are kept, never swept.
 
 **⌘P → Show/Hide Goals** toggles the whole section off and on (persisted
-across launches). Goals are logged to the journal like items — every
+across launches; **Show Default View** hides it — the default working view is
+the plain task list). Goals are logged to the journal like items — every
 set / achieve / reopen / edit / drop shows up in the Journal view, which also
 has a **Goals** filter pill for the identity-layer narrative. The project link
 stays housekeeping, unlogged. `dayapp --goals` prints the current list grouped

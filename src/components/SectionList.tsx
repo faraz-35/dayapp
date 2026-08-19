@@ -30,18 +30,19 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
 ];
 
 export default function SectionList({
-  items, projects, selectedId, editingId, showCapture,
+  items, visible, projects, selectedId, editingId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
   onSetProject, onCreateProject, onSetReminder, onMoveItem,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
   items: Record<Section, Item[]>;
+  /** Per-section ⌘P Show/Hide toggle — a toggled-off section doesn't render at
+   *  all (its items stay in state; the parent already narrows `items` to the
+   *  visible sections, this keeps the section heads/dropzones off screen). */
+  visible: Record<Section, boolean>;
   projects: Project[];
   selectedId: string | null;
   editingId: string | null;
-  /** Capture inputs are hidden in hidden-only mode — a fresh entry isn't
-   *  hidden, so it would vanish from the view the moment it's created. */
-  showCapture: boolean;
   onSelect: (id: string) => void;
   onComplete: (id: string, section: Section) => void;
   onDelete: (id: string, section: Section) => void;
@@ -118,7 +119,7 @@ export default function SectionList({
       onDragEnd={onDragEnd}
     >
       <main className="sections">
-        {SECTIONS.map((sec) => (
+        {SECTIONS.filter((sec) => visible[sec.id]).map((sec) => (
           <SectionView
             key={sec.id}
             section={sec.id}
@@ -128,7 +129,6 @@ export default function SectionList({
             projects={projects}
             selectedId={selectedId}
             editingId={editingId}
-            showCapture={showCapture}
             onSelect={onSelect}
             onComplete={onComplete}
             onDelete={onDelete}

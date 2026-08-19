@@ -8,7 +8,7 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type HideDuration, type HiddenFilter, type Item, type Project, type Section } from "./lib";
+import { api, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type HideDuration, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import Notes from "./Notes";
 import Goals from "./Goals";
@@ -22,17 +22,9 @@ import MobileSyncSettings from "./MobileSyncSettings";
 
 type View = "list" | "journal";
 
-// The three ⌘P visibility modes — a filter over the main list, so all three
-// land on the same page: "regular" (default) excludes hidden entries, "all"
-// shows them inline (dimmed, ↺/× actions), "hidden" shows only them.
-// Session-only state — a relaunch starts regular.
-type Visibility = "regular" | "all" | "hidden";
-
-// What each mode asks the list queries for (see HiddenFilter in lib.ts).
-const HIDDEN_FILTER: Record<Visibility, HiddenFilter> = {
-  regular: "exclude",
-  all: "include",
-  hidden: "only",
+// Labels for the per-section ⌘P toggles (Show/Hide Today, …).
+const SECTION_LABELS: Record<Section, string> = {
+  today: "Today", daily: "Daily", backlog: "Backlog",
 };
 
 // ⌘+/⌘- zoom bounds and step, in the comfortable-reading range around the 13px
@@ -109,12 +101,38 @@ function DayApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [view, setView] = useState<View>("list");
-  const [visibility, setVisibility] = useState<Visibility>("regular");
-  // ⌘P "Show Priority N Only" — narrow the list to one urgency tier; null = off.
-  // Session-only, like visibility.
-  const [priorityFilter, setPriorityFilter] = useState<1 | 2 | 3 | null>(null);
-  // ⌘F "#project" — narrow the list to one project; null = off. Session-only,
-  // like the others, and composed with the priority tier in displayItems.
+  // ---- Show/Hide toggles (⌘P) ---------------------------------------------
+  // Every layout surface is an independent toggle whose palette label reflects
+  // its state ("Show X" / "Hide X"). All persist in localStorage — display
+  // preferences like zoom, not session filters; Show Default View is the one
+  // universal reset (it hides the goals: the default working view is the plain
+  // task list). Show Hidden Tasks/Notes render hidden entries inline (dimmed,
+  // ↺/× actions) instead of excluding them; the header ◐ toggles both at once.
+  const [goalsVisible, setGoalsVisible] = useState(
+    () => localStorage.getItem("dayapp-goals-visible") !== "0",
+  );
+  const [notesVisible, setNotesVisible] = useState(
+    () => localStorage.getItem("dayapp-notes-visible") !== "0",
+  );
+  const [sectionsVisible, setSectionsVisible] = useState<Record<Section, boolean>>(() => ({
+    today: localStorage.getItem("dayapp-sec-today") !== "0",
+    daily: localStorage.getItem("dayapp-sec-daily") !== "0",
+    backlog: localStorage.getItem("dayapp-sec-backlog") !== "0",
+  }));
+  const [showHiddenItems, setShowHiddenItems] = useState(
+    () => localStorage.getItem("dayapp-hidden-items") === "1",
+  );
+  const [showHiddenNotes, setShowHiddenNotes] = useState(
+    () => localStorage.getItem("dayapp-hidden-notes") === "1",
+  );
+  // ⌘P "Show/Hide Priority N" — narrow the list to one urgency tier; null = off.
+  const [priorityFilter, setPriorityFilter] = useState<1 | 2 | 3 | null>(() => {
+    const saved = Number(localStorage.getItem("dayapp-priority"));
+    return saved === 1 || saved === 2 || saved === 3 ? saved : null;
+  });
+  // ⌘F "#project" — narrow the list to one project; null = off. The one
+  // session-only filter (a search-shaped focus, not a layout preference);
+  // composed with the priority tier in displayItems.
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -140,11 +158,6 @@ function DayApp() {
     const saved = Number(localStorage.getItem("dayapp-zoom"));
     return Number.isFinite(saved) && saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;
   });
-  // Whether the Goals section renders at all (⌘P → Show/Hide Goals). A
-  // display preference like zoom, so it persists; default on.
-  const [goalsVisible, setGoalsVisible] = useState(
-    () => localStorage.getItem("dayapp-goals-visible") !== "0",
-  );
   // The masthead brand word after "Live @ " — "Faraz" is home. Session-only:
   // a launch always starts at home.
   const [liveAt, setLiveAt] = useState("Faraz");
@@ -159,7 +172,7 @@ function DayApp() {
   // ---- Load -------------------------------------------------------------
 
   const refresh = useCallback(async () => {
-    const hidden = HIDDEN_FILTER[visibility];
+    const hidden = showHiddenItems ? "include" : "exclude";
     const [today, daily, backlog, projs] = await Promise.all([
       // Completed Today rows stay in the list — crossed out, like a done
       // daily — until the day-boundary sweep retires them, so only Today
@@ -171,7 +184,7 @@ function DayApp() {
     ]);
     setItems({ today, daily, backlog });
     setProjects(projs);
-  }, [visibility]);
+  }, [showHiddenItems]);
 
   useEffect(() => {
     refresh().catch((e) => log.error("initial load failed", e));
@@ -213,7 +226,15 @@ function DayApp() {
 
   useEffect(() => {
     localStorage.setItem("dayapp-goals-visible", goalsVisible ? "1" : "0");
-  }, [goalsVisible]);
+    localStorage.setItem("dayapp-notes-visible", notesVisible ? "1" : "0");
+    localStorage.setItem("dayapp-sec-today", sectionsVisible.today ? "1" : "0");
+    localStorage.setItem("dayapp-sec-daily", sectionsVisible.daily ? "1" : "0");
+    localStorage.setItem("dayapp-sec-backlog", sectionsVisible.backlog ? "1" : "0");
+    localStorage.setItem("dayapp-hidden-items", showHiddenItems ? "1" : "0");
+    localStorage.setItem("dayapp-hidden-notes", showHiddenNotes ? "1" : "0");
+    if (priorityFilter === null) localStorage.removeItem("dayapp-priority");
+    else localStorage.setItem("dayapp-priority", String(priorityFilter));
+  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, priorityFilter]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the journal title simply ignores it.
@@ -231,9 +252,8 @@ function DayApp() {
   }, []);
 
   // What the user sees: items narrowed by the ⌘P priority tier and/or the ⌘F
-  // project filter, if any. Everything display-shaped (SectionList, search
-  // hits, keyboard nav, totals) reads this; mutations read the full `items`,
-  // and DnD indexes map back to full-list space in handleMoveItem.
+  // project filter, if any. Mutations read the full `items`, and DnD indexes
+  // map back to full-list space in handleMoveItem.
   const displayItems = useMemo<Record<Section, Item[]>>(() => {
     if (priorityFilter === null && projectFilter === null) return items;
     const matches = (i: Item) =>
@@ -246,10 +266,19 @@ function DayApp() {
     };
   }, [items, priorityFilter, projectFilter]);
 
+  // displayItems narrowed to the visible sections — a toggled-off section's
+  // rows aren't rendered, searchable, keyboard-navigable, or totaled (they
+  // stay in state; only the view skips them).
+  const renderItems = useMemo<Record<Section, Item[]>>(() => ({
+    today: sectionsVisible.today ? displayItems.today : [],
+    daily: sectionsVisible.daily ? displayItems.daily : [],
+    backlog: sectionsVisible.backlog ? displayItems.backlog : [],
+  }), [displayItems, sectionsVisible]);
+
   // All currently-visible item ids — drives the per-row cumulative totals fetch.
   const allIds = useMemo(
-    () => [...displayItems.today, ...displayItems.daily, ...displayItems.backlog].map((i) => i.id),
-    [displayItems],
+    () => [...renderItems.today, ...renderItems.daily, ...renderItems.backlog].map((i) => i.id),
+    [renderItems],
   );
 
   const refreshTotals = useCallback(async () => {
@@ -315,39 +344,65 @@ function DayApp() {
   }, []);
 
   // ---- Command palette registry -----------------------------------------
-  // The set of commands shown in the ⌘P palette. The visibility modes and the
-  // priority filters are two groups over the same main list; all of them land
-  // on it, filtered differently.
+  // Every layout surface is a state-aware Show/Hide toggle (persisted); the
+  // one non-toggle is the universal reset. Labels reflect the current state,
+  // so re-running a command always reads as its inverse.
   const commands: Command[] = useMemo(() => [
     {
-      id: "view-regular",
-      label: "Show Regular View",
-      hint: "clears every filter",
-      // The universal reset: the unfiltered list, regardless of which
-      // visibility / priority / project filters are stacked up.
+      id: "view-default",
+      label: "Show Default View",
+      hint: "reset every toggle + filter",
+      // The universal reset: hidden entries excluded, filters cleared, all
+      // sections + Notes shown — and Goals hidden (the default working view
+      // is the plain task list).
       run: () => {
         setView("list");
-        setVisibility("regular");
+        setShowHiddenItems(false);
+        setShowHiddenNotes(false);
         setPriorityFilter(null);
         setProjectFilter(null);
+        setSectionsVisible({ today: true, daily: true, backlog: true });
+        setNotesVisible(true);
+        setGoalsVisible(false);
       },
     },
     {
-      id: "view-all",
-      label: "Show All",
-      hint: "hidden entries shown inline",
-      run: () => { setView("list"); setVisibility("all"); },
+      id: "toggle-goals",
+      label: goalsVisible ? "Hide Goals" : "Show Goals",
+      hint: "the goals section",
+      run: () => { setView("list"); setGoalsVisible((v) => !v); },
     },
     {
-      id: "view-hidden",
-      label: "Show Hidden Only",
-      hint: "only hidden tasks + notes",
-      run: () => { setView("list"); setVisibility("hidden"); },
+      id: "toggle-notes",
+      label: notesVisible ? "Hide Notes" : "Show Notes",
+      hint: "the notes section",
+      run: () => { setView("list"); setNotesVisible((v) => !v); },
+    },
+    ...(["today", "daily", "backlog"] as const).map((s) => ({
+      id: `toggle-${s}`,
+      label: sectionsVisible[s] ? `Hide ${SECTION_LABELS[s]}` : `Show ${SECTION_LABELS[s]}`,
+      hint: "section",
+      run: () => {
+        setView("list");
+        setSectionsVisible((v) => ({ ...v, [s]: !v[s] }));
+      },
+    })),
+    {
+      id: "toggle-hidden-items",
+      label: showHiddenItems ? "Hide Hidden Tasks" : "Show Hidden Tasks",
+      hint: "inline, dimmed",
+      run: () => { setView("list"); setShowHiddenItems((v) => !v); },
+    },
+    {
+      id: "toggle-hidden-notes",
+      label: showHiddenNotes ? "Hide Hidden Notes" : "Show Hidden Notes",
+      hint: "inline, dimmed",
+      run: () => { setView("list"); setShowHiddenNotes((v) => !v); },
     },
     ...([1, 2, 3] as const).map((n) => ({
       id: `prio-${n}`,
-      label: `Show Priority ${n} Only`,
       // Mirrors the row's signal bars: filled count = urgency (P1 = 3).
+      label: priorityFilter === n ? `Hide Priority ${n}` : `Show Priority ${n}`,
       hint: "▮".repeat(4 - n),
       run: () => {
         setView("list");
@@ -355,14 +410,6 @@ function DayApp() {
         setPriorityFilter((p) => (p === n ? null : n));
       },
     })),
-    {
-      id: "toggle-goals",
-      // One command whose label reflects the current state — running it
-      // always flips. Persists (localStorage), unlike the filters above.
-      label: goalsVisible ? "Hide Goals" : "Show Goals",
-      hint: "the goals section",
-      run: () => setGoalsVisible((v) => !v),
-    },
     {
       id: "mobile-deploy",
       label: "Mobile: Deploy Task List Now",
@@ -399,7 +446,7 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, priorityFilter]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -573,34 +620,23 @@ function DayApp() {
     if (priority !== null) api.setItemPriority(id, tier);
   };
 
-  // Soft-archive a task. In a view that shows hidden entries the row stays
-  // put, flipped to its dimmed hidden state (expiry computed locally so the
-  // chip is right immediately); in Regular mode it leaves the list. Time-
-  // limited hides auto-restore via the day-boundary sweep.
+  // Soft-archive a task. With Show Hidden Tasks on, the row stays put flipped
+  // to its dimmed hidden state (expiry computed locally so the chip is right
+  // immediately); otherwise it leaves the list. Time-limited hides
+  // auto-restore via the day-boundary sweep.
   const handleHide = async (id: string, section: Section, duration: HideDuration) => {
-    if (visibility === "regular") {
-      setItems((s) => ({ ...s, [section]: s[section].filter((i) => i.id !== id) }));
-    } else {
+    if (showHiddenItems) {
       updateItemField(id, { hidden: true, hiddenUntil: hideExpiry(duration) });
+    } else {
+      setItems((s) => ({ ...s, [section]: s[section].filter((i) => i.id !== id) }));
     }
     await api.hideItem(id, duration);
   };
 
-  // Restore a hidden row. In hidden-only mode it leaves the view (a restored
-  // row isn't hidden anymore); in Show All it just sheds its dimmed state.
+  // Restore a hidden row — it sheds its dimmed state and stays in place
+  // (hidden rows only render when Show Hidden Tasks is on).
   const handleUnhide = async (id: string) => {
-    if (visibility === "hidden") {
-      setItems((s) => {
-        const section = (["today", "daily", "backlog"] as Section[]).find(
-          (sec) => s[sec].some((i) => i.id === id),
-        );
-        return section
-          ? { ...s, [section]: s[section].filter((i) => i.id !== id) }
-          : s;
-      });
-    } else {
-      updateItemField(id, { hidden: false });
-    }
+    updateItemField(id, { hidden: false });
     await api.unhideItem(id);
   };
 
@@ -696,11 +732,11 @@ function DayApp() {
   // SearchMenu always reflects what's on screen.
   const searchHits: SearchHit[] = useMemo(
     () => ([
-      ...displayItems.today.map((item) => ({ item, section: "today" as Section })),
-      ...displayItems.daily.map((item) => ({ item, section: "daily" as Section })),
-      ...displayItems.backlog.map((item) => ({ item, section: "backlog" as Section })),
+      ...renderItems.today.map((item) => ({ item, section: "today" as Section })),
+      ...renderItems.daily.map((item) => ({ item, section: "daily" as Section })),
+      ...renderItems.backlog.map((item) => ({ item, section: "backlog" as Section })),
     ]),
-    [displayItems],
+    [renderItems],
   );
 
   // Jump to a search hit: select it and scroll its row into view. The row is
@@ -724,8 +760,8 @@ function DayApp() {
   // ---- Keyboard nav ----------------------------------------------------
 
   const allVisible = useMemo(
-    () => [...displayItems.today, ...displayItems.daily, ...displayItems.backlog],
-    [displayItems],
+    () => [...renderItems.today, ...renderItems.daily, ...renderItems.backlog],
+    [renderItems],
   );
 
   useEffect(() => {
@@ -808,16 +844,18 @@ function DayApp() {
               >×</button>
             </div>
           )}
-          {/* ◐ filters the main list to hidden-only (same as ⌘P → Show Hidden
-              Only); ✕ returns to regular. Journal keeps its own toggle. */}
+          {/* ◐ toggles both hidden surfaces (tasks + notes) at once — the
+              one-click archive peek over the ⌘P per-surface toggles. */}
           <button
-            className={`icon-btn ${visibility === "hidden" ? "active" : ""}`}
-            onClick={() => setVisibility(visibility === "hidden" ? "regular" : "hidden")}
-            title={visibility === "hidden" ? "Back to list" : "View hidden"}
-            aria-label="Toggle hidden"
-          >
-            {visibility === "hidden" ? "✕" : "◐"}
-          </button>
+            className={`icon-btn ${showHiddenItems || showHiddenNotes ? "active" : ""}`}
+            onClick={() => {
+              const next = !(showHiddenItems || showHiddenNotes);
+              setShowHiddenItems(next);
+              setShowHiddenNotes(next);
+            }}
+            title={showHiddenItems || showHiddenNotes ? "Hide hidden entries" : "Show hidden entries inline"}
+            aria-label="Toggle hidden entries"
+          >◐</button>
           <button
             className={`icon-btn ${view === "journal" ? "active" : ""}`}
             onClick={() => setView(view === "journal" ? "list" : "journal")}
@@ -846,23 +884,24 @@ function DayApp() {
             {/* Notes — the lowest-friction capture surface, right under the
                 goals. Lives above the DnD area so typing/pasting isn't a drag
                 surface. Self-contained: owns its state, API, and persistence.
-                In hidden-only mode it lists the hidden notes instead. */}
-            <Notes hiddenFilter={HIDDEN_FILTER[visibility]} />
-            {(visibility === "hidden" || priorityFilter !== null || projectFilter !== null) && allVisible.length === 0 && (
+                With Show Hidden Notes on, hidden notes render inline (dimmed)
+                instead of being excluded. */}
+            {notesVisible && (
+              <Notes hiddenFilter={showHiddenNotes ? "include" : "exclude"} />
+            )}
+            {(priorityFilter !== null || projectFilter !== null) && allVisible.length === 0 && (
               <div className="empty">
-                {visibility === "hidden"
-                  ? "Nothing hidden."
-                  : projectFilter
-                    ? `No tasks in ${projects.find((p) => p.id === projectFilter)?.name ?? "project"}.`
-                    : `No priority ${priorityFilter} tasks.`}
+                {projectFilter
+                  ? `No tasks in ${projects.find((p) => p.id === projectFilter)?.name ?? "project"}.`
+                  : `No priority ${priorityFilter} tasks.`}
               </div>
             )}
             <SectionList
-              items={displayItems}
+              items={renderItems}
+              visible={sectionsVisible}
               projects={projects}
               selectedId={selectedId}
               editingId={editingId}
-              showCapture={visibility !== "hidden"}
               onSelect={setSelectedId}
               onComplete={handleComplete}
               onDelete={handleDelete}

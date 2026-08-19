@@ -5,8 +5,8 @@
 // Completed Today rows render like a done daily — crossed out, in place — until
 // the day-boundary sweep retires them; the checkbox (or Enter) toggles them back.
 //
-// Hidden rows (⌘P → Show All / Show Hidden Only) render inline but archived:
-// dimmed text, an inert checkbox, a ◐ chip carrying the hide's expiry, no drag
+// Hidden rows (⌘P → Show Hidden Tasks) render inline but archived: dimmed
+// text, an inert checkbox, a ◐ chip carrying the hide's expiry, no drag
 // handle, and their only actions are unhide (↺) and delete.
 //
 // Single click selects AND enters edit mode; the checkbox/buttons all
