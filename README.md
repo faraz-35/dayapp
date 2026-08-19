@@ -281,11 +281,21 @@ Mac app ──(pull captures.json, ingest each as a real item)◀─────
    paste repo + token. Done.
 
 **APK:** `npm run tauri android build -- --target aarch64 --apk` (needs
-Android SDK + NDK + JDK 17+). The signed APK lands under
-`src-tauri/gen/android/app/build/outputs/apk/`. Distribute it as a Release on
-the public [`faraz-35/dayapp-mobile`](https://github.com/faraz-35/dayapp-mobile)
-repo (authless download), signed with the debug keystore — keep using the same
-keystore so updates install over the top.
+Android SDK + NDK + JDK 17+). The build emits an **unsigned** APK under
+`src-tauri/gen/android/app/build/outputs/apk/universal/release/`; sign it with
+the debug keystore before shipping:
+
+```bash
+~/Library/Android/sdk/build-tools/*/apksigner sign \
+  --ks ~/.android/debug.keystore --ks-pass pass:android \
+  --ks-key-alias androiddebugkey --key-pass pass:android <apk>
+```
+
+Distribute it as a Release on the public
+[`faraz-35/dayapp-mobile`](https://github.com/faraz-35/dayapp-mobile)
+repo (authless download) — keep signing with that same keystore so updates
+install over the top (compare `apksigner verify --print-certs` SHA-256 against
+the previous release if in doubt).
 
 ## Remote access (SSH / zcode)
 
