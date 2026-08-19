@@ -203,10 +203,11 @@ structurally, no divider can be mistaken for the capture input, and a drag
 across a divider snapping back to its tier is visible, not surprising. A
 Backlog whose items all share one tier renders undivided.
 
-**⌘P → Show/Hide Priority 1/2/3** filters the whole list down to one tier
-(each command's hint shows its bars; the toggle persists across launches).
-Re-run the active tier's command — or **Show Default View** — to clear the
-filter. Priorities are housekeeping, like projects: not logged to the journal.
+**⌘P → Show/Hide Priority 1/2/3** are three independent toggles: each hides
+(or shows) just that tier's rows, leaving the other tiers and unmarked tasks
+alone (each command's hint shows its bars; the toggles persist across
+launches). **Show Default View** clears them all. Priorities are
+housekeeping, like projects: not logged to the journal.
 
 ## Goals
 

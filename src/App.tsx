@@ -125,10 +125,16 @@ function DayApp() {
   const [showHiddenNotes, setShowHiddenNotes] = useState(
     () => localStorage.getItem("dayapp-hidden-notes") === "1",
   );
-  // ⌘P "Show/Hide Priority N" — narrow the list to one urgency tier; null = off.
-  const [priorityFilter, setPriorityFilter] = useState<1 | 2 | 3 | null>(() => {
-    const saved = Number(localStorage.getItem("dayapp-priority"));
-    return saved === 1 || saved === 2 || saved === 3 ? saved : null;
+  // ⌘P "Show/Hide Priority N" — three independent per-tier toggles; a tier in
+  // this list is hidden from the main list. Unmarked rows are never touched,
+  // and toggling one tier leaves the others alone.
+  const [hiddenPriorities, setHiddenPriorities] = useState<(1 | 2 | 3)[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem("dayapp-hidden-priorities") ?? "[]");
+      return [1, 2, 3].filter((n) => raw.includes(n)) as (1 | 2 | 3)[];
+    } catch {
+      return [];
+    }
   });
   // ⌘F "#project" — narrow the list to one project; null = off. The one
   // session-only filter (a search-shaped focus, not a layout preference);
@@ -232,9 +238,10 @@ function DayApp() {
     localStorage.setItem("dayapp-sec-backlog", sectionsVisible.backlog ? "1" : "0");
     localStorage.setItem("dayapp-hidden-items", showHiddenItems ? "1" : "0");
     localStorage.setItem("dayapp-hidden-notes", showHiddenNotes ? "1" : "0");
-    if (priorityFilter === null) localStorage.removeItem("dayapp-priority");
-    else localStorage.setItem("dayapp-priority", String(priorityFilter));
-  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, priorityFilter]);
+    localStorage.setItem("dayapp-hidden-priorities", JSON.stringify(hiddenPriorities));
+    // Retired key from the single-tier "only" filter era — one-time cleanup.
+    localStorage.removeItem("dayapp-priority");
+  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the journal title simply ignores it.
@@ -251,20 +258,22 @@ function DayApp() {
     return () => clearInterval(id);
   }, []);
 
-  // What the user sees: items narrowed by the ⌘P priority tier and/or the ⌘F
-  // project filter, if any. Mutations read the full `items`, and DnD indexes
-  // map back to full-list space in handleMoveItem.
+  // What the user sees: items narrowed by the ⌘P hidden priority tiers and/or
+  // the ⌘F project filter, if any. Hiding a tier removes just that tier's
+  // rows — unmarked rows stay, and each tier is independent. Mutations read
+  // the full `items`, and DnD indexes map back to full-list space in
+  // handleMoveItem.
   const displayItems = useMemo<Record<Section, Item[]>>(() => {
-    if (priorityFilter === null && projectFilter === null) return items;
+    if (hiddenPriorities.length === 0 && projectFilter === null) return items;
     const matches = (i: Item) =>
-      (priorityFilter === null || i.priority === priorityFilter) &&
+      (i.priority === null || !hiddenPriorities.includes(i.priority)) &&
       (projectFilter === null || i.projectId === projectFilter);
     return {
       today: items.today.filter(matches),
       daily: items.daily.filter(matches),
       backlog: items.backlog.filter(matches),
     };
-  }, [items, priorityFilter, projectFilter]);
+  }, [items, hiddenPriorities, projectFilter]);
 
   // displayItems narrowed to the visible sections — a toggled-off section's
   // rows aren't rendered, searchable, keyboard-navigable, or totaled (they
@@ -359,7 +368,7 @@ function DayApp() {
         setView("list");
         setShowHiddenItems(false);
         setShowHiddenNotes(false);
-        setPriorityFilter(null);
+        setHiddenPriorities([]);
         setProjectFilter(null);
         setSectionsVisible({ today: true, daily: true, backlog: true });
         setNotesVisible(true);
@@ -402,12 +411,15 @@ function DayApp() {
     ...([1, 2, 3] as const).map((n) => ({
       id: `prio-${n}`,
       // Mirrors the row's signal bars: filled count = urgency (P1 = 3).
-      label: priorityFilter === n ? `Hide Priority ${n}` : `Show Priority ${n}`,
+      // Independent like the section toggles: flipping one tier never
+      // touches the others (or the unmarked rows).
+      label: hiddenPriorities.includes(n) ? `Show Priority ${n}` : `Hide Priority ${n}`,
       hint: "▮".repeat(4 - n),
       run: () => {
         setView("list");
-        // Re-running the active tier's command clears the filter.
-        setPriorityFilter((p) => (p === n ? null : n));
+        setHiddenPriorities((h) =>
+          h.includes(n) ? h.filter((p) => p !== n) : [...h, n],
+        );
       },
     })),
     {
@@ -446,7 +458,7 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, priorityFilter]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -889,11 +901,11 @@ function DayApp() {
             {notesVisible && (
               <Notes hiddenFilter={showHiddenNotes ? "include" : "exclude"} />
             )}
-            {(priorityFilter !== null || projectFilter !== null) && allVisible.length === 0 && (
+            {(hiddenPriorities.length > 0 || projectFilter !== null) && allVisible.length === 0 && (
               <div className="empty">
                 {projectFilter
                   ? `No tasks in ${projects.find((p) => p.id === projectFilter)?.name ?? "project"}.`
-                  : `No priority ${priorityFilter} tasks.`}
+                  : "No tasks at the shown priorities."}
               </div>
             )}
             <SectionList

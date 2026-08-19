@@ -518,21 +518,22 @@ window; below 455px of width a media query hides the masthead.
 **Show/Hide toggles (⌘P):** every layout surface is an independent, persisted toggle
 whose label reflects its state — `Goals`, `Notes`, `Today`/`Daily`/`Backlog` sections,
 `Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
-dimmed, ↺/× actions), and the `Priority 1/2/3` filters. All persist in localStorage
-(display preferences, like zoom). The header ◐ button toggles both hidden surfaces at
-once. There is no hidden-only mode and no separate archive screen — inline-or-excluded
-is the whole visibility story.
+dimmed, ↺/× actions), and the per-tier `Priority 1/2/3` toggles. All persist in
+localStorage (display preferences, like zoom). The header ◐ button toggles both hidden
+surfaces at once. There is no hidden-only mode and no separate archive screen —
+inline-or-excluded is the whole visibility story.
 
-**Priority filter (⌘P):** `Show/Hide Priority 1/2/3` narrows the main list to one tier
-(`displayItems` in `App.tsx`; DnD indexes map back to full-list space in `handleMoveItem`).
-Re-running the active tier's command clears it; the tier persists across launches.
+**Priority visibility (⌘P):** `Show/Hide Priority 1/2/3` are three independent toggles —
+each hides (or shows) just that tier's rows; unmarked rows are never touched and
+toggling one tier leaves the others alone (`hiddenPriorities` in `App.tsx`; DnD indexes
+map back to full-list space in `handleMoveItem`). The set persists across launches.
 
 **Project filter (⌘F `#`):** typing a leading `#` in the ⌘F search flips the hit list to the
 projects (color dot + name, narrowed by the text after the `#`); picking one narrows the main
 list to that project, picking the already-active one clears it (the same toggle rule as the
 priority tiers). Same `displayItems` pipeline — it composes with the priority tier.
 
-**Show Default View is the universal reset:** hidden entries excluded, priority tier and
+**Show Default View is the universal reset:** hidden entries excluded, priority tiers and
 project filter cleared, all three sections + Notes shown — and Goals hidden (the default
 working view is the plain task list). One command always restores it.
 
