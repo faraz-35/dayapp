@@ -16,6 +16,11 @@ const VERB: Record<string, string> = {
   edited: "edited",
   deleted: "deleted",
   fell_to_backlog: "fell to backlog",
+  goal_created: "set goal",
+  goal_achieved: "achieved goal",
+  goal_unachieved: "reopened goal",
+  goal_edited: "edited goal",
+  goal_deleted: "dropped goal",
 };
 
 type JournalRange = "today" | "week" | "month" | "all";
@@ -54,6 +59,9 @@ export default function JournalView() {
 
   const filtered = useMemo(() => {
     if (filter === "all") return actions;
+    // "Goals" spans the five goal_* verbs — one pill for the whole
+    // identity-layer narrative.
+    if (filter === "goal") return actions.filter((a) => a.action.startsWith("goal_"));
     return actions.filter((a) => a.action === filter);
   }, [actions, filter]);
 
@@ -99,6 +107,7 @@ export default function JournalView() {
     { id: "moved", label: "Moved" },
     { id: "fell_to_backlog", label: "Fell" },
     { id: "deleted", label: "Deleted" },
+    { id: "goal", label: "Goals" },
   ];
 
   const ranges: { id: JournalRange; label: string }[] = [

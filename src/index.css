@@ -882,9 +882,10 @@ button {
    grip: no DnD, goals are a calm static list. */
 
 .goals {
-  /* In-flow block like .notes — .scroll owns scroll. */
-  padding: 4px 8px 0;
-  margin-bottom: 22px;
+  /* In-flow block like .notes — .scroll owns scroll. First block on the page,
+     so it carries the top padding the header doesn't. */
+  padding: 8px 8px 0;
+  margin-bottom: 16px;
 }
 
 /* Divider label — sub-header level, quieter than .section-name, the same role
@@ -908,10 +909,6 @@ button {
   line-height: 1;
   flex-shrink: 0;
 }
-
-/* Only the goals capture carries a placeholder (it teaches the horizon token);
-   the section inputs stay line-only. */
-.capture input::placeholder { color: var(--text-faint); }
 
 
 /* ---- Command palette (⌘P) --------------------------------------------- */

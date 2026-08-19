@@ -1,8 +1,9 @@
-// Goals — the identity layer above the task sections: statements of direction
-// at three horizons (Timeless → Long term → Short term, achieved goals last).
-// The timescale stack tops out here: timers (seconds) → items (days) → goals
-// (months → never). Goals are content, not activity — never logged to
-// `actions`; the achieved date lives on the row (see goals.rs).
+// Goals — the identity layer at the top of the main page: statements of
+// direction at three horizons (Timeless → Long term → Short term, achieved
+// goals last). The timescale stack tops out here: timers (seconds) → items
+// (days) → goals (months → never). Like items, goals are state + logged
+// activity — every mutation appends to `actions` (goal_* values, see
+// goals.rs); only the project link is housekeeping.
 //
 // Self-contained like Notes: owns its state, API, and handlers. Not part of
 // the DnD area — goals are a calm static list, not a reorderable one. The
@@ -210,12 +211,11 @@ export default function Goals({
         <span className="section-name">Goals</span>
       </div>
 
-      {/* Always-open capture, like the section inputs. The placeholder carries
-          the horizon syntax — the one token set goals add. */}
+      {/* Always-open capture, line-only like the section inputs — no
+          placeholder, the line is the affordance. */}
       <div className="capture">
         <input
           value={draft}
-          placeholder="Add a goal — prefix long / timeless, #project"
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); submit(); }

@@ -33,7 +33,9 @@ export interface Item {
 
 export interface Action {
   id: number;
-  itemId: string;
+  /** Set on item rows; null on goal rows (and vice versa for goalId). */
+  itemId: string | null;
+  goalId: string | null;
   itemText: string;
   action: string;
   fromSection?: string;
@@ -94,9 +96,10 @@ export const projectsApi = {
 // ---- Goals ----------------------------------------------------------------
 // The identity layer above the task sections: statements of direction at three
 // horizons — short (months, completable), long (years, completable), timeless
-// (a direction, never achieved). Goals are content, not activity — like
-// notes/projects they are NOT logged to `actions`; the lifecycle dates
-// (createdAt / achievedAt) live on the row. See src-tauri/src/goals.rs.
+// (a direction, never achieved). Like items, goals are state + logged
+// activity: every create/achieve/unachieve/edit/delete appends to `actions`
+// (goal_* values — see src-tauri/src/goals.rs); only the project link is
+// housekeeping, unlogged.
 
 export const GOAL_HORIZONS = ["short", "long", "timeless"] as const;
 export type GoalHorizon = (typeof GOAL_HORIZONS)[number];

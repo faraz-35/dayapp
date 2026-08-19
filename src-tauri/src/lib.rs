@@ -206,9 +206,9 @@ async fn set_item_priority(
 
 // ---- Goal commands -------------------------------------------------------
 // The identity layer: horizon-scoped goals (short / long / timeless) above the
-// task sections, optionally linked to a project. Like notes/projects they are
-// content, not activity — lifecycle dates live on the row, nothing is logged
-// to `actions`.
+// task sections, optionally linked to a project. Like items, goals are state +
+// logged activity — every mutation appends to `actions` (goal_* values); only
+// the project link is housekeeping (unlogged).
 
 #[tauri::command]
 async fn list_goals(db: State<'_, DbState>) -> Result<Vec<Goal>, String> {

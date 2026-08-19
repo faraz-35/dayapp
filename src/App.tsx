@@ -834,19 +834,20 @@ function DayApp() {
       <div className="scroll">
         {view === "list" ? (
           <>
-            {/* Notes live above the DnD area so typing/pasting isn't a drag
-                surface. Self-contained: owns its state, API, and persistence.
-                In hidden-only mode it lists the hidden notes instead. */}
-            <Notes hiddenFilter={HIDDEN_FILTER[visibility]} />
-            {/* Goals — the identity layer between Notes and the task sections:
-                horizon statements (timeless / long / short) that give the list
-                its "why". Self-contained like Notes, outside the DnD area;
-                ⌘P → Show/Hide Goals toggles it completely (persisted). Goals
-                don't take part in the item visibility/priority/project
-                filters — they're a separate surface, shown as-is. */}
+            {/* Goals — the identity layer at the very top: horizon statements
+                (timeless / long / short) that give the list its "why".
+                Self-contained like Notes, outside the DnD area; ⌘P → Show/Hide
+                Goals toggles it completely (persisted). Goals don't take part
+                in the item visibility/priority/project filters — they're a
+                separate surface, shown as-is. */}
             {goalsVisible && (
               <Goals projects={projects} onCreateProject={handleCreateProject} />
             )}
+            {/* Notes — the lowest-friction capture surface, right under the
+                goals. Lives above the DnD area so typing/pasting isn't a drag
+                surface. Self-contained: owns its state, API, and persistence.
+                In hidden-only mode it lists the hidden notes instead. */}
+            <Notes hiddenFilter={HIDDEN_FILTER[visibility]} />
             {(visibility === "hidden" || priorityFilter !== null || projectFilter !== null) && allVisible.length === 0 && (
               <div className="empty">
                 {visibility === "hidden"

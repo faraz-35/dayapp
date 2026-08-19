@@ -215,10 +215,10 @@ projects: not logged to the journal.
 
 ## Goals
 
-Goals are the identity layer above the task sections — statements of direction
-at three horizons, the top of the app's timescale stack (timers track seconds,
-items track days, goals span months → never). The section sits between Notes
-and Today, grouped in reading order:
+Goals are the identity layer — statements of direction at three horizons, the
+top of the app's timescale stack (timers track seconds, items track days,
+goals span months → never). The section renders at the very top of the main
+page, above Notes, grouped in reading order:
 
 - **Timeless** — a direction, never done ("be a better person"). These rows
   show ∞ instead of a checkbox: a timeless goal can't be achieved, only
@@ -238,9 +238,11 @@ Checking a short/long goal marks it **achieved** — it moves to a dim
 the checkbox undoes it. Achievements are kept, never swept.
 
 **⌘P → Show/Hide Goals** toggles the whole section off and on (persisted
-across launches). Goals are content like notes/projects — **not** logged to
-the journal; the created/achieved dates live on each goal row, which is what
-makes them clean agent context (`dayapp --goals`, below).
+across launches). Goals are logged to the journal like items — every
+set / achieve / reopen / edit / drop shows up in the Journal view, which also
+has a **Goals** filter pill for the identity-layer narrative. The project link
+stays housekeeping, unlogged. `dayapp --goals` prints the current list grouped
+by horizon (below) — the agent-context view.
 
 ## Reminders
 

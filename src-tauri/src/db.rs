@@ -30,7 +30,9 @@ pub struct Item {
 #[serde(rename_all = "camelCase")]
 pub struct Action {
     pub id: i64,
-    pub item_id: String,
+    /// Set for item rows, null for goal rows (and vice versa for goal_id).
+    pub item_id: Option<String>,
+    pub goal_id: Option<String>,
     pub item_text: String,
     pub action: String,
     pub from_section: Option<String>,
@@ -84,6 +86,64 @@ impl Db {
     }
 
     fn migrate(conn: &Connection) -> anyhow::Result<()> {
+        // Actions v2: goals log here too (goal_* action values, a nullable
+        // item_id + a goal_id column — see schema.sql). SQLite can't ALTER a
+        // CHECK constraint or a NOT NULL, so detect the old shape and rebuild
+        // the table once, copying the whole history through. This runs BEFORE
+        // the schema batch below — schema.sql creates idx_actions_goal, which
+        // can't run against the pre-goals table shape. On a fresh db there is
+        // no actions table yet and the schema batch creates v2 directly.
+        let actions_exists = conn
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'actions'",
+                [], |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if actions_exists {
+            let has_goal_col = {
+                let mut stmt = conn.prepare("SELECT name FROM pragma_table_info('actions')")?;
+                let names: Vec<String> = stmt
+                    .query_map([], |r| r.get::<_, String>(0))?
+                    .filter_map(|n| n.ok())
+                    .collect();
+                names.iter().any(|n| n == "goal_id")
+            };
+            if !has_goal_col {
+                log::info!("migrate: rebuilding actions table to add goal logging");
+                // Keep this definition in lockstep with schema.sql's `actions`.
+                conn.execute_batch("
+                    BEGIN;
+                    CREATE TABLE actions_v2 (
+                        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                        item_id      TEXT,
+                        goal_id      TEXT,
+                        item_text    TEXT NOT NULL,
+                        action       TEXT NOT NULL CHECK (action IN
+                                      ('created','completed','uncompleted','moved',
+                                       'edited','deleted','fell_to_backlog',
+                                       'goal_created','goal_achieved','goal_unachieved',
+                                       'goal_edited','goal_deleted')),
+                        from_section TEXT, to_section TEXT,
+                        from_status  TEXT, to_status  TEXT,
+                        timestamp    TEXT NOT NULL,
+                        CHECK (item_id IS NOT NULL OR goal_id IS NOT NULL)
+                    );
+                    INSERT INTO actions_v2
+                        (id,item_id,goal_id,item_text,action,from_section,to_section,from_status,to_status,timestamp)
+                    SELECT id,item_id,NULL,item_text,action,from_section,to_section,from_status,to_status,timestamp
+                    FROM actions;
+                    DROP TABLE actions;
+                    ALTER TABLE actions_v2 RENAME TO actions;
+                    CREATE INDEX IF NOT EXISTS idx_actions_ts     ON actions(timestamp);
+                    CREATE INDEX IF NOT EXISTS idx_actions_item   ON actions(item_id);
+                    CREATE INDEX IF NOT EXISTS idx_actions_action ON actions(action);
+                    CREATE INDEX IF NOT EXISTS idx_actions_goal   ON actions(goal_id);
+                    COMMIT;
+                ")?;
+            }
+        }
+
         let schema = include_str!("../schema.sql");
         conn.execute_batch(schema)?;
         // schema.sql only creates new columns on fresh tables. For DBs created
@@ -537,7 +597,7 @@ impl Db {
         // Build the WHERE clause dynamically so each bound is optional; collect
         // positional params in the same order so bind indices line up.
         let mut sql = String::from(
-            "SELECT id,item_id,item_text,action,from_section,to_section,from_status,to_status,timestamp
+            "SELECT id,item_id,goal_id,item_text,action,from_section,to_section,from_status,to_status,timestamp
              FROM actions WHERE 1=1");
         let mut pv: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         if let Some(s) = since { sql.push_str(" AND timestamp >= ?"); pv.push(Box::new(s.to_string())); }
@@ -549,9 +609,10 @@ impl Db {
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt.query_map(refs.as_slice(), |r| {
             Ok(Action {
-                id: r.get(0)?, item_id: r.get(1)?, item_text: r.get(2)?, action: r.get(3)?,
-                from_section: r.get(4)?, to_section: r.get(5)?,
-                from_status: r.get(6)?, to_status: r.get(7)?, timestamp: r.get(8)?,
+                id: r.get(0)?, item_id: r.get(1)?, goal_id: r.get(2)?,
+                item_text: r.get(3)?, action: r.get(4)?,
+                from_section: r.get(5)?, to_section: r.get(6)?,
+                from_status: r.get(7)?, to_status: r.get(8)?, timestamp: r.get(9)?,
             })
         })?;
         let mut out = Vec::new();

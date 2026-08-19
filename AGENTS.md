@@ -53,8 +53,8 @@ writes itself), not fight it.
   methods directly from a command body.
 - **One `Mutex<Connection>`.** DayApp is single-user, single-process, low-concurrency.
   No pool dependency needed.
-- **Every write to `items` is wrapped in a transaction that also appends to `actions`.**
-  The log must never drift from the live row.
+- **Every write to `items` or `goals` is wrapped in a transaction that also appends to
+  `actions`.** The log must never drift from the live row.
 
 ---
 
@@ -67,7 +67,7 @@ Two independent feature areas, deliberately decoupled:
 ```
 items   id, text, section, status, last_completed_date, sort_order, created_at, updated_at,
         hidden, hidden_until, project_id, remind_at, priority
-actions id, item_id, item_text, action, from_section, to_section, from_status, to_status, timestamp
+actions id, item_id, goal_id, item_text, action, from_section, to_section, from_status, to_status, timestamp
 meta    key, value           — currently holds last_sweep_date
 ```
 
@@ -102,7 +102,11 @@ meta    key, value           — currently holds last_sweep_date
 - `remind_at` — ISO `YYYY-MM-DD` on which a backlog item auto-promotes to `today`. The
   promotion is logged as a `moved` action (backlog→today) and `remind_at` is cleared so it
   fires once. Date-granular, fires on launch (no cron / no macOS notification).
-- `actions.action` ∈ `created | completed | uncompleted | moved | edited | deleted | fell_to_backlog`
+- `actions.action` ∈ `created | completed | uncompleted | moved | edited | deleted | fell_to_backlog |
+  goal_created | goal_achieved | goal_unachieved | goal_edited | goal_deleted`
+- `actions` rows set exactly one subject: `item_id` on item rows, `goal_id` on goal rows
+  (CHECK-enforced). On goal rows the section columns carry the horizon and the status
+  columns carry active/achieved, so the journal renders both subjects uniformly.
 - **`actions.item_text` is snapshotted at write time.** History must survive edits and
   deletions — if it referenced the live row, renaming a task would silently rewrite the
   past.
@@ -128,7 +132,7 @@ hide) — **never** logged to `actions`. `items.project_id` is the nullable FK (
 cascade; deleting a project runs `UPDATE items SET project_id = NULL`). Logic lives in
 `src-tauri/src/projects.rs`; the popover is `src/ProjectMenu.tsx`.
 
-### Goals (the identity layer — NOT logged)
+### Goals (the identity layer — logged like items)
 
 ```
 goals    id, text, horizon, status, project_id, sort_order, created_at, updated_at, achieved_at
@@ -136,10 +140,12 @@ goals    id, text, horizon, status, project_id, sort_order, created_at, updated_
 
 Statements of direction at three horizons — the top of the app's timescale stack
 (timers = seconds, items = days, goals = months → never). Goals give the daily
-list its "why" and are prime agent context, but they are **content, not
-activity**: never written to `actions`; the lifecycle dates (`created_at`,
-`achieved_at`) live on the row, which is what the planned read-only agent
-bridge reads. Not exported to the phone (mobile is a task mirror).
+list its "why" and are prime agent context. Like items they are **state + logged
+activity**: every create/achieve/unachieve/edit/delete appends to `actions`
+(`goal_*` values; the horizon rides `from/to_section`, active/achieved rides
+`from/to_status`). The Journal renders them with goal verbs ("set goal",
+"achieved goal", …) and a **Goals** filter pill. Not exported to the phone
+(mobile is a task mirror).
 
 - `horizon` ∈ `timeless` | `long` | `short` — grouped and displayed in that
   order (constitution → career → now) under hairline dividers labeled with the
@@ -155,11 +161,12 @@ bridge reads. Not exported to the phone (mobile is a task mirror).
   only exit is × (delete).
 - `project_id` — optional link to a `projects` row (housekeeping, **not**
   logged; deleting a project nulls it, same as items).
-- The section renders between Notes and the task sections; **⌘P → Show/Hide
-  Goals** toggles it completely (persisted in localStorage
-  `dayapp-goals-visible`, default on — a display preference like zoom, not a
-  session filter). Goals don't take part in the item
-  visibility/priority/project filters, and there's no DnD — a calm static list.
+- The section renders at the very top of the main page, above Notes — the
+  identity layer sits over everything; **⌘P → Show/Hide Goals** toggles it
+  completely (persisted in localStorage `dayapp-goals-visible`, default on — a
+  display preference like zoom, not a session filter). Goals don't take part
+  in the item visibility/priority/project filters, and there's no DnD — a calm
+  static list.
 - Logic lives in `src-tauri/src/goals.rs`; the UI is `src/Goals.tsx`; the CLI
   prints them grouped by horizon via `dayapp --goals`.
 
@@ -361,7 +368,7 @@ separately" bug.
 .app       display:flex column; height:100%; overflow:hidden   ← the shell, never scrolls
   .header  flex-shrink:0                                       ← pinned
   .scroll   flex:1; overflow-y:auto; min-height:0              ← THE ONE scroll container
-    Notes / Goals / SectionList / JournalView                   ← in-flow, no own scroll
+    Goals / Notes / SectionList / JournalView                   ← in-flow, no own scroll
 ```
 
 `.notes`, `.goals`, `.sections`, `.journal`, `.hidden-view` must **not** set `overflow`,
@@ -419,8 +426,9 @@ keyboard-first.** Every choice below is intentional.
 5. **One accent colour.** `#7b8cff` means "active/selected/completed/done-today." Do not
    introduce a second accent.
 6. **Dark, always dark.** No light theme, no `prefers-color-scheme` switching. `color-scheme: dark`.
-7. **Zero inertia for capture.** The lowest-friction surface (Notes) renders first, above
-   everything else. There is always a ready textarea.
+7. **Identity first, then capture.** Goals — the identity layer — render at the very
+   top; Notes, the lowest-friction capture surface, right below. There is always
+   a ready textarea.
 
 ### Colour tokens (from `index.css` — use these, do not hardcode hex)
 
@@ -548,20 +556,20 @@ into Notes or edit fields isn't hijacked.
   not keys (see principle 3).
 
 **Goals:**
-- The identity layer between Notes and the task sections: horizon groups in the order
-  Timeless / Long term / Short term, each introduced by a `.tier-divider` hairline
-  labeled with the horizon's name (the Backlog's tier-divider pattern, text label
-  instead of bars; empty groups render no divider). Achieved goals collapse into a dim
-  "Achieved" group at the bottom — they never delete on their own.
-- Capture takes a leading horizon word (`timeless be a better person`, `long better
-  entrepreneur #hustle`); plain text defaults to short. Same parse on edit — no word
-  leaves the tier alone. The placeholder carries the syntax (the one capture input
-  allowed a placeholder).
+- The identity layer at the top of the main page, above Notes: horizon groups in the
+  order Timeless / Long term / Short term, each introduced by a `.tier-divider`
+  hairline labeled with the horizon's name (the Backlog's tier-divider pattern, text
+  label instead of bars; empty groups render no divider). Achieved goals collapse
+  into a dim "Achieved" group at the bottom — they never delete on their own.
+- Capture is line-only like the section inputs (no placeholder); it takes a leading
+  horizon word (`timeless be a better person`, `long better entrepreneur #hustle`),
+  plain text defaulting to short. Same parse on edit — no word leaves the tier alone.
 - Rows are the `.item` language minus the grip: no DnD, no timer, no hide, no priority.
   Short/long rows carry a checkbox (achieve / unachieve, month-granular date on the
   achieved row); timeless rows show ∞ in that slot and can only be edited or deleted (×).
   Single-click enters edit; hover reveals # project assign + × delete — the same
   `ProjectMenu` items use. ⌘P → Show/Hide Goals toggles the whole section (persisted).
+  Every mutation is logged to `actions` (goal_* values) — see the data model.
 
 ### What NOT to add (explicit non-goals)
 
@@ -575,7 +583,8 @@ into Notes or edit fields isn't hijacked.
   cumulative + the Journal's per-day, per-task totals — not an analytics surface.
 - No journal surface / blank-page daily note. The log IS the journal.
 - No agent writes (read-only bridge, planned Phase 3).
-- Do not log Notes, Projects, Goals, reminder-setting, or timer sessions to `actions`.
+- Do not log Notes, Projects, goal-project assignment, reminder-setting, or timer sessions
+  to `actions`.
 - Do not add multi-select / bulk edit. This is a focused single-action tool.
 
 ---

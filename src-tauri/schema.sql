@@ -34,21 +34,31 @@ CREATE INDEX IF NOT EXISTS idx_items_status  ON items(status);
 -- filter is cheap on a personal-scale table.
 
 -- Append-only. item_text is snapshotted at write time so history survives edits/deletes.
+-- v2: goals log here too. Item rows set item_id; goal rows set goal_id — exactly
+-- one of the two (CHECK). Goal rows reuse the section columns for the horizon and
+-- the status columns for active/achieved, so the journal renders both uniformly.
+-- DBs created before v2 are rebuilt once in db.rs migrate() (SQLite can't ALTER
+-- a CHECK constraint or a NOT NULL).
 CREATE TABLE IF NOT EXISTS actions (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    item_id      TEXT NOT NULL,
-    item_text    TEXT NOT NULL,
+    item_id      TEXT,                                    -- FK→items.id; NULL on goal rows
+    goal_id      TEXT,                                    -- FK→goals.id; NULL on item rows
+    item_text    TEXT NOT NULL,                           -- subject text snapshot (item or goal)
     action       TEXT NOT NULL CHECK (action IN
                   ('created','completed','uncompleted','moved',
-                   'edited','deleted','fell_to_backlog')),
+                   'edited','deleted','fell_to_backlog',
+                   'goal_created','goal_achieved','goal_unachieved',
+                   'goal_edited','goal_deleted')),
     from_section TEXT, to_section TEXT,
     from_status  TEXT, to_status  TEXT,
-    timestamp    TEXT NOT NULL
+    timestamp    TEXT NOT NULL,
+    CHECK (item_id IS NOT NULL OR goal_id IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS idx_actions_ts      ON actions(timestamp);
 CREATE INDEX IF NOT EXISTS idx_actions_item    ON actions(item_id);
 CREATE INDEX IF NOT EXISTS idx_actions_action  ON actions(action);
+CREATE INDEX IF NOT EXISTS idx_actions_goal    ON actions(goal_id);
 
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
@@ -88,11 +98,12 @@ CREATE INDEX IF NOT EXISTS idx_projects_order ON projects(sort_order, created_at
 -- at three horizons: short (months, completable), long (years, completable),
 -- timeless (a direction, never achieved — only revised or deleted). The timescale
 -- stack tops out here: timers (seconds) → items (days) → goals (months → never).
--- Goals give the daily list its "why" and are prime agent context, but they are
--- content, not activity: like notes/projects they are NOT logged to `actions` —
--- the lifecycle dates (created_at / achieved_at) live on the row itself.
--- project_id is the optional link to a project (nullable, no CASCADE enforced
--- inline; deleting a project nulls it).
+-- Goals give the daily list its "why" and are prime agent context. Like items,
+-- they are state + logged activity: every create/achieve/unachieve/edit/delete
+-- appends to `actions` (goal_* values; horizon rides from/to_section,
+-- active/achieved rides from/to_status). Project assignment is housekeeping —
+-- NOT logged, same as items.project_id. project_id is the optional link to a
+-- project (nullable, no CASCADE enforced inline; deleting a project nulls it).
 CREATE TABLE IF NOT EXISTS goals (
     id          TEXT PRIMARY KEY,                          -- ULID
     text        TEXT NOT NULL,
