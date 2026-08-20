@@ -231,7 +231,8 @@ architecture — don't grow this one into it.
 ### CLI (remote access)
 
 The binary doubles as a headless CLI (`--list`, `--task`, `--search`, `--journal`, `--notes`,
-`--projects`, `--add`, `--complete`, `--start`, `--goals`, `--deploy`, `--sync-pull-peek`) for
+`--projects`, `--add`, `--complete`, `--start`, `--move`, `--details`, `--goals`, `--deploy`,
+`--sync-pull-peek`) for
 SSH/zcode sessions — see `cli.rs`. It opens the
 same db the GUI holds: WAL + `busy_timeout(5s)` make the two processes safe together,
 and the GUI's 60s deploy loop picks up CLI writes. `--add` stores text **raw** (token
@@ -255,7 +256,16 @@ Journal view (actions grouped newest-first by day with the per-task ⏱ breakdow
 total, the same verbs, default `today` like the GUI), `--notes`/`--projects` are their
 sections, and the `--hidden` modifier on `--list`/`--notes` is the ⌘P "Show Hidden"
 reveal (archived rows marked ◐). `--task` also carries the row's ⏱ cumulative time and
-pending reminder. The read flags stay read-only; writes remain `--add`/`--complete`/`--start`.
+pending reminder. The read flags stay read-only; writes are `--add`/`--complete`/`--start`
+plus the two delegation verbs: `--move <query> --to <section>` is the drag, headless — the
+row appends to the destination (no drop index over SSH), a same-section move is a no-op,
+and it logs `moved` like any section change; `--details <query> <body>` replaces the
+details body whole (`""` clears; words after the query join with spaces) — content, not
+logged, same as GUI edits. Together they close the delegation loop remotely: claim a 🤖
+task by moving it to Today, work it, write the outcome back into the body, complete it.
+The flags are deliberately ungated (the CLI is Faraz's remote access too) — the
+"agents touch only their 🤖 queue" discipline lives in the agent's instructions, not the
+binary.
 
 ### Timers (per-task time tracking — NOT logged)
 
@@ -360,7 +370,7 @@ dayapp/
     │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
     │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API)
-    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--notes/--projects/--add/--complete/--start/--goals/--deploy/--sync-pull-peek
+    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--notes/--projects/--add/--complete/--start/--move/--details/--goals/--deploy/--sync-pull-peek
     │   └── main.rs                 ← binary entrypoint (GUI, or cli::run when given flags)
     ├── schema.sql                  ← items + actions + meta + notes + projects + goals + sessions
     ├── Cargo.toml

@@ -367,7 +367,9 @@ The same binary is a tiny CLI for checking and triggering tasks from a remote
 session — it opens the same db (WAL + busy-timeout make the two processes
 safe together) and force-deploys after writes so the phone sees them fast.
 The read flags mirror the GUI's surfaces (⌘F, the journal, the sections), so
-a remote session can reach any information the app can show:
+a remote session can access any information the app can show, and the write
+flags close the delegation loop: claim a 🤖 task (`--move` it to Today), work
+it, write the outcome back (`--details`), complete it.
 
 ```bash
 dayapp --list [today|daily|backlog] [--hidden]   # tasks (▶ timer, ✓ done, ◐ hidden, 🤖 agent, #name project)
@@ -382,6 +384,8 @@ dayapp --projects                     # projects as #tags
 dayapp --add "call bank #money !1" --to backlog   # note: text is stored raw (no token parsing here)
 dayapp --complete "call bank"         # id prefix or unique text substring
 dayapp --start "ship mobile build"    # start the single active timer
+dayapp --move "call bank" --to today  # move between sections (appends at the end)
+dayapp --details "call bank" "..."    # replace the details body — the agent prompt ("" clears)
 dayapp --goals                        # print goals grouped by horizon (achieved last)
 dayapp --deploy                       # force-push tasks.json now
 dayapp --sync-pull-peek               # peek at the phone's pending captures

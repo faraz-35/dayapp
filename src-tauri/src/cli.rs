@@ -10,6 +10,8 @@
 //   dayapp --add "text" [--to backlog]      create (today|daily|backlog; default backlog)
 //   dayapp --complete "query"               complete (stops its timer first)
 //   dayapp --start "query"                  start the single active timer
+//   dayapp --move "query" --to today        move between sections (appends; logs moved)
+//   dayapp --details "query" "body"         replace the details body ("" clears; not logged)
 //   dayapp --goals                          print goals grouped by horizon
 //   dayapp --deploy                         force-push tasks.json now (read-only)
 //   dayapp --sync-pull-peek                 print the phone's pending captures
@@ -54,6 +56,8 @@ pub fn run(args: Vec<String>) -> i32 {
         "--start" => with_query(&db, &rest, |db, item| {
             db.start_timer(&item.id).map(|_| ())
         }),
+        "--move" => move_item(&db, &rest),
+        "--details" => details(&db, &rest),
         "--search" => search(&db, &rest),
         "--journal" => journal(&db, rest.first().map(|s| s.as_str())),
         "--notes" => notes(&db, &rest),
@@ -89,6 +93,8 @@ usage: dayapp <command> [args]
   --add \"text\" [--to section]   create (today|daily|backlog; default backlog)
   --complete <query>             complete (stops its timer first)
   --start <query>                start the single active timer
+  --move <query> --to <section>  move a task (appends at the destination)
+  --details <query> <body>       replace a task's details body (\"\" clears)
   --deploy                       force-push tasks.json now
   --sync-pull-peek               print the phone's pending captures";
 
@@ -529,6 +535,55 @@ fn add(db: &Db, rest: &[String]) -> anyhow::Result<()> {
     }
     let item = db.create_item(text.trim(), &section)?;
     println!("added to {section}: {}", item.text);
+    deploy_hint(db);
+    Ok(())
+}
+
+/// Move a task between sections — the drag, headless. There's no meaningful
+/// drop index over SSH, so the row appends to the end of the destination
+/// (move_item clamps the index). A same-section move is a no-op: the CLI has
+/// no use for reorder-by-append.
+fn move_item(db: &Db, rest: &[String]) -> anyhow::Result<()> {
+    let mut query: Option<String> = None;
+    let mut to: Option<String> = None;
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        if a == "--to" {
+            to = Some(it.next().ok_or_else(|| anyhow::anyhow!("--to needs a section (today | daily | backlog)"))?.clone());
+        } else if query.is_none() {
+            query = Some(a.clone());
+        } else {
+            anyhow::bail!("unexpected argument \"{a}\"");
+        }
+    }
+    let q = query.ok_or_else(|| anyhow::anyhow!("--move needs a <query> (id prefix or unique text substring) and --to <section>"))?;
+    let to = to.ok_or_else(|| anyhow::anyhow!("--move needs --to <section> (today | daily | backlog)"))?;
+    if !["today", "daily", "backlog"].contains(&to.as_str()) {
+        anyhow::bail!("unknown section \"{to}\"");
+    }
+    let item = find_item(db, &q)?;
+    if item.section == to {
+        println!("already in {to}: {}", item.text);
+        return Ok(());
+    }
+    db.move_item(&item.id, &to, i64::MAX)?;
+    println!("moved to {to}: {}", item.text);
+    deploy_hint(db);
+    Ok(())
+}
+
+/// Replace a task's details body — the spec/prompt under the title. The whole
+/// body is replaced (the GUI textarea IS the content; no append mode) and ""
+/// clears it. Like the GUI's edits this is housekeeping: not logged. Words
+/// after the query join with spaces, so quoting is optional for one-liners.
+fn details(db: &Db, rest: &[String]) -> anyhow::Result<()> {
+    if rest.len() < 2 {
+        anyhow::bail!("--details needs a <query> and a <body> (quoted; \"\" clears)");
+    }
+    let item = find_item(db, &rest[0])?;
+    let body = rest[1..].join(" ");
+    db.set_item_details(&item.id, &body)?;
+    println!("details updated: {}", item.text);
     deploy_hint(db);
     Ok(())
 }
