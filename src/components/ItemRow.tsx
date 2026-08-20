@@ -303,13 +303,14 @@ export function EditInput({  initial, onCommit,
   );
 }
 
-// The task's details body — the spec under the one-line title, and for agent-
-// delegated rows the prompt an autonomous session executes (readable via
-// `dayapp --task`). Rendered by SectionView as a sibling under the open row
-// (like the tier dividers — never inside the dragged row). Auto-growing
-// textarea with debounced autosave, the Notes pattern; Escape flushes and
-// collapses. Content, not state: saves go through set_item_details and are
-// never logged to `actions`.
+// The task's details body — the main content opened under the headline row,
+// full width and full-strength: the expanded task reads as a small document,
+// not an attachment. For agent-delegated rows it's the prompt an autonomous
+// session executes (readable via `dayapp --task`). Rendered by SectionView as
+// a sibling under the open row (like the tier dividers — never inside the
+// dragged row). Auto-growing textarea with debounced autosave, the Notes
+// pattern; Escape flushes and collapses. Content, not state: saves go through
+// set_item_details and are never logged to `actions`.
 export function ItemDetailsBody({
   initial, onCommit, onDone,
 }: {
@@ -368,7 +369,7 @@ export function ItemDetailsBody({
             onDone();
           }
         }}
-        placeholder="Details — context, constraints, definition of done. For agent tasks this is the prompt."
+        placeholder="Add context, constraints, done-criteria…"
         spellCheck={false}
       />
     </div>

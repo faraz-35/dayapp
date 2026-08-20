@@ -743,34 +743,35 @@ button {
    owns both axes (text glyphs would ride the font's baseline instead). */
 .action-chevron { display: block; }
 
-/* The details body — an auto-growing textarea rendered under its open row
+/* The details body — the task's main content, opened under its headline row
    (sibling position, like the tier dividers, so the drag transform only ever
-   owns the one-line row). Content styling: dim, small, no chrome — the row's
-   title stays the identity, this is the spec beneath it. For agent-delegated
-   rows it's the prompt an autonomous session executes (dayapp --task). */
+   owns the one-line row). Full content width, zero chrome, full-strength
+   base-size text: the expanded task reads as a small document (headline +
+   body), not an attachment. Auto-growing textarea with Notes' autosave
+   pattern; the faint focus tint is the only editing signal — the caret does
+   the rest. For agent-delegated rows the body is the prompt (dayapp --task). */
 .item-details {
-  margin: 0 8px 2px 48px;
+  margin: 0 8px 4px;
 }
 .item-details textarea {
   display: block;
   width: 100%;
-  min-height: 44px;
+  min-height: 70px;   /* ~3 lines at 13px/1.5 — opens as a page, not a sliver */
   resize: none;
   overflow: hidden;
   box-sizing: border-box;
-  padding: 4px 8px;
+  padding: 6px 8px;
   border: none;
-  border-left: 2px solid var(--border);
-  border-radius: 0 4px 4px 0;
+  border-radius: 6px;
   background: transparent;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
-  color: var(--text-dim);
+  color: var(--text);
   outline: none;
-  transition: border-color 0.08s ease;
+  transition: background 0.08s ease;
 }
-.item-details textarea:focus { border-left-color: var(--accent); }
+.item-details textarea:focus { background: var(--bg-hover); }
 .item-details textarea::placeholder { color: var(--text-faint); }
 
 /* Priority tier dividers (Backlog only). The section sorts P1 → P3 → unmarked,

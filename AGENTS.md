@@ -518,9 +518,10 @@ window; below 455px of width a media query hides the masthead.
   automatically when `last_completed_date != today`.
 - Edit: double-click text, or hover ✎, or select + `e`. Inline `<input>`, commits on
   Enter/blur, cancels on Escape.
-- Details: the spec under the title — a dim auto-growing textarea under the open row
-  (the hover button — ⋯ when empty, ⌄ once it has a body — or `d`; Escape saves +
-  collapses). For 🤖 rows this is the prompt.
+- Details: the spec under the title — a full-width, full-strength writing surface
+  under the open row (the hover button — ⋯ when empty, ⌄ once it has a body — or
+  `d`; Escape saves + collapses); zero chrome, the expanded task reads as a small
+  document (headline + body). For 🤖 rows this is the prompt.
 
 **DnD:**
 - Drag via the grip handle, not the whole row (so text selection and typing aren't fights).
