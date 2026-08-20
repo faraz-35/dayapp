@@ -25,6 +25,7 @@ pub struct Item {
     pub remind_at: Option<String>,     // ISO YYYY-MM-DD when a backlog item auto-promotes to today
     pub priority: Option<i64>,         // urgency tier 1–3 (housekeeping — not logged); Backlog sorts by it
     pub assigned_to_agent: bool,      // delegation: 1 = fully delegable to an AI agent (housekeeping — not logged)
+    pub details: String,              // free-form spec under the title; for agent rows, the prompt (content — not logged)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,6 +159,7 @@ impl Db {
         ensure_column(conn, "items", "remind_at", "TEXT")?;
         ensure_column(conn, "items", "priority", "INTEGER")?;
         ensure_column(conn, "items", "assigned_to_agent", "INTEGER NOT NULL DEFAULT 0")?;
+        ensure_column(conn, "items", "details", "TEXT NOT NULL DEFAULT ''")?;
         ensure_column(conn, "notes", "hidden", "INTEGER NOT NULL DEFAULT 0")?;
         ensure_column(conn, "notes", "hidden_until", "TEXT")?;
         Ok(())
@@ -178,7 +180,7 @@ impl Db {
     pub fn list(&self, section: &str, include_done: bool, hidden: HiddenFilter) -> anyhow::Result<Vec<Item>> {
         let conn = self.0.lock().unwrap();
         let mut sql = String::from(
-            "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until,project_id,remind_at,priority,assigned_to_agent
+            "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until,project_id,remind_at,priority,assigned_to_agent,details
              FROM items WHERE section = ?1");
         if !include_done && hidden != HiddenFilter::Only {
             sql.push_str(" AND status = 'active'");
@@ -227,7 +229,7 @@ impl Db {
             sort_order, created_at: now.clone(), updated_at: now,
             hidden: false, hidden_until: None,
             project_id: None, remind_at: None, priority: None,
-            assigned_to_agent: false,
+            assigned_to_agent: false, details: String::new(),
         })
     }
 
@@ -441,6 +443,19 @@ impl Db {
         conn.execute(
             "UPDATE items SET assigned_to_agent = ?1, updated_at = ?2 WHERE id = ?3",
             params![assigned, now, id],
+        )?;
+        Ok(())
+    }
+
+    /// Set the item's details body — the spec under the one-line title; for
+    /// agent-delegated rows, the prompt an autonomous session executes.
+    /// Content like notes (not item-state): housekeeping, never logged.
+    pub fn set_item_details(&self, id: &str, details: &str) -> anyhow::Result<()> {
+        let conn = self.0.lock().unwrap();
+        let now = now_iso();
+        conn.execute(
+            "UPDATE items SET details = ?1, updated_at = ?2 WHERE id = ?3",
+            params![details, now, id],
         )?;
         Ok(())
     }
@@ -683,7 +698,7 @@ pub fn hidden_until_for(duration: &str) -> Option<String> {
     Some(date.format("%Y-%m-%d").to_string())
 }
 
-// Build an Item from a 14-column SELECT row (id..assigned_to_agent).
+// Build an Item from a 15-column SELECT row (id..details).
 fn item_from_row(r: &rusqlite::Row) -> rusqlite::Result<Item> {
     Ok(Item {
         id: r.get(0)?,
@@ -700,6 +715,7 @@ fn item_from_row(r: &rusqlite::Row) -> rusqlite::Result<Item> {
         remind_at: r.get(11)?,
         priority: r.get(12)?,
         assigned_to_agent: r.get::<_, i64>(13)? != 0,
+        details: r.get(14)?,
     })
 }
 

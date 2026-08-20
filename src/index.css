@@ -739,6 +739,48 @@ button {
 }
 .agent-badge .agent-eye { fill: var(--bg); }
 
+/* The details hint — a faint ⌄ on rows that carry a details body (the spec
+   under the one-line title). Click, the hover ⋯ button, or the `d` key opens
+   the body; the hint hides while it's open. */
+.details-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: color 0.08s ease;
+}
+.item:hover .details-hint { color: var(--text-dim); }
+
+/* The details body — an auto-growing textarea rendered under its open row
+   (sibling position, like the tier dividers, so the drag transform only ever
+   owns the one-line row). Content styling: dim, small, no chrome — the row's
+   title stays the identity, this is the spec beneath it. For agent-delegated
+   rows it's the prompt an autonomous session executes (dayapp --task). */
+.item-details {
+  margin: 0 8px 2px 48px;
+}
+.item-details textarea {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  resize: none;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border: none;
+  border-left: 2px solid var(--border);
+  border-radius: 0 4px 4px 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  outline: none;
+  transition: border-color 0.08s ease;
+}
+.item-details textarea:focus { border-left-color: var(--accent); }
+.item-details textarea::placeholder { color: var(--text-faint); }
+
 /* Priority tier dividers (Backlog only). The section sorts P1 → P3 → unmarked,
    and every tier group is introduced by a hairline whose label is the group's
    signal bars — the unmarked group's label is the empty track. The label keeps

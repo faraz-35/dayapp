@@ -32,6 +32,9 @@ export interface Item {
   /** Delegation axis: true = fully delegable to an AI agent (the `@` token).
    *  Housekeeping like priority — not logged. */
   assignedToAgent: boolean;
+  /** Free-form spec under the one-line title; for agent rows, the prompt an
+   *  autonomous session executes. Content like notes — not logged. */
+  details: string;
 }
 
 export interface Action {
@@ -72,6 +75,8 @@ export const api = {
     invoke<void>("set_item_priority", { id, priority }),
   setItemAgent: (id: string, assigned: boolean) =>
     invoke<void>("set_item_agent", { id, assigned }),
+  setItemDetails: (id: string, details: string) =>
+    invoke<void>("set_item_details", { id, details }),
   runSweep: () => invoke<number>("run_sweep"),
   listActions: (opts: { since?: string; until?: string; limit?: number } = {}) =>
     invoke<Action[]>("list_actions", {

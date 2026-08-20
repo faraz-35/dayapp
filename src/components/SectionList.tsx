@@ -30,9 +30,9 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
 ];
 
 export default function SectionList({
-  items, visible, projects, selectedId, editingId,
+  items, visible, projects, selectedId, editingId, detailsOpenId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
-  onSetProject, onCreateProject, onSetReminder, onMoveItem,
+  onSetProject, onCreateProject, onSetReminder, onMoveItem, onToggleDetails, onSetDetails,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
   items: Record<Section, Item[]>;
@@ -43,6 +43,7 @@ export default function SectionList({
   projects: Project[];
   selectedId: string | null;
   editingId: string | null;
+  detailsOpenId: string | null;
   onSelect: (id: string) => void;
   onComplete: (id: string, section: Section) => void;
   onDelete: (id: string, section: Section) => void;
@@ -55,6 +56,8 @@ export default function SectionList({
   onCreateProject: (name: string) => Promise<Project>;
   onSetReminder: (id: string, remindAt: string | null) => void;
   onMoveItem: (id: string, toSection: Section, newIndex: number) => void;
+  onToggleDetails: (id: string) => void;
+  onSetDetails: (id: string, details: string) => void;
   activeTimerId: string | null;
   liveElapsed: number;
   timeTotals: Record<string, number>;
@@ -129,6 +132,7 @@ export default function SectionList({
             projects={projects}
             selectedId={selectedId}
             editingId={editingId}
+            detailsOpenId={detailsOpenId}
             onSelect={onSelect}
             onComplete={onComplete}
             onDelete={onDelete}
@@ -140,6 +144,8 @@ export default function SectionList({
             onSetProject={onSetProject}
             onCreateProject={onCreateProject}
             onSetReminder={onSetReminder}
+            onToggleDetails={onToggleDetails}
+            onSetDetails={onSetDetails}
             activeTimerId={activeTimerId}
             liveElapsed={liveElapsed}
             timeTotals={timeTotals}

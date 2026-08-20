@@ -122,6 +122,7 @@ dayapp/
 | `k` / `↑` | select previous |
 | `Enter` | complete selected (on a crossed Today row: un-complete) |
 | `e` | edit selected |
+| `d` | toggle selected task's details — the spec under the title (for 🤖 tasks, the agent's prompt) |
 | `t` | start/stop timer on selected (toggles; starting stops any other) |
 | hover **⌃** (note) | collapse the note to its first line, in place; click the collapsed note (or **⌄**) to expand it with the caret at the end — one click back to editing |
 | `⌫` / `Delete` | delete selected |
@@ -224,6 +225,13 @@ housekeeping — not logged to the journal.
 
 The point is triage and dispatch:
 
+- **Details are the prompt.** A one-line title isn't enough for an agent to execute
+  well. Hover **⋯** (or press **`d`** on the selected row, or click the faint **⌄**
+  hint on rows that have details) to open a dim auto-growing textarea under the row —
+  context, constraints, definition of done. It autosaves like Notes and is **not**
+  logged to the journal (content, not activity). `dayapp --task <query>` prints the
+  task plus its details, so an automation — or any agent session — reads the spec
+  straight from the CLI.
 - **⌘F → `@`** flips the search to the executor picker: **🤖 Agent tasks**
   narrows the list to the agent's queue, **My tasks** to your own (picking the
   active one clears it — same toggle rule as the project filter; session-only,
@@ -359,6 +367,7 @@ safe together) and force-deploys after writes so the phone sees them fast:
 
 ```bash
 dayapp --list [today|daily|backlog]   # print tasks (▶ = timer, ✓ = done, 🤖 = agent task, #name = project)
+dayapp --task "PSX stock algo"        # one task in full, incl. its details (the agent prompt)
 dayapp --add "call bank #money !1" --to backlog   # note: text is stored raw (no token parsing here)
 dayapp --complete "call bank"         # id prefix or unique text substring
 dayapp --start "ship mobile build"    # start the single active timer

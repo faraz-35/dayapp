@@ -66,7 +66,7 @@ Two independent feature areas, deliberately decoupled:
 
 ```
 items   id, text, section, status, last_completed_date, sort_order, created_at, updated_at,
-        hidden, hidden_until, project_id, remind_at, priority, assigned_to_agent
+        hidden, hidden_until, project_id, remind_at, priority, assigned_to_agent, details
 actions id, item_id, goal_id, item_text, action, from_section, to_section, from_status, to_status, timestamp
 meta    key, value           — currently holds last_sweep_date
 ```
@@ -109,6 +109,13 @@ meta    key, value           — currently holds last_sweep_date
   ⌘P → Show/Hide Agent Tasks; `dayapp --list` marks the rows with 🤖 so agent sessions can
   see their queue. Binary by design: marked = fully delegable end to end, unmarked = Faraz's
   own — no "agent drafts, I review" middle tier.
+- `details` — free-form body under the one-line title: the task's spec/context, and for
+  agent-delegated rows **the prompt an autonomous session executes**. Edited in the GUI via
+  the hover ⋯ button, the resting ⌄ hint, or the `d` key (auto-growing textarea under the
+  open row — Notes' debounce/autosave pattern; a sibling of the row, never inside the
+  dragged element). Content like notes, not state: edits are housekeeping — **not** logged —
+  and the field stays out of the phone export. `dayapp --task <query>` prints the row plus
+  its body, so an automation picks from `--list` and reads the spec from `--task`.
 - `remind_at` — ISO `YYYY-MM-DD` on which a backlog item auto-promotes to `today`. The
   promotion is logged as a `moved` action (backlog→today) and `remind_at` is cleared so it
   fires once. Date-granular, fires on launch (no cron / no macOS notification).
@@ -222,7 +229,7 @@ architecture — don't grow this one into it.
 
 ### CLI (remote access)
 
-The binary doubles as a headless CLI (`--list`, `--add`, `--complete`, `--start`,
+The binary doubles as a headless CLI (`--list`, `--task`, `--add`, `--complete`, `--start`,
 `--goals`, `--deploy`, `--sync-pull-peek`) for SSH/zcode sessions — see `cli.rs`. It opens the
 same db the GUI holds: WAL + `busy_timeout(5s)` make the two processes safe together,
 and the GUI's 60s deploy loop picks up CLI writes. `--add` stores text **raw** (token
@@ -232,7 +239,9 @@ parsing lives in the frontend); a remote trigger for `t`-style actions goes thro
 axis, so a session can pick up its queue — and suffixes each row's project as `#name`,
 the correlation axis for goal-linked work: a goal linked to project X spawns tasks
 tagged `#X`, and the whole chain (goal → tasks → who executes) reads from the CLI
-alone. `--goals` is read-only — the agent-context view
+alone. `--task <query>` prints one row in full including its details body — the prompt
+surface for the hourly zcode automation that picks a 🤖 task and works it. `--goals`
+is read-only — the agent-context view
 of the identity layer, grouped timeless → long → short with achieved last.
 
 ### Timers (per-task time tracking — NOT logged)
@@ -326,7 +335,7 @@ dayapp/
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + capture input + sortable items + dropzone; Backlog tier dividers)
-│       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput + shared PriorityBars
+│       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput + shared PriorityBars/ItemDetailsBody
 │       ├── JournalView.tsx         ← the journal: actions log + per-task time, grouped by day
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
 └── src-tauri/
@@ -359,8 +368,8 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `App.tsx` | state (incl. the active timer), effects, keyboard handlers, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
 | `Goals.tsx` | goals state + capture + horizon groups + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
 | `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
-| `SectionView.tsx` | one section's header + capture input + sortable items + dropzone (+ Backlog tier dividers) | DnD sensors/handlers |
-| `ItemRow.tsx` | one row's render + ▶/⏸ timer control + the shared `EditInput`/`PriorityBars` | DnD wiring (from `useSortable` via parent) |
+| `SectionView.tsx` | one section's header + capture input + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers |
+| `ItemRow.tsx` | one row's render + ▶/⏸ timer control + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
 | `JournalView.tsx` | fetching + filtering + grouping the actions log + per-task time totals | — |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
@@ -508,6 +517,9 @@ window; below 455px of width a media query hides the masthead.
   automatically when `last_completed_date != today`.
 - Edit: double-click text, or hover ✎, or select + `e`. Inline `<input>`, commits on
   Enter/blur, cancels on Escape.
+- Details: the spec under the title — a dim auto-growing textarea under the open row
+  (hover ⋯, the resting ⌄ hint, or `d`; Escape saves + collapses). For 🤖 rows this is
+  the prompt. A row with collapsed details shows the faint ⌄ in its metadata.
 
 **DnD:**
 - Drag via the grip handle, not the whole row (so text selection and typing aren't fights).
@@ -523,6 +535,7 @@ window; below 455px of width a media query hides the masthead.
 | `k` / `↑` | select previous |
 | `Enter` | complete selected (toggles a crossed Today row back to active) |
 | `e` | edit selected |
+| `d` | toggle selected row's details body (the spec / agent prompt) |
 | `t` | start/stop timer on selected (toggles; starting stops any other) |
 | `⌫` / `Delete` | delete selected |
 | single-click | select + enter edit mode (caret at end, not full-select) |

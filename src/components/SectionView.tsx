@@ -9,12 +9,13 @@ import { Fragment, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { type HideDuration, type Item, type Project, type Section } from "../lib";
-import ItemRow, { PriorityBars } from "./ItemRow";
+import ItemRow, { ItemDetailsBody, PriorityBars } from "./ItemRow";
 
 export default function SectionView({
-  section, label, hint, items, projects, selectedId, editingId,
+  section, label, hint, items, projects, selectedId, editingId, detailsOpenId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
-  onSetProject, onCreateProject, onSetReminder, activeTimerId, liveElapsed, timeTotals, onToggleTimer,
+  onSetProject, onCreateProject, onSetReminder, onToggleDetails, onSetDetails,
+  activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
   section: Section;
   label: string;
@@ -23,6 +24,7 @@ export default function SectionView({
   projects: Project[];
   selectedId: string | null;
   editingId: string | null;
+  detailsOpenId: string | null;
   onSelect: (id: string) => void;
   onComplete: (id: string, section: Section) => void;
   onDelete: (id: string, section: Section) => void;
@@ -34,6 +36,8 @@ export default function SectionView({
   onSetProject: (id: string, projectId: string | null) => void;
   onCreateProject: (name: string) => Promise<Project>;
   onSetReminder: (id: string, remindAt: string | null) => void;
+  onToggleDetails: (id: string) => void;
+  onSetDetails: (id: string, details: string) => void;
   activeTimerId: string | null;
   liveElapsed: number;
   timeTotals: Record<string, number>;
@@ -100,6 +104,7 @@ export default function SectionView({
                 projects={projects}
                 selected={item.id === selectedId}
                 editing={item.id === editingId}
+                detailsOpen={detailsOpenId === item.id}
                 onSelect={onSelect}
                 onComplete={() => onComplete(item.id, section)}
                 onDelete={() => onDelete(item.id, section)}
@@ -110,11 +115,23 @@ export default function SectionView({
                 onSetProject={(projectId) => onSetProject(item.id, projectId)}
                 onCreateProject={onCreateProject}
                 onSetReminder={(remindAt) => onSetReminder(item.id, remindAt)}
+                onToggleDetails={() => onToggleDetails(item.id)}
                 onToggleTimer={() => onToggleTimer(item.id)}
                 isTiming={timing}
                 elapsedSec={timing ? liveElapsed : 0}
                 totalSec={timeTotals[item.id] ?? 0}
               />
+              {/* The details body renders as a sibling under the open row
+                  (tier-divider position), not inside the dragged row — the
+                  drag transform only ever owns the one-line row. */}
+              {detailsOpenId === item.id && !item.hidden && (
+                <ItemDetailsBody
+                  key={item.id}
+                  initial={item.details}
+                  onCommit={(details) => onSetDetails(item.id, details)}
+                  onDone={() => onToggleDetails(item.id)}
+                />
+              )}
             </Fragment>
           );
         })}

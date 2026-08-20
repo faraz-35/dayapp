@@ -100,6 +100,9 @@ function DayApp() {
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The row whose details body is expanded (⋯ hover button, the ⌄ hint, or the
+  // `d` key). Session-only — transient inspection, like editingId.
+  const [detailsOpenId, setDetailsOpenId] = useState<string | null>(null);
   const [view, setView] = useState<View>("list");
   // ---- Show/Hide toggles (⌘P) ---------------------------------------------
   // Every layout surface is an independent toggle whose palette label reflects
@@ -701,6 +704,17 @@ function DayApp() {
     await api.setReminder(id, remindAt);
   };
 
+  // Set the task's details body (the spec / agent prompt). Content like a
+  // note save — optimistic patch + fire; the body debounces its own saves.
+  const handleSetDetails = async (id: string, details: string) => {
+    updateItemField(id, { details });
+    await api.setItemDetails(id, details);
+  };
+
+  const handleToggleDetails = useCallback((id: string) => {
+    setDetailsOpenId((cur) => (cur === id ? null : id));
+  }, []);
+
   // Toggle the single active timer on `id`. Starting B auto-stops A (the
   // backend finalizes any open session first). Optimistic: show the timer with
   // ~0 elapsed immediately, then reconcile with the authoritative started_at.
@@ -836,6 +850,10 @@ function DayApp() {
       } else if (e.key === "e" && selectedId) {
         e.preventDefault();
         setEditingId(selectedId);
+      } else if (e.key === "d" && selectedId) {
+        // Toggle the selected row's details body (the spec / agent prompt).
+        e.preventDefault();
+        handleToggleDetails(selectedId);
       } else if ((e.key === "Backspace" || e.key === "Delete") && selectedId) {
         const item = allVisible.find((i) => i.id === selectedId);
         if (item) { e.preventDefault(); handleDelete(item.id, item.section); }
@@ -956,6 +974,7 @@ function DayApp() {
               projects={projects}
               selectedId={selectedId}
               editingId={editingId}
+              detailsOpenId={detailsOpenId}
               onSelect={setSelectedId}
               onComplete={handleComplete}
               onDelete={handleDelete}
@@ -967,6 +986,8 @@ function DayApp() {
               onSetProject={handleSetProject}
               onCreateProject={handleCreateProject}
               onSetReminder={handleSetReminder}
+              onToggleDetails={handleToggleDetails}
+              onSetDetails={handleSetDetails}
               onMoveItem={handleMoveItem}
               activeTimerId={activeTimer?.itemId ?? null}
               liveElapsed={liveElapsed}

@@ -26,7 +26,12 @@ CREATE TABLE IF NOT EXISTS items (
     -- Delegation axis: 1 = the task is fully delegable to an AI agent (set via a
     -- bare `@` token in the item text; `@0` clears). Housekeeping like priority —
     -- not logged. Unmarked (0) = Faraz's own. The list/CLI/⌘F filter off it.
-    assigned_to_agent   INTEGER NOT NULL DEFAULT 0 CHECK (assigned_to_agent IN (0, 1))
+    assigned_to_agent   INTEGER NOT NULL DEFAULT 0 CHECK (assigned_to_agent IN (0, 1)),
+    -- Free-form body under the one-line title — the task's spec/context, and
+    -- for agent-delegated rows the prompt an autonomous session executes
+    -- (readable via `dayapp --task`). Content like notes, not state: edits are
+    -- housekeeping — not logged — and it stays out of the phone export.
+    details             TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_items_section ON items(section, sort_order);

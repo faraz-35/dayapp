@@ -1,6 +1,7 @@
 // Headless CLI — remote access to DayApp over SSH/zcode.
 //
 //   dayapp --list [today|daily|backlog]     print tasks (▶/✓ marks, !prio, 🤖 agent, #project)
+//   dayapp --task <query>                   print one task in full, incl. its details
 //   dayapp --add "text" [--to backlog]      create (today|daily|backlog; default backlog)
 //   dayapp --complete "query"               complete (stops its timer first)
 //   dayapp --start "query"                  start the single active timer
@@ -27,6 +28,7 @@ pub fn run(args: Vec<String>) -> i32 {
     let rest: Vec<String> = it.collect();
     let result = match cmd.as_str() {
         "--list" => list(&db, rest.first().map(|s| s.as_str())),
+        "--task" => task(&db, &rest),
         "--add" => add(&db, &rest),
         "--complete" => with_query(&db, &rest, |db, item| {
             // Same rule as the GUI: completing a running item stops its timer
@@ -45,7 +47,7 @@ pub fn run(args: Vec<String>) -> i32 {
         "--deploy" => sync::deploy(&db, true).map(|o| println!("{}", o.describe())),
         "--sync-pull-peek" => peek(&db),
         "--help" | "-h" => {
-            println!("usage: dayapp --list [today|daily|backlog] | --add \"text\" [--to backlog] | --complete <query> | --start <query> | --goals | --deploy | --sync-pull-peek");
+            println!("usage: dayapp --list [today|daily|backlog] | --task <query> | --add \"text\" [--to backlog] | --complete <query> | --start <query> | --goals | --deploy | --sync-pull-peek");
             Ok(())
         }
         _ => Err(anyhow::anyhow!("unknown command \"{cmd}\" — try --help")),
@@ -60,7 +62,7 @@ pub fn run(args: Vec<String>) -> i32 {
 }
 
 fn usage() -> i32 {
-    eprintln!("usage: dayapp --list [section] | --add \"text\" [--to backlog] | --complete <query> | --start <query> | --goals | --deploy | --sync-pull-peek");
+    eprintln!("usage: dayapp --list [section] | --task <query> | --add \"text\" [--to backlog] | --complete <query> | --start <query> | --goals | --deploy | --sync-pull-peek");
     1
 }
 
@@ -155,11 +157,7 @@ fn list(db: &Db, section: Option<&str>) -> anyhow::Result<()> {
     // Project names for the trailing #tag — the goal↔task correlation axis:
     // a goal linked to project X spawns tasks tagged #X, and the agent
     // reading --list can tie rows back to the goal that motivated them.
-    let projects: std::collections::HashMap<String, String> = db
-        .list_projects()?
-        .into_iter()
-        .map(|p| (p.id, p.name))
-        .collect();
+    let projects = project_names(db)?;
     let today = crate::db::today_iso();
     for (item, sec) in all_items(db)? {
         if let Some(s) = section {
@@ -181,6 +179,38 @@ fn list(db: &Db, section: Option<&str>) -> anyhow::Result<()> {
             .and_then(|id| projects.get(id).map(|n| format!(" #{n}")))
             .unwrap_or_default();
         println!("{mark} {sec:<8} {prio}{agent}{}{proj}", item.text);
+    }
+    Ok(())
+}
+
+/// id → name map for the trailing #tags shared by --list and --task.
+fn project_names(db: &Db) -> anyhow::Result<std::collections::HashMap<String, String>> {
+    Ok(db.list_projects()?.into_iter().map(|p| (p.id, p.name)).collect())
+}
+
+/// Print one task in full — the --list row (minus the done/timer mark) plus
+/// its details body, indented. This is the prompt surface for agent-delegated
+/// rows: an automation (or any session) picks a 🤖 task from --list and reads
+/// the spec here before working it.
+fn task(db: &Db, rest: &[String]) -> anyhow::Result<()> {
+    let q = rest.first().ok_or_else(|| anyhow::anyhow!("--task needs a <query> (id prefix or unique text substring)"))?;
+    let item = find_item(db, q)?;
+    let projects = project_names(db)?;
+    let prio = item.priority.map(|p| format!(" !{p}")).unwrap_or_default();
+    let agent = if item.assigned_to_agent { "🤖 " } else { "" };
+    let proj = item
+        .project_id
+        .as_ref()
+        .and_then(|id| projects.get(id).map(|n| format!(" #{n}")))
+        .unwrap_or_default();
+    let sec = item.section.as_str();
+    println!("{sec:<8} {prio}{agent}{}{proj}", item.text);
+    if item.details.trim().is_empty() {
+        println!("no details");
+    } else {
+        for line in item.details.lines() {
+            println!("  {line}");
+        }
     }
     Ok(())
 }

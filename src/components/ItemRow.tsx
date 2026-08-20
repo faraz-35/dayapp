@@ -21,14 +21,15 @@ import ProjectMenu from "../ProjectMenu";
 import ReminderMenu from "../ReminderMenu";
 
 export default function ItemRow({
-  item, projects, selected, editing,
+  item, projects, selected, editing, detailsOpen,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide, onUnhide,
-  onSetProject, onCreateProject, onSetReminder, onToggleTimer, isTiming, elapsedSec, totalSec,
+  onSetProject, onCreateProject, onSetReminder, onToggleDetails, onToggleTimer, isTiming, elapsedSec, totalSec,
 }: {
   item: Item;
   projects: Project[];
   selected: boolean;
   editing: boolean;
+  detailsOpen: boolean;
   onSelect: (id: string) => void;
   onComplete: () => void;
   onDelete: () => void;
@@ -39,6 +40,7 @@ export default function ItemRow({
   onSetProject: (projectId: string | null) => void;
   onCreateProject: (name: string) => Promise<Project>;
   onSetReminder: (remindAt: string | null) => void;
+  onToggleDetails: () => void;
   onToggleTimer: () => void;
   isTiming: boolean;
   elapsedSec: number;
@@ -101,14 +103,21 @@ export default function ItemRow({
       )}
 
       {/* Right-aligned metadata (robot + priority + time + project label +
-          reminder). Robot + priority + project stay visible on hover (the
-          row's identity, wanted while its actions are on screen); time /
-          reminder yield to the buttons. Suppressed while timing — the live
-          elapsed then lives in the action cluster instead. */}
-      {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars || item.assignedToAgent) && (
+          reminder + details hint). Robot + priority + project stay visible on
+          hover (the row's identity, wanted while its actions are on screen);
+          time / reminder yield to the buttons. Suppressed while timing — the
+          live elapsed then lives in the action cluster instead. */}
+      {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars || item.assignedToAgent || item.details) && (
         <div className="item-meta">
           {item.assignedToAgent && <AgentBadge />}
           {priorityBars}
+          {item.details && !detailsOpen && (
+            <span
+              className="details-hint"
+              onClick={(e) => { e.stopPropagation(); onToggleDetails(); }}
+              title="Has details — click to expand (d)"
+            >⌄</span>
+          )}
           {item.hidden && (
             <span
               className="hidden-chip"
@@ -179,6 +188,12 @@ export default function ItemRow({
               <ReminderMenu remindAt={item.remindAt} onSet={onSetReminder} />
               <HideMenu onHide={onHide} />
               <button
+                className={`item-action${detailsOpen ? " active" : ""}`}
+                onClick={(e) => { e.stopPropagation(); onToggleDetails(); }}
+                title={detailsOpen ? "Collapse details" : "Details — the task's spec (for agent tasks, the prompt)"}
+                aria-label={detailsOpen ? "Collapse details" : "Show details"}
+              >{detailsOpen ? "⌃" : "⋯"}</button>
+              <button
                 className="item-action danger"
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 title="Delete"
@@ -236,8 +251,7 @@ export function PriorityBars({ priority }: { priority: 1 | 2 | 3 | null }) {
 // Controlled input that commits on Enter/blur, cancels on Escape.
 // Focus lands at the end of the text (not a full select) so a click-to-edit
 // appends naturally, like the notes textareas. Shared with Goals.tsx.
-export function EditInput({
-  initial, onCommit,
+export function EditInput({  initial, onCommit,
 }: {
   initial: string;
   onCommit: (text: string) => void;
@@ -264,5 +278,77 @@ export function EditInput({
         if (e.key === "Escape") onCommit(initial);
       }}
     />
+  );
+}
+
+// The task's details body — the spec under the one-line title, and for agent-
+// delegated rows the prompt an autonomous session executes (readable via
+// `dayapp --task`). Rendered by SectionView as a sibling under the open row
+// (like the tier dividers — never inside the dragged row). Auto-growing
+// textarea with debounced autosave, the Notes pattern; Escape flushes and
+// collapses. Content, not state: saves go through set_item_details and are
+// never logged to `actions`.
+export function ItemDetailsBody({
+  initial, onCommit, onDone,
+}: {
+  initial: string;
+  onCommit: (details: string) => void;
+  onDone: () => void;
+}) {
+  const [val, setVal] = useState(initial);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const savedRef = useRef(initial);
+
+  // Auto-grow to content height (Notes pattern — no internal scrollbar).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [val]);
+
+  useEffect(() => {
+    ref.current?.focus();
+    const el = ref.current;
+    if (!el) return;
+    const end = initial.length;
+    el.setSelectionRange(end, end);
+  }, [initial]);
+
+  // Debounced autosave (600ms) once the value drifts from the last save.
+  useEffect(() => {
+    if (val === savedRef.current) return;
+    const t = window.setTimeout(() => {
+      savedRef.current = val;
+      onCommit(val);
+    }, 600);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [val]);
+
+  const flush = () => {
+    if (val === savedRef.current) return;
+    savedRef.current = val;
+    onCommit(val);
+  };
+
+  return (
+    <div className="item-details">
+      <textarea
+        ref={ref}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={flush}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            flush();
+            onDone();
+          }
+        }}
+        placeholder="Details — context, constraints, definition of done. For agent tasks this is the prompt."
+        spellCheck={false}
+      />
+    </div>
   );
 }
