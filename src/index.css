@@ -739,6 +739,10 @@ button {
 }
 .agent-badge .agent-eye { fill: var(--bg); }
 
+/* SVG chevron inside an .item-action — block so the button's flex centering
+   owns both axes (text glyphs would ride the font's baseline instead). */
+.action-chevron { display: block; }
+
 /* The details body — an auto-growing textarea rendered under its open row
    (sibling position, like the tier dividers, so the drag transform only ever
    owns the one-line row). Content styling: dim, small, no chrome — the row's

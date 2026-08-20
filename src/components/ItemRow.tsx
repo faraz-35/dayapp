@@ -189,7 +189,7 @@ export default function ItemRow({
                     ? "Expand details (d)"
                     : "Add details — the task's spec (for agent tasks, the prompt)"}
                 aria-label={detailsOpen ? "Collapse details" : item.details ? "Expand details" : "Add details"}
-              >{detailsOpen ? "⌃" : item.details ? "⌄" : "⋯"}</button>
+              >{detailsOpen ? <Chevron up /> : item.details ? <Chevron /> : "⋯"}</button>
               <button
                 className="item-action danger"
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
@@ -222,6 +222,31 @@ function AgentBadge() {
         <circle className="agent-eye" cx="7.5" cy="6.8" r="1" />
       </svg>
     </span>
+  );
+}
+
+// The expand/collapse chevron for the details button. Drawn as SVG rather
+// than the ⌄/⌃ unicode arrowheads — those fall back to an odd font and render
+// at different sizes/baselines per direction; a stroked path is identical in
+// both directions and centers exactly in the 22×22 .item-action (flex).
+function Chevron({ up }: { up?: boolean }) {
+  return (
+    <svg
+      className="action-chevron"
+      viewBox="0 0 12 12"
+      width="12"
+      height="12"
+      aria-hidden="true"
+    >
+      <path
+        d={up ? "M2.8 7.6 6 4.4 9.2 7.6" : "M2.8 4.4 6 7.6 9.2 4.4"}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
