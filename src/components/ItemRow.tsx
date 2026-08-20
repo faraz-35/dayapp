@@ -103,21 +103,14 @@ export default function ItemRow({
       )}
 
       {/* Right-aligned metadata (robot + priority + time + project label +
-          reminder + details hint). Robot + priority + project stay visible on
-          hover (the row's identity, wanted while its actions are on screen);
-          time / reminder yield to the buttons. Suppressed while timing — the
-          live elapsed then lives in the action cluster instead. */}
-      {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars || item.assignedToAgent || item.details) && (
+          reminder). Robot + priority + project stay visible on hover (the
+          row's identity, wanted while its actions are on screen); time /
+          reminder yield to the buttons. Suppressed while timing — the live
+          elapsed then lives in the action cluster instead. */}
+      {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars || item.assignedToAgent) && (
         <div className="item-meta">
           {item.assignedToAgent && <AgentBadge />}
           {priorityBars}
-          {item.details && !detailsOpen && (
-            <span
-              className="details-hint"
-              onClick={(e) => { e.stopPropagation(); onToggleDetails(); }}
-              title="Has details — click to expand (d)"
-            >⌄</span>
-          )}
           {item.hidden && (
             <span
               className="hidden-chip"
@@ -190,9 +183,13 @@ export default function ItemRow({
               <button
                 className={`item-action${detailsOpen ? " active" : ""}`}
                 onClick={(e) => { e.stopPropagation(); onToggleDetails(); }}
-                title={detailsOpen ? "Collapse details" : "Details — the task's spec (for agent tasks, the prompt)"}
-                aria-label={detailsOpen ? "Collapse details" : "Show details"}
-              >{detailsOpen ? "⌃" : "⋯"}</button>
+                title={detailsOpen
+                  ? "Collapse details"
+                  : item.details
+                    ? "Expand details (d)"
+                    : "Add details — the task's spec (for agent tasks, the prompt)"}
+                aria-label={detailsOpen ? "Collapse details" : item.details ? "Expand details" : "Add details"}
+              >{detailsOpen ? "⌃" : item.details ? "⌄" : "⋯"}</button>
               <button
                 className="item-action danger"
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
@@ -216,7 +213,7 @@ export default function ItemRow({
 function AgentBadge() {
   return (
     <span className="agent-badge" title="Assigned to the AI agent">
-      <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true">
+      <svg viewBox="0 0 12 12" width="13" height="13" aria-hidden="true">
         {/* antenna + head silhouette in currentColor; eyes punched in --bg */}
         <circle cx="6" cy="1.6" r="1" />
         <rect x="5.4" y="2.2" width="1.2" height="1.4" rx="0.6" />

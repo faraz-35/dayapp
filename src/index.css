@@ -739,18 +739,6 @@ button {
 }
 .agent-badge .agent-eye { fill: var(--bg); }
 
-/* The details hint — a faint ⌄ on rows that carry a details body (the spec
-   under the one-line title). Click, the hover ⋯ button, or the `d` key opens
-   the body; the hint hides while it's open. */
-.details-hint {
-  font-size: 11px;
-  color: var(--text-faint);
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: color 0.08s ease;
-}
-.item:hover .details-hint { color: var(--text-dim); }
-
 /* The details body — an auto-growing textarea rendered under its open row
    (sibling position, like the tier dividers, so the drag transform only ever
    owns the one-line row). Content styling: dim, small, no chrome — the row's

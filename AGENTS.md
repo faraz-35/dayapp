@@ -111,7 +111,8 @@ meta    key, value           — currently holds last_sweep_date
   own — no "agent drafts, I review" middle tier.
 - `details` — free-form body under the one-line title: the task's spec/context, and for
   agent-delegated rows **the prompt an autonomous session executes**. Edited in the GUI via
-  the hover ⋯ button, the resting ⌄ hint, or the `d` key (auto-growing textarea under the
+  the hover button (⋯ when the row has no body, ⌄ once it does — the icon itself signals
+  "has details") or the `d` key (auto-growing textarea under the
   open row — Notes' debounce/autosave pattern; a sibling of the row, never inside the
   dragged element). Content like notes, not state: edits are housekeeping — **not** logged —
   and the field stays out of the phone export. `dayapp --task <query>` prints the row plus
@@ -518,8 +519,8 @@ window; below 455px of width a media query hides the masthead.
 - Edit: double-click text, or hover ✎, or select + `e`. Inline `<input>`, commits on
   Enter/blur, cancels on Escape.
 - Details: the spec under the title — a dim auto-growing textarea under the open row
-  (hover ⋯, the resting ⌄ hint, or `d`; Escape saves + collapses). For 🤖 rows this is
-  the prompt. A row with collapsed details shows the faint ⌄ in its metadata.
+  (the hover button — ⋯ when empty, ⌄ once it has a body — or `d`; Escape saves +
+  collapses). For 🤖 rows this is the prompt.
 
 **DnD:**
 - Drag via the grip handle, not the whole row (so text selection and typing aren't fights).

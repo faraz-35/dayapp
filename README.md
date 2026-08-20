@@ -226,9 +226,9 @@ housekeeping — not logged to the journal.
 The point is triage and dispatch:
 
 - **Details are the prompt.** A one-line title isn't enough for an agent to execute
-  well. Hover **⋯** (or press **`d`** on the selected row, or click the faint **⌄**
-  hint on rows that have details) to open a dim auto-growing textarea under the row —
-  context, constraints, definition of done. It autosaves like Notes and is **not**
+  well. Hover the row's **⋯** button (it reads **⌄** — expand — once details exist),
+  or press **`d`** on the selected row, to open a dim auto-growing textarea under the
+  row — context, constraints, definition of done. It autosaves like Notes and is **not**
   logged to the journal (content, not activity). `dayapp --task <query>` prints the
   task plus its details, so an automation — or any agent session — reads the spec
   straight from the CLI.
