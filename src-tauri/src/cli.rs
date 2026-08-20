@@ -1,6 +1,6 @@
 // Headless CLI — remote access to DayApp over SSH/zcode.
 //
-//   dayapp --list [today|daily|backlog]     print tasks (timer/done/🤖 agent markers)
+//   dayapp --list [today|daily|backlog]     print tasks (▶/✓ marks, !prio, 🤖 agent, #project)
 //   dayapp --add "text" [--to backlog]      create (today|daily|backlog; default backlog)
 //   dayapp --complete "query"               complete (stops its timer first)
 //   dayapp --start "query"                  start the single active timer
@@ -152,6 +152,14 @@ fn list(db: &Db, section: Option<&str>) -> anyhow::Result<()> {
         }
     }
     let timer = db.get_active_timer().ok().flatten();
+    // Project names for the trailing #tag — the goal↔task correlation axis:
+    // a goal linked to project X spawns tasks tagged #X, and the agent
+    // reading --list can tie rows back to the goal that motivated them.
+    let projects: std::collections::HashMap<String, String> = db
+        .list_projects()?
+        .into_iter()
+        .map(|p| (p.id, p.name))
+        .collect();
     let today = crate::db::today_iso();
     for (item, sec) in all_items(db)? {
         if let Some(s) = section {
@@ -167,7 +175,12 @@ fn list(db: &Db, section: Option<&str>) -> anyhow::Result<()> {
         // The delegation axis: 🤖 marks rows assigned to the AI agent, so an
         // agent (or Faraz over SSH) can see which tasks are theirs to take.
         let agent = if item.assigned_to_agent { "🤖 " } else { "" };
-        println!("{mark} {sec:<8} {prio}{agent}{}", item.text);
+        let proj = item
+            .project_id
+            .as_ref()
+            .and_then(|id| projects.get(id).map(|n| format!(" #{n}")))
+            .unwrap_or_default();
+        println!("{mark} {sec:<8} {prio}{agent}{}{proj}", item.text);
     }
     Ok(())
 }

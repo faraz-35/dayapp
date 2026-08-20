@@ -229,7 +229,10 @@ and the GUI's 60s deploy loop picks up CLI writes. `--add` stores text **raw** (
 parsing lives in the frontend); a remote trigger for `t`-style actions goes through
 `--complete`/`--start`, which honour the timer rules (completing stops a running timer).
 `--list` marks agent-delegated rows with 🤖 — the agent-context view of the delegation
-axis, so a session can pick up its queue. `--goals` is read-only — the agent-context view
+axis, so a session can pick up its queue — and suffixes each row's project as `#name`,
+the correlation axis for goal-linked work: a goal linked to project X spawns tasks
+tagged `#X`, and the whole chain (goal → tasks → who executes) reads from the CLI
+alone. `--goals` is read-only — the agent-context view
 of the identity layer, grouped timeless → long → short with achieved last.
 
 ### Timers (per-task time tracking — NOT logged)

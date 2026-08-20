@@ -358,7 +358,7 @@ session — it opens the same db (WAL + busy-timeout make the two processes
 safe together) and force-deploys after writes so the phone sees them fast:
 
 ```bash
-dayapp --list [today|daily|backlog]   # print tasks (▶ = timer running, ✓ = done, 🤖 = agent task)
+dayapp --list [today|daily|backlog]   # print tasks (▶ = timer, ✓ = done, 🤖 = agent task, #name = project)
 dayapp --add "call bank #money !1" --to backlog   # note: text is stored raw (no token parsing here)
 dayapp --complete "call bank"         # id prefix or unique text substring
 dayapp --start "ship mobile build"    # start the single active timer
