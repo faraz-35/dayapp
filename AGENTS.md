@@ -521,7 +521,13 @@ window; below 455px of width a media query hides the masthead.
 - Details: the spec under the title — a full-width, full-strength writing surface
   under the open row (the hover button — ⋯ when empty, ⌄ once it has a body — or
   `d`; Escape saves + collapses); zero chrome, the expanded task reads as a small
-  document (headline + body). For 🤖 rows this is the prompt.
+  document (headline + body) — **primary content, never styled secondary** (no dim
+  text, no rail/border, no indent). The body sits on the row's own grid: same
+  padding/gap/radius plus mirrored leading slots (a real invisible grip glyph + the
+  15px checkbox slot), so its text starts exactly under the row's text and its
+  focus tint matches the hovered row's background box. Mirror the markup — never a
+  hardcoded indent; the grip glyph has no fixed advance width. For 🤖 rows this is
+  the prompt.
 
 **DnD:**
 - Drag via the grip handle, not the whole row (so text selection and typing aren't fights).
