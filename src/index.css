@@ -745,33 +745,43 @@ button {
 
 /* The details body — the task's main content, opened under its headline row
    (sibling position, like the tier dividers, so the drag transform only ever
-   owns the one-line row). Full content width, zero chrome, full-strength
-   base-size text: the expanded task reads as a small document (headline +
-   body), not an attachment. Auto-growing textarea with Notes' autosave
-   pattern; the faint focus tint is the only editing signal — the caret does
-   the rest. For agent-delegated rows the body is the prompt (dayapp --task). */
+   owns the one-line row). It mirrors the row's own geometry — same padding,
+   gap, and leading slots (a real, invisible grip glyph + the 15px checkbox
+   slot) — so its text starts exactly under .item-text and its focus
+   background spans the exact box a hovered row's background does. Full
+   strength at base size: the expanded task reads as a small document
+   (headline + body). Auto-growing textarea with Notes' autosave pattern; the
+   faint focus tint is the only editing signal — the caret does the rest. For
+   agent-delegated rows the body is the prompt (dayapp --task). */
 .item-details {
-  margin: 0 8px 4px;
+  display: flex;
+  gap: 8px;                 /* = .item's gap */
+  align-items: flex-start;
+  margin: 0 0 4px;          /* full width — same bounds as the row's bg */
+  padding: 6px 8px;         /* = .item's padding */
+  border-radius: 6px;       /* = .item's radius */
+  transition: background 0.08s ease;
 }
+.item-details:focus-within { background: var(--bg-hover); }
+/* The mirrored grip is a spacer only — never a drag handle. */
+.item-details .grip { cursor: default; }
+/* The checkbox's slot (.item-check is 15px wide). */
+.item-details .details-slot { width: 15px; flex-shrink: 0; }
 .item-details textarea {
-  display: block;
-  width: 100%;
-  min-height: 70px;   /* ~3 lines at 13px/1.5 — opens as a page, not a sliver */
+  flex: 1;
+  min-width: 0;
+  min-height: 58px;         /* ~3 lines at 13px/1.5 — opens as a page, not a sliver */
   resize: none;
   overflow: hidden;
-  box-sizing: border-box;
-  padding: 6px 8px;
   border: none;
-  border-radius: 6px;
   background: transparent;
   font: inherit;
   font-size: 13px;
   line-height: 1.5;
   color: var(--text);
   outline: none;
-  transition: background 0.08s ease;
+  padding: 0;
 }
-.item-details textarea:focus { background: var(--bg-hover); }
 .item-details textarea::placeholder { color: var(--text-faint); }
 
 /* Priority tier dividers (Backlog only). The section sorts P1 → P3 → unmarked,

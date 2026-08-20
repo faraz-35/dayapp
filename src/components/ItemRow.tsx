@@ -357,6 +357,12 @@ export function ItemDetailsBody({
 
   return (
     <div className="item-details">
+      {/* Leading slots mirror the row's own structure (grip glyph + checkbox
+          slot + the 8px gaps, same container padding) so the body's text
+          starts exactly under .item-text and its focus background spans the
+          exact box a hovered row's background does — one grid, not two. */}
+      <span className="grip" aria-hidden="true">⠿</span>
+      <span className="details-slot" aria-hidden="true" />
       <textarea
         ref={ref}
         value={val}
