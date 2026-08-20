@@ -89,6 +89,7 @@ struct ExportItem {
     status: String,
     last_completed_date: Option<String>,
     priority: Option<i64>,
+    assigned_to_agent: bool,
     project_id: Option<String>,
     remind_at: Option<String>,
     total_secs: i64,
@@ -163,7 +164,7 @@ pub fn build_export(db: &Db) -> anyhow::Result<(String, usize)> {
     let items: Vec<ExportItem> = {
         let conn = db.0.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, text, section, status, last_completed_date, priority, project_id, remind_at
+            "SELECT id, text, section, status, last_completed_date, priority, assigned_to_agent, project_id, remind_at
              FROM items WHERE hidden = 0
              ORDER BY CASE section WHEN 'today' THEN 0 WHEN 'daily' THEN 1 ELSE 2 END,
                       CASE WHEN section = 'backlog' THEN COALESCE(priority, 99) ELSE 0 END,
@@ -177,8 +178,9 @@ pub fn build_export(db: &Db) -> anyhow::Result<(String, usize)> {
                 status: r.get(3)?,
                 last_completed_date: r.get(4)?,
                 priority: r.get(5)?,
-                project_id: r.get(6)?,
-                remind_at: r.get(7)?,
+                assigned_to_agent: r.get::<_, i64>(6)? != 0,
+                project_id: r.get(7)?,
+                remind_at: r.get(8)?,
                 total_secs: 0,
             })
         })?;

@@ -204,6 +204,13 @@ async fn set_item_priority(
     with_db(db, move |db| db.set_item_priority(&id, priority)).await
 }
 
+#[tauri::command]
+async fn set_item_agent(
+    db: State<'_, DbState>, id: String, assigned: bool,
+) -> Result<(), String> {
+    with_db(db, move |db| db.set_item_agent(&id, assigned)).await
+}
+
 // ---- Goal commands -------------------------------------------------------
 // The identity layer: horizon-scoped goals (short / long / timeless) above the
 // task sections, optionally linked to a project. Like items, goals are state +
@@ -525,7 +532,7 @@ pub fn run() {
             list_notes, create_note, update_note, delete_note,
             hide_note, unhide_note,
             list_projects, create_project, rename_project, delete_project, set_item_project,
-            set_reminder, set_item_priority,
+            set_reminder, set_item_priority, set_item_agent,
             list_goals, create_goal, edit_goal, set_goal_project,
             achieve_goal, unachieve_goal, delete_goal,
             start_timer, stop_timer, discard_timer, get_active_timer,

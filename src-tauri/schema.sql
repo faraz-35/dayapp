@@ -22,7 +22,11 @@ CREATE TABLE IF NOT EXISTS items (
     remind_at           TEXT,                                    -- ISO YYYY-MM-DD when a backlog item auto-promotes to today
     -- Urgency tier 1–3 (NULL = none), set via !1/!2/!3 tokens in the item text.
     -- Housekeeping like project_id — not logged. The Backlog sorts by it.
-    priority            INTEGER CHECK (priority IS NULL OR priority IN (1, 2, 3))
+    priority            INTEGER CHECK (priority IS NULL OR priority IN (1, 2, 3)),
+    -- Delegation axis: 1 = the task is fully delegable to an AI agent (set via a
+    -- bare `@` token in the item text; `@0` clears). Housekeeping like priority —
+    -- not logged. Unmarked (0) = Faraz's own. The list/CLI/⌘F filter off it.
+    assigned_to_agent   INTEGER NOT NULL DEFAULT 0 CHECK (assigned_to_agent IN (0, 1))
 );
 
 CREATE INDEX IF NOT EXISTS idx_items_section ON items(section, sort_order);

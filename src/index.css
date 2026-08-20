@@ -725,6 +725,20 @@ button {
 }
 .priority-bars .bar.filled { background: var(--accent); }
 
+/* The agent badge — a tiny robot marking rows fully delegable to the AI agent
+   (set via a bare `@` token). Identity metadata like the project label: dim,
+   stays visible on hover, shown in every section. Fill is currentColor (the
+   dim metadata grey); the eyes punch through with the app bg so the glyph
+   stays monochrome. */
+.agent-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-dim);
+  fill: currentColor;
+}
+.agent-badge .agent-eye { fill: var(--bg); }
+
 /* Priority tier dividers (Backlog only). The section sorts P1 → P3 → unmarked,
    and every tier group is introduced by a hairline whose label is the group's
    signal bars — the unmarked group's label is the empty track. The label keeps

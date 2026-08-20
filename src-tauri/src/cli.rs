@@ -1,6 +1,6 @@
 // Headless CLI — remote access to DayApp over SSH/zcode.
 //
-//   dayapp --list [today|daily|backlog]     print tasks (timer + done markers)
+//   dayapp --list [today|daily|backlog]     print tasks (timer/done/🤖 agent markers)
 //   dayapp --add "text" [--to backlog]      create (today|daily|backlog; default backlog)
 //   dayapp --complete "query"               complete (stops its timer first)
 //   dayapp --start "query"                  start the single active timer
@@ -164,7 +164,10 @@ fn list(db: &Db, section: Option<&str>) -> anyhow::Result<()> {
         let timing = timer.as_ref().map(|t| t.item_id == item.id).unwrap_or(false);
         let mark = if timing { "▶" } else if done { "✓" } else { " " };
         let prio = item.priority.map(|p| format!(" !{p}")).unwrap_or_default();
-        println!("{mark} {sec:<8} {prio}{}", item.text);
+        // The delegation axis: 🤖 marks rows assigned to the AI agent, so an
+        // agent (or Faraz over SSH) can see which tasks are theirs to take.
+        let agent = if item.assigned_to_agent { "🤖 " } else { "" };
+        println!("{mark} {sec:<8} {prio}{agent}{}", item.text);
     }
     Ok(())
 }

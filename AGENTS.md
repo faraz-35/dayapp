@@ -66,7 +66,7 @@ Two independent feature areas, deliberately decoupled:
 
 ```
 items   id, text, section, status, last_completed_date, sort_order, created_at, updated_at,
-        hidden, hidden_until, project_id, remind_at, priority
+        hidden, hidden_until, project_id, remind_at, priority, assigned_to_agent
 actions id, item_id, goal_id, item_text, action, from_section, to_section, from_status, to_status, timestamp
 meta    key, value           — currently holds last_sweep_date
 ```
@@ -100,6 +100,15 @@ meta    key, value           — currently holds last_sweep_date
   label is the empty track; a single-tier Backlog renders undivided — derived purely from
   the rendered order in `SectionView.tsx`, so filters that drop tiers drop their dividers);
   Today/Daily stay manual.
+- `assigned_to_agent` ∈ `0` | `1` — the delegation axis ("who executes"), set via a bare `@`
+  token in the capture or edit text (`parseItemTags` in `lib.ts` strips it; composable with
+  `#tag`/`!N` in any order; `@0` clears, no token on edit leaves it alone; `@word` stays
+  literal so mentions aren't eaten). Housekeeping — **not** logged. Shown as a small
+  monochrome robot badge in the row's metadata (every section, kept on hover); filtered by
+  ⌘F `@` (Agent tasks / My tasks — the same picker pattern as `#` projects) and toggled by
+  ⌘P → Show/Hide Agent Tasks; `dayapp --list` marks the rows with 🤖 so agent sessions can
+  see their queue. Binary by design: marked = fully delegable end to end, unmarked = Faraz's
+  own — no "agent drafts, I review" middle tier.
 - `remind_at` — ISO `YYYY-MM-DD` on which a backlog item auto-promotes to `today`. The
   promotion is logged as a `moved` action (backlog→today) and `remind_at` is cleared so it
   fires once. Date-granular, fires on launch (no cron / no macOS notification).
@@ -219,8 +228,9 @@ same db the GUI holds: WAL + `busy_timeout(5s)` make the two processes safe toge
 and the GUI's 60s deploy loop picks up CLI writes. `--add` stores text **raw** (token
 parsing lives in the frontend); a remote trigger for `t`-style actions goes through
 `--complete`/`--start`, which honour the timer rules (completing stops a running timer).
-`--goals` is read-only — the agent-context view of the identity layer, grouped
-timeless → long → short with achieved last.
+`--list` marks agent-delegated rows with 🤖 — the agent-context view of the delegation
+axis, so a session can pick up its queue. `--goals` is read-only — the agent-context view
+of the identity layer, grouped timeless → long → short with achieved last.
 
 ### Timers (per-task time tracking — NOT logged)
 
@@ -470,14 +480,16 @@ window; below 455px of width a media query hides the masthead.
 ### Interaction patterns (existing — match these for new features)
 
 **Item rows:**
-- Resting: the checkbox circle + text, plus any right-aligned metadata (priority signal
-  bars, `⏱` cumulative time, project label, reminder chip). Rows with no priority / tracked
-  time / project / reminder show only checkbox + text — and Backlog rows never show bars:
-  every tier group there is introduced by a `.tier-divider` hairline labeled with the
-  group's bars, empty track for unmarked (Backlog only — never Today/Daily).
+- Resting: the checkbox circle + text, plus any right-aligned metadata (agent robot badge,
+  priority signal bars, `⏱` cumulative time, project label, reminder chip). Rows with no
+  assignment / priority / tracked time / project / reminder show only checkbox + text — and
+  Backlog rows never show bars: every tier group there is introduced by a `.tier-divider`
+  hairline labeled with the group's bars, empty track for unmarked (Backlog only — never
+  Today/Daily). The robot badge shows in every section (there's no agent grouping).
 - Hover: row bg → `--bg-hover`; grip (⠿) + ▶ timer + project/reminder/hide + delete (×) buttons
-  fade in. The priority bars + project label stay visible (the row's identity, wanted while its
-  actions are on screen); the time / reminder / hidden metadata fades out. Checkbox circle
+  fade in. The robot badge + priority bars + project label stay visible (the row's identity,
+  wanted while its actions are on screen); the time / reminder / hidden metadata fades out.
+  Checkbox circle
   border → `--accent`. Editing is reached by single-click or the `e` key — there is no explicit
   edit button.
 - Timing (the one row whose timer is running): the ⏸ button + live `H:MM:SS` elapsed are
@@ -512,13 +524,14 @@ window; below 455px of width a media query hides the masthead.
 | `⌫` / `Delete` | delete selected |
 | single-click | select + enter edit mode (caret at end, not full-select) |
 | `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, …) |
-| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` flips it to the project filter picker |
+| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` flips it to the project filter picker, a leading `@` to the agent/my picker |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets) — CSS `zoom` on `<html>`, persisted in localStorage (`dayapp-zoom`); scales every px dimension together, so the design's proportions hold at any size |
 
 **Show/Hide toggles (⌘P):** every layout surface is an independent, persisted toggle
 whose label reflects its state — `Goals`, `Notes`, `Today`/`Daily`/`Backlog` sections,
 `Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
-dimmed, ↺/× actions), and the per-tier `Priority 1/2/3` toggles. All persist in
+dimmed, ↺/× actions), the per-tier `Priority 1/2/3` toggles, and `Agent Tasks` (hides
+the 🤖-marked rows — the "what's actually mine" focus view). All persist in
 localStorage (display preferences, like zoom). The header ◐ button toggles both hidden
 surfaces at once. There is no hidden-only mode and no separate archive screen —
 inline-or-excluded is the whole visibility story.
@@ -533,9 +546,16 @@ projects (color dot + name, narrowed by the text after the `#`); picking one nar
 list to that project, picking the already-active one clears it (the same toggle rule as the
 priority tiers). Same `displayItems` pipeline — it composes with the priority tier.
 
-**Show Default View is the universal reset:** hidden entries excluded, priority tiers and
-project filter cleared, all three sections + Notes shown — and Goals hidden (the default
-working view is the plain task list). One command always restores it.
+**Agent filter (⌘F `@`):** the same picker pattern over the delegation axis — a leading `@`
+flips the hit list to two fixed entries, `🤖 Agent tasks` and `My tasks`; picking one narrows
+the main list to the agent's queue or Faraz's own rows, picking the active one clears it.
+Session-only like the project filter; composes with the tiers and the project filter in the
+same `displayItems` pipeline.
+
+**Show Default View is the universal reset:** hidden entries excluded, priority tiers,
+project and agent filters cleared, agent tasks shown, all three sections + Notes shown —
+and Goals hidden (the default working view is the plain task list). One command always
+restores it.
 
 The keyboard handler **ignores events when an `<input>`/`<textarea>` is focused** so typing
 into Notes or edit fields isn't hijacked.
@@ -582,7 +602,9 @@ into Notes or edit fields isn't hijacked.
 - No second accent colour. No status colours per section.
 - No tags or arbitrary due-date fields. (Projects are a first-class filter axis; reminders
   are a date-granular promotion; timers are a measurement layer; priorities are a `!1..3`
-  text token + Backlog sort; goals are the horizon layer above the sections — these are
+  text token + Backlog sort; goals are the horizon layer above the sections; agent
+  delegation is a `@` token + robot badge — the "who executes" axis that the Phase 3
+  agent-writes bridge will dispatch off. These are
   the deliberate scope expansions. Don't pile on more organising metadata on top.)
 - No time-tracking reports / billable hours / charts. The timer's payoff is the per-row
   cumulative + the Journal's per-day, per-task totals — not an analytics surface.

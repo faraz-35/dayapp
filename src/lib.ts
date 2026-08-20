@@ -29,6 +29,9 @@ export interface Item {
   projectId: string | null;
   remindAt: string | null;
   priority: 1 | 2 | 3 | null;
+  /** Delegation axis: true = fully delegable to an AI agent (the `@` token).
+   *  Housekeeping like priority — not logged. */
+  assignedToAgent: boolean;
 }
 
 export interface Action {
@@ -67,6 +70,8 @@ export const api = {
     invoke<void>("set_reminder", { id, remindAt }),
   setItemPriority: (id: string, priority: 1 | 2 | 3 | null) =>
     invoke<void>("set_item_priority", { id, priority }),
+  setItemAgent: (id: string, assigned: boolean) =>
+    invoke<void>("set_item_agent", { id, assigned }),
   runSweep: () => invoke<number>("run_sweep"),
   listActions: (opts: { since?: string; until?: string; limit?: number } = {}) =>
     invoke<Action[]>("list_actions", {
@@ -309,26 +314,58 @@ export const projectColor = (id: string): string => {
   return `hsl(${hue} 65% 68%)`;
 };
 
-/** The combined capture/edit text parser: resolves `#tag` → Project and
- *  `!1..3` → priority, stripping both from the returned text. The two token
- *  kinds are independent and composable in either order ("fix bug #acme !2",
- *  "fix bug !2 #acme", or either alone) — priority tokens are stripped first
- *  so a trailing `#tag` still satisfies the project-create rule on the
- *  remaining text. When nothing resolves, both fields are null and callers
- *  decide whether that means "not set" (on create) or "leave the existing
- *  value alone" (on edit).
+/** The combined capture/edit text parser: resolves `#tag` → Project, `!1..3` →
+ *  priority, and a bare `@` → agent assignment, stripping all three from the
+ *  returned text. The token kinds are independent and composable in any order
+ *  ("fix bug #acme !2 @", "fix bug @ !2 #acme", or any alone) — agent and
+ *  priority tokens are stripped first so a trailing `#tag` still satisfies the
+ *  project-create rule on the remaining text. When nothing resolves, the
+ *  fields are null/false-side and callers decide whether that means "not set"
+ *  (on create) or "leave the existing value alone" (on edit).
  *
  *  See `parseProjectTag` for the project resolution rules; the priority rule
- *  is: any `!0..3` at a word boundary, the LAST one wins, all are stripped.
- *  `!0` means "clear the priority" (only meaningful on edit).
+ *  is: any `!0..3` at a word boundary, the LAST one wins, all are stripped
+ *  (`!0` means "clear", only meaningful on edit). The agent rule is the same
+ *  shape: a standalone `@` assigns, `@0` is the explicit clear, `@word` stays
+ *  literal (so "ping @bob" is never eaten); last token wins.
  */
 export function parseItemTags(
   text: string,
   projects: Project[],
-): { text: string; projectId: string | null; createProjectName?: string; priority: 0 | 1 | 2 | 3 | null } {
-  const stripped = parsePriorityTag(text);
+): { text: string; projectId: string | null; createProjectName?: string; priority: 0 | 1 | 2 | 3 | null; agent: boolean | null } {
+  const noAgent = parseAgentToken(text);
+  const stripped = parsePriorityTag(noAgent.text);
   const project = parseProjectTag(stripped.text, projects);
-  return { ...project, priority: stripped.priority };
+  return { ...project, priority: stripped.priority, agent: noAgent.agent };
+}
+
+/** Extract & strip the delegation tokens: a standalone `@` (assign to the AI
+ *  agent) or `@0` (clear the assignment), both at word boundaries. `@1` also
+ *  assigns, mirroring the `!N` shape. Like the priority parser, a bare token
+ *  that would empty the row keeps the text intact so the input is never lost —
+ *  the assignment still applies. */
+function parseAgentToken(text: string): { text: string; agent: boolean | null } {
+  const re = /(?:^|\s)@([01]?)(?=\s|$)/g;
+  const spans: { start: number; end: number; on: boolean }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    spans.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      on: m[1] !== "0",
+    });
+  }
+  if (spans.length === 0) return { text, agent: null };
+  const agent = spans[spans.length - 1].on;
+  let out = "";
+  let pos = 0;
+  for (const s of spans) {
+    out += text.slice(pos, s.start);
+    pos = s.end;
+  }
+  out += text.slice(pos);
+  const normalized = out.replace(/\s+/g, " ").trim();
+  return { text: normalized || text.trim(), agent };
 }
 
 /** Extract & strip `!0..3` tokens (word-boundary `!` + digit, so "wow!!" and

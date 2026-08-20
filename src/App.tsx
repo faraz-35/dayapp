@@ -136,6 +136,15 @@ function DayApp() {
       return [];
     }
   });
+  // ⌘P "Show/Hide Agent Tasks" — hide the 🤖-marked rows to focus on the ones
+  // that are Faraz's own. Persisted like the other layout toggles; default on
+  // (agent rows are normal tasks until he says otherwise).
+  const [agentTasksVisible, setAgentTasksVisible] = useState(
+    () => localStorage.getItem("dayapp-agent-tasks-visible") !== "0",
+  );
+  // ⌘F "@agent/my" — narrow the list to the agent's tasks or Faraz's own;
+  // null = off. Session-only like the project filter (a search-shaped focus).
+  const [agentFilter, setAgentFilter] = useState<"agent" | "mine" | null>(null);
   // ⌘F "#project" — narrow the list to one project; null = off. The one
   // session-only filter (a search-shaped focus, not a layout preference);
   // composed with the priority tier in displayItems.
@@ -239,9 +248,10 @@ function DayApp() {
     localStorage.setItem("dayapp-hidden-items", showHiddenItems ? "1" : "0");
     localStorage.setItem("dayapp-hidden-notes", showHiddenNotes ? "1" : "0");
     localStorage.setItem("dayapp-hidden-priorities", JSON.stringify(hiddenPriorities));
+    localStorage.setItem("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
     // Retired key from the single-tier "only" filter era — one-time cleanup.
     localStorage.removeItem("dayapp-priority");
-  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities]);
+  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, agentTasksVisible]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the journal title simply ignores it.
@@ -258,22 +268,27 @@ function DayApp() {
     return () => clearInterval(id);
   }, []);
 
-  // What the user sees: items narrowed by the ⌘P hidden priority tiers and/or
-  // the ⌘F project filter, if any. Hiding a tier removes just that tier's
-  // rows — unmarked rows stay, and each tier is independent. Mutations read
-  // the full `items`, and DnD indexes map back to full-list space in
-  // handleMoveItem.
+  // What the user sees: items narrowed by the ⌘P hidden priority tiers, the ⌘P
+  // agent-tasks toggle, and/or the ⌘F project/agent filters, if any. Hiding a
+  // tier removes just that tier's rows — unmarked rows stay, and each tier is
+  // independent. Mutations read the full `items`, and DnD indexes map back to
+  // full-list space in handleMoveItem.
   const displayItems = useMemo<Record<Section, Item[]>>(() => {
-    if (hiddenPriorities.length === 0 && projectFilter === null) return items;
+    if (
+      hiddenPriorities.length === 0 && projectFilter === null &&
+      agentTasksVisible && agentFilter === null
+    ) return items;
     const matches = (i: Item) =>
       (i.priority === null || !hiddenPriorities.includes(i.priority)) &&
-      (projectFilter === null || i.projectId === projectFilter);
+      (projectFilter === null || i.projectId === projectFilter) &&
+      (agentTasksVisible || !i.assignedToAgent) &&
+      (agentFilter === null || (agentFilter === "agent") === i.assignedToAgent);
     return {
       today: items.today.filter(matches),
       daily: items.daily.filter(matches),
       backlog: items.backlog.filter(matches),
     };
-  }, [items, hiddenPriorities, projectFilter]);
+  }, [items, hiddenPriorities, projectFilter, agentTasksVisible, agentFilter]);
 
   // displayItems narrowed to the visible sections — a toggled-off section's
   // rows aren't rendered, searchable, keyboard-navigable, or totaled (they
@@ -362,14 +377,16 @@ function DayApp() {
       label: "Show Default View",
       hint: "reset every toggle + filter",
       // The universal reset: hidden entries excluded, filters cleared, all
-      // sections + Notes shown — and Goals hidden (the default working view
-      // is the plain task list).
+      // sections + Notes + agent tasks shown — and Goals hidden (the default
+      // working view is the plain task list).
       run: () => {
         setView("list");
         setShowHiddenItems(false);
         setShowHiddenNotes(false);
         setHiddenPriorities([]);
         setProjectFilter(null);
+        setAgentTasksVisible(true);
+        setAgentFilter(null);
         setSectionsVisible({ today: true, daily: true, backlog: true });
         setNotesVisible(true);
         setGoalsVisible(false);
@@ -423,6 +440,15 @@ function DayApp() {
       },
     })),
     {
+      id: "toggle-agent-tasks",
+      // The delegation axis: 🤖-marked rows are the agent's queue. Hiding them
+      // leaves just the rows that need Faraz — the inverse focus of ⌘F's
+      // "@agent" filter, which narrows *to* the queue.
+      label: agentTasksVisible ? "Hide Agent Tasks" : "Show Agent Tasks",
+      hint: "🤖 marked",
+      run: () => { setView("list"); setAgentTasksVisible((v) => !v); },
+    },
+    {
       id: "mobile-deploy",
       label: "Mobile: Deploy Task List Now",
       hint: "push to GitHub",
@@ -458,7 +484,7 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, agentTasksVisible]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -510,18 +536,20 @@ function DayApp() {
   };
 
   const handleCreate = async (section: Section, raw: string) => {
-    // Resolve `#tag` → project and `!1..3` → priority on capture (e.g.
-    // "fix bug #day !2" → dayapp project, priority 2), stripping both tokens
-    // from the text. Assignment is housekeeping, so it happens after the item
-    // exists.
-    const { text, projectId, createProjectName, priority } = parseItemTags(raw, projects);
+    // Resolve `#tag` → project, `!1..3` → priority, and `@` → agent assignment
+    // on capture (e.g. "fix bug #day !2 @" → dayapp project, priority 2,
+    // agent-owned), stripping the tokens from the text. Assignment is
+    // housekeeping, so it happens after the item exists.
+    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects);
     const item = await api.createItem(text, section);
     const assignId = projectId ?? (await materializeTagProject(createProjectName));
     // !0 ("clear") is a no-op at capture — a fresh item has no priority yet.
+    // Same for @0: fresh rows start unassigned.
     const tier = priority === 0 ? null : priority;
     const patch: Partial<Item> = {};
     if (assignId) patch.projectId = assignId;
     if (tier !== null) patch.priority = tier;
+    if (agent === true) patch.assignedToAgent = true;
     setItems((s) => ({
       ...s,
       // A backlog capture with a !N token must land in its tier group right
@@ -533,6 +561,7 @@ function DayApp() {
     }));
     if (assignId) api.setItemProject(item.id, assignId);
     if (tier !== null) api.setItemPriority(item.id, tier);
+    if (agent === true) api.setItemAgent(item.id, true);
   };
 
   // Drain the phone's capture inbox: each entry goes through handleCreate (so
@@ -604,12 +633,12 @@ function DayApp() {
   };
 
   const handleCommitEdit = async (id: string, raw: string) => {
-    const { text, projectId, createProjectName, priority } = parseItemTags(raw, projects);
+    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects);
     setEditingId(null);
     if (!text) return;
     // Apply the stripped text, and — only if a token resolved or created a
-    // project / priority — override that field. No tokens leave any existing
-    // values alone; !0 explicitly clears the priority.
+    // project / priority / agent assignment — override that field. No tokens
+    // leave any existing values alone; !0 / @0 explicitly clear.
     const assignId = projectId ?? (await materializeTagProject(createProjectName));
     // !0 maps to null — the explicit clear.
     const tier = priority === 0 ? null : priority;
@@ -617,6 +646,7 @@ function DayApp() {
       const patch: Partial<Item> = { text };
       if (assignId) patch.projectId = assignId;
       if (priority !== null) patch.priority = tier;
+      if (agent !== null) patch.assignedToAgent = agent;
       const update = (list: Item[]) => list.map((i) => (i.id === id ? { ...i, ...patch } : i));
       return {
         today: update(s.today),
@@ -630,6 +660,7 @@ function DayApp() {
     await api.editItem(id, text);
     if (assignId) api.setItemProject(id, assignId);
     if (priority !== null) api.setItemPriority(id, tier);
+    if (agent !== null) api.setItemAgent(id, agent);
   };
 
   // Soft-archive a task. With Show Hidden Tasks on, the row stays put flipped
@@ -763,10 +794,17 @@ function DayApp() {
 
   // Selecting a project in ⌘F's `#` mode narrows the main list to it; picking
   // the already-active project clears the filter — the same toggle rule as the
-  // ⌘P priority tiers. Show Regular View clears it with everything else.
+  // ⌘P priority tiers. The `@` mode works identically over the delegation axis:
+  // "agent" narrows to the 🤖 queue, "mine" to Faraz's own rows. Show Regular
+  // View clears both with everything else.
   const handleSelectProject = useCallback((id: string) => {
     setView("list");
     setProjectFilter((p) => (p === id ? null : id));
+  }, []);
+
+  const handleSelectAgent = useCallback((mode: "agent" | "mine") => {
+    setView("list");
+    setAgentFilter((f) => (f === mode ? null : mode));
   }, []);
 
   // ---- Keyboard nav ----------------------------------------------------
@@ -901,11 +939,15 @@ function DayApp() {
             {notesVisible && (
               <Notes hiddenFilter={showHiddenNotes ? "include" : "exclude"} />
             )}
-            {(hiddenPriorities.length > 0 || projectFilter !== null) && allVisible.length === 0 && (
+            {(hiddenPriorities.length > 0 || projectFilter !== null || agentFilter !== null) && allVisible.length === 0 && (
               <div className="empty">
                 {projectFilter
                   ? `No tasks in ${projects.find((p) => p.id === projectFilter)?.name ?? "project"}.`
-                  : "No tasks at the shown priorities."}
+                  : agentFilter === "agent"
+                    ? "No agent tasks."
+                    : agentFilter === "mine"
+                      ? "No tasks assigned to you."
+                      : "No tasks at the shown priorities."}
               </div>
             )}
             <SectionList
@@ -944,9 +986,11 @@ function DayApp() {
         hits={searchHits}
         projects={projects}
         activeProjectId={projectFilter}
+        activeAgentFilter={agentFilter}
         onClose={() => setSearchOpen(false)}
         onJump={jumpTo}
         onSelectProject={handleSelectProject}
+        onSelectAgent={handleSelectAgent}
       />
       <CommandPalette
         open={paletteOpen}

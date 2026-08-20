@@ -28,6 +28,8 @@ interface ExportItem {
   status: "active" | "done";
   lastCompletedDate: string | null;
   priority: 1 | 2 | 3 | null;
+  /** Carried for mirror completeness; the phone doesn't render it (yet). */
+  assignedToAgent: boolean;
   projectId: string | null;
   remindAt: string | null;
   totalSecs: number;

@@ -71,8 +71,8 @@ Your data in `~/Library/.../dayapp.db` is never touched.
 
 VS Code / Linear–style: press **⌘P** anywhere, type to filter, ↑/↓ to move, Enter to run.
 Currently: Show Default View (the universal reset), the Show/Hide toggles — Goals, Notes,
-Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3 — the mobile sync
-commands (Deploy Task List Now / Pull Captures Now / Configure Sync…), View Journal, and
+Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3, Agent Tasks — the mobile
+sync commands (Deploy Task List Now / Pull Captures Now / Configure Sync…), View Journal, and
 Update DayApp. Trivially extensible — add a command to the registry in `App.tsx`.
 
 ## Where things live
@@ -132,7 +132,7 @@ dayapp/
 | hover **◷** | set a reminder (Tomorrow / 3 days / week / pick date) |
 | hover **◐** | hide item/note (forever / day / week / month) |
 | `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
-| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` switches it to the project filter |
+| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` switches it to the project filter, a leading `@` to the agent/my filter |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets; persists across launches) |
 
 ## Hiding
@@ -171,8 +171,9 @@ You can also assign a project right from the capture field: end the text with a
 or a unique prefix (`#day` → "dayapp"). If the tag matches **no** existing
 project, a new one is created from it — but only when the tag is the last thing
 typed (`fix bug #acme` creates "acme"; `fix bug #acme notes` does not). The tag
-is stripped from the row once linked. (Tags compose with `!1..3` priority
-tokens — see [Priorities](#priorities).)
+is stripped from the row once linked. (Tags compose with `!1..3` priority and
+`@` agent tokens — see [Priorities](#priorities) and
+[Delegating to the agent](#delegating-to-the-agent).)
 
 To focus on one project's work, press **⌘F and type `#`**: the search list
 becomes your projects (keep typing after the `#` to narrow it), each shown with
@@ -208,6 +209,29 @@ Backlog whose items all share one tier renders undivided.
 alone (each command's hint shows its bars; the toggles persist across
 launches). **Show Default View** clears them all. Priorities are
 housekeeping, like projects: not logged to the journal.
+
+## Delegating to the agent
+
+Every task answers *what* and *when* — sections, reminders, priorities. The
+`@` token adds the one missing axis: **who executes**. End a task's text with
+a bare `@` ("refactor the parser @") to mark it as fully delegable to an AI
+agent — the token is stripped and the row grows a small **robot badge** in its
+metadata (before the priority bars, visible in every section, kept on hover).
+`@0` on a later edit takes the task back; editing without a token leaves the
+assignment alone. The token composes with `#tag` and `!N` in any order, and
+`@word` stays literal, so "ping @bob" is never eaten. Assignment is
+housekeeping — not logged to the journal.
+
+The point is triage and dispatch:
+
+- **⌘F → `@`** flips the search to the executor picker: **🤖 Agent tasks**
+  narrows the list to the agent's queue, **My tasks** to your own (picking the
+  active one clears it — same toggle rule as the project filter; session-only,
+  composes with the priority tiers and project filter).
+- **⌘P → Show/Hide Agent Tasks** hides the 🤖 rows entirely (persisted) — the
+  focus view for "what's actually mine". **Show Default View** shows them again.
+- **`dayapp --list`** marks agent rows with **🤖**, so an agent session (or you
+  over SSH) can see which tasks are theirs to take at a glance.
 
 ## Goals
 
@@ -334,7 +358,7 @@ session — it opens the same db (WAL + busy-timeout make the two processes
 safe together) and force-deploys after writes so the phone sees them fast:
 
 ```bash
-dayapp --list [today|daily|backlog]   # print tasks (▶ = timer running, ✓ = done)
+dayapp --list [today|daily|backlog]   # print tasks (▶ = timer running, ✓ = done, 🤖 = agent task)
 dayapp --add "call bank #money !1" --to backlog   # note: text is stored raw (no token parsing here)
 dayapp --complete "call bank"         # id prefix or unique text substring
 dayapp --start "ship mobile build"    # start the single active timer

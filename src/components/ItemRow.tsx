@@ -100,13 +100,14 @@ export default function ItemRow({
         <span className="item-text">{item.text}</span>
       )}
 
-      {/* Right-aligned metadata (priority + time + project label + reminder).
-          Priority + project stay visible on hover (the row's identity, wanted
-          while its actions are on screen); time / reminder yield to the
-          buttons. Suppressed while timing — the live elapsed then lives in the
-          action cluster instead. */}
-      {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars) && (
+      {/* Right-aligned metadata (robot + priority + time + project label +
+          reminder). Robot + priority + project stay visible on hover (the
+          row's identity, wanted while its actions are on screen); time /
+          reminder yield to the buttons. Suppressed while timing — the live
+          elapsed then lives in the action cluster instead. */}
+      {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars || item.assignedToAgent) && (
         <div className="item-meta">
+          {item.assignedToAgent && <AgentBadge />}
           {priorityBars}
           {item.hidden && (
             <span
@@ -188,6 +189,27 @@ export default function ItemRow({
         </>
       )}
     </div>
+  );
+}
+
+// The delegation badge: a small monochrome robot marking rows the AI agent can
+// take end to end (the `@` token). Identity metadata like the project label —
+// shown in every section (including the Backlog, unlike the bars: there's no
+// agent grouping) and kept visible on hover. Monochrome SVG rather than the 🤖
+// emoji so it tints with the metadata greys like every other row glyph; the
+// emoji form is the symbol in the ⌘F picker and the CLI.
+function AgentBadge() {
+  return (
+    <span className="agent-badge" title="Assigned to the AI agent">
+      <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true">
+        {/* antenna + head silhouette in currentColor; eyes punched in --bg */}
+        <circle cx="6" cy="1.6" r="1" />
+        <rect x="5.4" y="2.2" width="1.2" height="1.4" rx="0.6" />
+        <rect x="1.8" y="3.4" width="8.4" height="6.8" rx="1.8" />
+        <circle className="agent-eye" cx="4.5" cy="6.8" r="1" />
+        <circle className="agent-eye" cx="7.5" cy="6.8" r="1" />
+      </svg>
+    </span>
   );
 }
 
