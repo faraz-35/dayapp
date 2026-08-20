@@ -8,6 +8,8 @@ use std::sync::Mutex;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
+use crate::timers::{finalize_open_session_for_item, finalize_retiring_today_sessions};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Item {
@@ -256,6 +258,10 @@ impl Db {
     /// `last_completed_date` is what tells that sweep which completions belong
     /// to the current day (and keeps a same-day completion safe if the sweep
     /// has already run).
+    ///
+    /// If this item's timer is running, the open session is finalized inside
+    /// the same transaction (kept in history). The rule lives here, not in the
+    /// calling surface — the GUI's view of the active timer can be stale.
     pub fn complete_item(&self, id: &str) -> anyhow::Result<()> {
         let conn = self.0.lock().unwrap();
         let now = now_iso();
@@ -266,6 +272,10 @@ impl Db {
             "SELECT text, section, status FROM items WHERE id = ?1", params![id], |r| {
                 Ok((r.get(0)?, r.get(1)?, r.get(2)?))
             })?;
+
+        // Completing a running item stops its timer first — same transaction,
+        // whichever surface asked for the completion.
+        finalize_open_session_for_item(&tx, &now, id)?;
 
         if section == "daily" {
             // Daily: don't flip status — record completion for today. Item stays
@@ -352,6 +362,9 @@ impl Db {
         Ok(tx.commit()?)
     }
 
+    /// Delete an item. Any open session on it is finalized first, in the same
+    /// transaction (the session is kept — its item_text snapshot survives the
+    /// deletion, like actions), so a running timer can never outlive its row.
     pub fn delete_item(&self, id: &str) -> anyhow::Result<()> {
         let conn = self.0.lock().unwrap();
         let now = now_iso();
@@ -359,6 +372,7 @@ impl Db {
         let (text, section): (String, String) = tx.query_row(
             "SELECT text, section FROM items WHERE id = ?1", params![id],
             |r| Ok((r.get(0)?, r.get(1)?)))?;
+        finalize_open_session_for_item(&tx, &now, id)?;
         tx.execute("DELETE FROM items WHERE id = ?1", params![id])?;
         log_action(&tx, id, &text, "deleted", Some(&section), None, None, None, &now)?;
         Ok(tx.commit()?)
@@ -542,6 +556,7 @@ impl Db {
         // NULL date means a pre-date-logging version wrote it; retire those
         // too). Rows dated today are kept: the sweep runs at a day boundary,
         // so a today-dated completion belongs to the fresh day.
+        finalize_retiring_today_sessions(&tx, &now, &today)?;
         let purged = tx.execute(
             "DELETE FROM items
              WHERE section = 'today' AND status = 'done'
@@ -578,14 +593,20 @@ impl Db {
     /// the sweep's retirement step. `run_sweep` does this when the day boundary
     /// actually opens; this standalone pass catches rows a gated-out sweep
     /// left behind (e.g. ones written by older versions on a day whose sweep
-    /// already ran). Idempotent.
+    /// already ran). Idempotent. Finalizes any still-open session on the
+    /// retiring rows, same as the sweep.
     pub fn purge_completed_today(&self) -> anyhow::Result<usize> {
         let conn = self.0.lock().unwrap();
-        let n = conn.execute(
+        let now = now_iso();
+        let today = today_iso();
+        let tx = conn.unchecked_transaction()?;
+        finalize_retiring_today_sessions(&tx, &now, &today)?;
+        let n = tx.execute(
             "DELETE FROM items
              WHERE section = 'today' AND status = 'done'
                AND (last_completed_date IS NULL OR last_completed_date != ?1)",
-            params![today_iso()])?;
+            params![today])?;
+        tx.commit()?;
         Ok(n)
     }
 

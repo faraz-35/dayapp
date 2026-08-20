@@ -234,16 +234,71 @@ fn finalize_open_session(tx: &rusqlite::Transaction, now: &str) -> anyhow::Resul
         )
         .optional()?;
     if let Some(s) = started {
-        let secs = match (parse_ts(&s), parse_ts(now)) {
-            (Some(a), Some(b)) => Some((b - a).num_seconds().max(0)),
-            _ => None,
-        };
         tx.execute(
             "UPDATE sessions SET ended_at = ?1, duration_secs = ?2 WHERE ended_at IS NULL",
-            params![now, secs],
+            params![now, secs_between(&s, now)],
         )?;
     }
     Ok(())
+}
+
+/// Finalize the open session if it belongs to `item_id` — the backend half of
+/// "completing/deleting a running item stops its timer first". Called inside
+/// db.rs's completion/deletion transactions so the rule holds no matter which
+/// surface triggered the write: the GUI's notion of the active timer can be
+/// stale (a session started from the CLI is invisible to it until re-pulled),
+/// but the db can't be. The session itself is kept — only the clock stops.
+pub(crate) fn finalize_open_session_for_item(
+    tx: &rusqlite::Transaction,
+    now: &str,
+    item_id: &str,
+) -> anyhow::Result<()> {
+    let started: Option<String> = tx
+        .query_row(
+            "SELECT started_at FROM sessions WHERE ended_at IS NULL AND item_id = ?1 LIMIT 1",
+            params![item_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if let Some(s) = started {
+        tx.execute(
+            "UPDATE sessions SET ended_at = ?1, duration_secs = ?2
+             WHERE ended_at IS NULL AND item_id = ?3",
+            params![now, secs_between(&s, now), item_id],
+        )?;
+    }
+    Ok(())
+}
+
+/// Finalize open sessions on completed-today rows the sweep is about to
+/// retire. With complete_item stopping timers itself this is pure self-heal
+/// for orphaned sessions written before that rule existed — without it they'd
+/// keep ticking forever, outliving their deleted item with no row to stop
+/// them from. `today` is the retirement cutoff, same predicate as the DELETE.
+pub(crate) fn finalize_retiring_today_sessions(
+    tx: &rusqlite::Transaction,
+    now: &str,
+    today: &str,
+) -> anyhow::Result<()> {
+    tx.execute(
+        "UPDATE sessions SET ended_at = ?1,
+            duration_secs = MAX(0, CAST(strftime('%s', ?1) AS INTEGER)
+                                     - CAST(strftime('%s', started_at) AS INTEGER))
+         WHERE ended_at IS NULL AND item_id IN (
+            SELECT id FROM items
+             WHERE section = 'today' AND status = 'done'
+               AND (last_completed_date IS NULL OR last_completed_date != ?2))",
+        params![now, today],
+    )?;
+    Ok(())
+}
+
+// Whole seconds between two now_iso() timestamps, floored at 0.
+fn secs_between(started: &str, now: &str) -> Option<i64> {
+    match (parse_ts(started), parse_ts(now)) {
+        (Some(a), Some(b)) => Some((b - a).num_seconds().max(0)),
+        _ => None,
+    }
 }
 
 // The (item_id, started_at) of the open session, if any — for the live-elapsed
@@ -294,4 +349,101 @@ fn session_day_splits(start: NaiveDateTime, end: NaiveDateTime) -> Vec<(NaiveDat
         cursor = next_midnight;
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Db;
+
+    fn tmp_db() -> (Db, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("dayapp-test-{}", ulid::Ulid::new()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = Db::open(&dir.join("t.db")).unwrap();
+        (db, dir)
+    }
+
+    fn open_session_count(db: &Db) -> i64 {
+        let conn = db.0.lock().unwrap();
+        conn.query_row("SELECT COUNT(*) FROM sessions WHERE ended_at IS NULL", [], |r| r.get(0))
+            .unwrap()
+    }
+
+    /// The stop-on-complete rule is enforced by complete_item itself, in its
+    /// own transaction — no matter which surface asked for the completion
+    /// (the GUI's view of the active timer can be stale). Completing must
+    /// finalize the item's open session but leave a *different* item's timer
+    /// running; the session row is kept with a duration.
+    #[test]
+    fn completing_an_item_stops_its_own_timer_only() {
+        let (db, dir) = tmp_db();
+        let a = db.create_item("timed task", "today").unwrap();
+        let b = db.create_item("other task", "today").unwrap();
+
+        // b is the running one; complete a — b's timer must be untouched.
+        db.start_timer(&a.id).unwrap();
+        db.start_timer(&b.id).unwrap(); // single-timer rule: a's closed, b's open
+        db.complete_item(&a.id).unwrap();
+        assert_eq!(open_session_count(&db), 1, "b's timer must keep running");
+
+        // Now a is the running one; complete b — a's timer must be untouched.
+        db.start_timer(&a.id).unwrap();
+        db.complete_item(&b.id).unwrap();
+        assert_eq!(open_session_count(&db), 1, "a's timer must keep running");
+
+        // Complete the running item itself: its session must finalize.
+        db.start_timer(&b.id).unwrap();
+        db.complete_item(&b.id).unwrap();
+        assert_eq!(open_session_count(&db), 0, "completing the timing item must stop it");
+        // The stopped session is kept, finalized — not deleted. (duration_secs
+        // is second-granular, so a fast test yields 0; NULL is the open-row mark.)
+        let conn = db.0.lock().unwrap();
+        let kept: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sessions
+                  WHERE item_id = ?1 AND ended_at IS NOT NULL AND duration_secs IS NOT NULL",
+                params![b.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(kept >= 2, "finalized sessions must be kept, not deleted");
+        drop(conn);
+
+        // Deleting a running item stops its timer too — same in-transaction rule.
+        let c = db.create_item("doomed task", "today").unwrap();
+        db.start_timer(&c.id).unwrap();
+        db.delete_item(&c.id).unwrap();
+        assert_eq!(open_session_count(&db), 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The retirement sweep finalizes orphaned open sessions on done-today
+    /// rows before deleting them (self-heal for rows written before the
+    /// stop-on-complete rule existed) — a session must never outlive its item.
+    #[test]
+    fn retiring_sweep_finalizes_orphaned_sessions() {
+        let (db, dir) = tmp_db();
+        let a = db.create_item("orphaned timer", "today").unwrap();
+        db.start_timer(&a.id).unwrap();
+        // Simulate the pre-rule bug: complete the row via raw SQL so no path
+        // stops the timer — status done, dated yesterday, session still open.
+        {
+            let conn = db.0.lock().unwrap();
+            conn.execute(
+                "UPDATE items SET status = 'done', last_completed_date = '2000-01-01' WHERE id = ?1",
+                params![a.id],
+            )
+            .unwrap();
+        }
+        assert_eq!(open_session_count(&db), 1);
+
+        db.purge_completed_today().unwrap();
+        assert_eq!(open_session_count(&db), 0, "the retiring pass must stop the orphan");
+        let conn = db.0.lock().unwrap();
+        let kept: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sessions WHERE item_id = ?1", params![a.id], |r| r.get(0))
+            .unwrap();
+        assert_eq!(kept, 1, "the orphan's session is finalized, not deleted");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

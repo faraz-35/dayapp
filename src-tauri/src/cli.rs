@@ -44,13 +44,9 @@ pub fn run(args: Vec<String>) -> i32 {
         "--task" => task(&db, &rest),
         "--add" => add(&db, &rest),
         "--complete" => with_query(&db, &rest, |db, item| {
-            // Same rule as the GUI: completing a running item stops its timer
-            // first (the session is kept).
-            if let Ok(Some(t)) = db.get_active_timer() {
-                if t.item_id == item.id {
-                    db.stop_timer()?;
-                }
-            }
+            // complete_item finalizes the item's open session in the same
+            // transaction (kept in history) — the stop-on-complete rule is
+            // enforced backend-side, same as the GUI path.
             db.complete_item(&item.id)
         }),
         "--start" => with_query(&db, &rest, |db, item| {

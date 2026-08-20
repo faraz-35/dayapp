@@ -292,7 +292,12 @@ logged to `actions` — the Journal surfaces time as a separate dimension via
 - The active timer **persists across app restarts** (the open row is the source of truth).
   If the app closes mid-session the elapsed keeps counting honestly on reopen; the header
   chip's × discards the session for the "left it running overnight" case.
-- Completing or deleting a running item stops its timer first (the session is kept).
+- Completing or deleting a running item stops its timer first (the session is kept). The
+  rule is enforced **inside `complete_item`/`delete_item`'s transaction** — calling surfaces
+  never check, so it holds even when a surface's view of the active timer is stale (a
+  session started from the CLI is invisible to an open GUI until its 60s tick re-pulls).
+  The retirement sweep (`run_sweep`/`purge_completed_today`) finalizes any orphaned open
+  session on the rows it deletes — self-heal for data written before the rule existed.
 - Logic lives in `src-tauri/src/timers.rs`; the row control is in `src/components/ItemRow.tsx`,
   the header chip + `t` keybinding in `src/App.tsx`. Live elapsed ticks once a second in the
   frontend; the backend is stateless between ticks (it derives elapsed from `started_at`).

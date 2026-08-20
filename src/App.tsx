@@ -212,6 +212,10 @@ function DayApp() {
     // walking lands within a minute of the Mac app being open.
     const tick = setInterval(() => {
       api.runSweep().then(refresh).catch((e) => log.warn("sweep tick failed", e));
+      // The open session row is the timer's source of truth — reconcile the
+      // chip with CLI writes (--start/--complete from an SSH session) that the
+      // GUI's state never saw.
+      timersApi.active().then(setActiveTimer).catch((e) => log.warn("active timer reconcile failed", e));
       ingestRef.current()
         .then((n) => { if (n > 0) refresh(); })
         .catch((e) => log.warn("sync: capture pull failed", e));
