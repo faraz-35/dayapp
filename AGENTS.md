@@ -230,8 +230,9 @@ architecture — don't grow this one into it.
 
 ### CLI (remote access)
 
-The binary doubles as a headless CLI (`--list`, `--task`, `--add`, `--complete`, `--start`,
-`--goals`, `--deploy`, `--sync-pull-peek`) for SSH/zcode sessions — see `cli.rs`. It opens the
+The binary doubles as a headless CLI (`--list`, `--task`, `--search`, `--journal`, `--notes`,
+`--projects`, `--add`, `--complete`, `--start`, `--goals`, `--deploy`, `--sync-pull-peek`) for
+SSH/zcode sessions — see `cli.rs`. It opens the
 same db the GUI holds: WAL + `busy_timeout(5s)` make the two processes safe together,
 and the GUI's 60s deploy loop picks up CLI writes. `--add` stores text **raw** (token
 parsing lives in the frontend); a remote trigger for `t`-style actions goes through
@@ -244,6 +245,17 @@ alone. `--task <query>` prints one row in full including its details body — th
 surface for the hourly zcode automation that picks a 🤖 task and works it. `--goals`
 is read-only — the agent-context view
 of the identity layer, grouped timeless → long → short with achieved last.
+
+The read flags deliberately mirror the GUI's surfaces — what the app renders as panels,
+the CLI renders as text — so a remote session can access any information in any format:
+`--search` is ⌘F (a plain substring over item text; a leading `#` flips to the project
+axis — bare `#` lists projects, `#name` lists that project's rows — and `@agent`/`@my`
+flip to the delegation axis), `--journal [today|week|month|all|YYYY-MM-DD]` is the
+Journal view (actions grouped newest-first by day with the per-task ⏱ breakdown and day
+total, the same verbs, default `today` like the GUI), `--notes`/`--projects` are their
+sections, and the `--hidden` modifier on `--list`/`--notes` is the ⌘P "Show Hidden"
+reveal (archived rows marked ◐). `--task` also carries the row's ⏱ cumulative time and
+pending reminder. The read flags stay read-only; writes remain `--add`/`--complete`/`--start`.
 
 ### Timers (per-task time tracking — NOT logged)
 
@@ -348,7 +360,7 @@ dayapp/
     │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
     │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API)
-    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--add/--complete/--start/--goals/--deploy/--sync-pull-peek
+    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--notes/--projects/--add/--complete/--start/--goals/--deploy/--sync-pull-peek
     │   └── main.rs                 ← binary entrypoint (GUI, or cli::run when given flags)
     ├── schema.sql                  ← items + actions + meta + notes + projects + goals + sessions
     ├── Cargo.toml

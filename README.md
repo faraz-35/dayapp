@@ -365,11 +365,20 @@ the previous release if in doubt).
 
 The same binary is a tiny CLI for checking and triggering tasks from a remote
 session — it opens the same db (WAL + busy-timeout make the two processes
-safe together) and force-deploys after writes so the phone sees them fast:
+safe together) and force-deploys after writes so the phone sees them fast.
+The read flags mirror the GUI's surfaces (⌘F, the journal, the sections), so
+a remote session can reach any information the app can show:
 
 ```bash
-dayapp --list [today|daily|backlog]   # print tasks (▶ = timer, ✓ = done, 🤖 = agent task, #name = project)
+dayapp --list [today|daily|backlog] [--hidden]   # tasks (▶ timer, ✓ done, ◐ hidden, 🤖 agent, #name project)
 dayapp --task "PSX stock algo"        # one task in full, incl. its details (the agent prompt)
+dayapp --search "outreach"            # ⌘F: text substring
+dayapp --search "#job"                #   or a project's rows (bare # lists projects)
+dayapp --search "@agent"              #   or the delegation axis (@agent / @my)
+dayapp --journal [week]               # the journal: actions + per-task time by day
+                                      #   (today | week | month | all | YYYY-MM-DD)
+dayapp --notes [query] [--hidden]     # notes, optionally filtered by body substring
+dayapp --projects                     # projects as #tags
 dayapp --add "call bank #money !1" --to backlog   # note: text is stored raw (no token parsing here)
 dayapp --complete "call bank"         # id prefix or unique text substring
 dayapp --start "ship mobile build"    # start the single active timer
