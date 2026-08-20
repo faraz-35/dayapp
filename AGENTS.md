@@ -211,7 +211,13 @@ architecture — don't grow this one into it.
   every 60s (it also sees CLI writes — both processes share the db file), and ⌘P
   "Mobile: Deploy Task List Now" force-pushes. The export carries raw dates; the phone
   derives day rollovers with the same render-time comparisons the desktop uses, so a
-  stale export still renders correctly.
+  stale export still renders correctly. It mirrors the desktop list's row visibility:
+  hidden rows are excluded, and so are done Backlog rows (complete = vanish there;
+  only Today/Daily done rows travel, for render-time grey-out/retirement — `rowState`
+  in `MobileView.tsx` retires a done Backlog row too, so a stale export can't show it
+  as active). The gate's hash blanks the volatile `exported_at` stamp — it differs on
+  every build, so hashing the raw body would push on every 60s cycle even when nothing
+  changed.
 - **Capture inbox**: the phone appends `{id, text, section, at}` to `captures.json`.
   `pull_captures` returns entries whose ids aren't in `meta.sync_ingested_ids`; the
   **frontend** ingests them through the normal create path (so `#tag`/`!N` parse) and

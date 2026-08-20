@@ -309,6 +309,11 @@ function rowState(i: ExportItem): "active" | "done" | "gone" {
     // export predates that, just don't show them.
     return i.lastCompletedDate === today ? "done" : "gone";
   }
+  if (i.section === "backlog" && i.status === "done") {
+    // Complete = vanish on the Mac; the export drops these too, but a stale
+    // one that still carries the row must not render it as an active task.
+    return "gone";
+  }
   return "active";
 }
 

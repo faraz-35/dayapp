@@ -79,7 +79,9 @@ impl DeployOutcome {
 // The exported read model. Day-rollover rules (daily grey-out, done-today
 // retirement) are render-time date comparisons, so raw dates travel and the
 // phone derives display state against its own "today" — a stale export still
-// renders correctly overnight.
+// renders correctly overnight. The export also mirrors the desktop list's
+// row visibility: done Backlog rows are excluded (complete = vanish there);
+// only Today/Daily done rows travel, for render-time grey-out/retirement.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ExportItem {
@@ -166,6 +168,7 @@ pub fn build_export(db: &Db) -> anyhow::Result<(String, usize)> {
         let mut stmt = conn.prepare(
             "SELECT id, text, section, status, last_completed_date, priority, assigned_to_agent, project_id, remind_at
              FROM items WHERE hidden = 0
+               AND NOT (section = 'backlog' AND status = 'done')
              ORDER BY CASE section WHEN 'today' THEN 0 WHEN 'daily' THEN 1 ELSE 2 END,
                       CASE WHEN section = 'backlog' THEN COALESCE(priority, 99) ELSE 0 END,
                       sort_order, created_at",
@@ -217,7 +220,7 @@ pub fn deploy(db: &Db, force: bool) -> anyhow::Result<DeployOutcome> {
         return Ok(DeployOutcome::NotConfigured);
     }
     let (body, n) = build_export(db)?;
-    let hash = sha256_hex(body.as_bytes());
+    let hash = content_hash(&body);
     let last = db.meta_get("sync_last_push_hash")?.unwrap_or_default();
     if !force && last == hash {
         return Ok(DeployOutcome::Unchanged);
@@ -370,4 +373,18 @@ fn err_body(status: reqwest::StatusCode, text: &str) -> String {
 fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     digest.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The change gate's hash: the export with its volatile `exported_at` stamp
+/// blanked. The stamp differs on every build (second granularity), so hashing
+/// the raw body would defeat the gate and push on every 60s cycle even when
+/// nothing changed. Falls back to the raw-body hash if the doc won't reparse
+/// (it's JSON we just serialized — it always will).
+fn content_hash(body: &str) -> String {
+    let mut v: serde_json::Value =
+        serde_json::from_str(body).unwrap_or(serde_json::Value::String(body.to_string()));
+    if let Some(obj) = v.as_object_mut() {
+        obj.insert("exportedAt".into(), serde_json::Value::String(String::new()));
+    }
+    sha256_hex(serde_json::to_string(&v).unwrap_or_default().as_bytes())
 }
