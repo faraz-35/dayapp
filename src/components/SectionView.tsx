@@ -64,14 +64,21 @@ export default function SectionView({
       </div>
 
       {/* Always-open capture at the top of the section: type + Enter to add.
-          No button, no click-to-reveal — the input itself is the affordance. */}
+          No button, no click-to-reveal — the input itself is the affordance.
+          data-capture is the focus grammar's target (`nt` / `nd` / `nb`). */}
       <div className="capture">
         <input
+          data-capture={section}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); submit(); }
-            else if (e.key === "Escape") setDraft("");
+            // Empty draft → blur: the Esc ladder's editing → nothing rung
+            // for captures (a capture input isn't a grammar focus target).
+            else if (e.key === "Escape") {
+              if (draft) setDraft("");
+              else e.currentTarget.blur();
+            }
           }}
           spellCheck={false}
         />

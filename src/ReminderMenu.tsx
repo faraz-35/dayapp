@@ -18,10 +18,11 @@ const PRESETS: { days: number; label: string }[] = [
 ];
 
 export default function ReminderMenu({
-  remindAt, onSet,
+  remindAt, onSet, kb,
 }: {
   remindAt: string | null;
   onSet: (remindAt: string | null) => void;
+  kb?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -54,6 +55,7 @@ export default function ReminderMenu({
     <div className="hide-menu-wrap" ref={ref}>
       <button
         className="item-action"
+        data-kb={kb}
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
         title="Remind me"
         aria-label="Remind me"

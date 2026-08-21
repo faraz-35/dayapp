@@ -1,0 +1,58 @@
+// KeyboardHelp — the reference card for the keyboard focus grammar
+// (⌘P → Keyboard Shortcuts). A floating surface like the palette: fixed
+// backdrop + card, Escape or click-outside closes. Pure documentation;
+// nothing here executes. The grammar itself lives in App.tsx's key handler
+// and src/focusNav.ts.
+
+import { useEffect } from "react";
+
+function Row({ keys, children }: { keys: string[]; children: React.ReactNode }) {
+  return (
+    <div className="help-row">
+      <span className="help-keys">
+        {keys.map((k) => <kbd key={k}>{k}</kbd>)}
+      </span>
+      <span className="help-desc">{children}</span>
+    </div>
+  );
+}
+
+export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose: () => void }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="help-backdrop" onClick={onClose}>
+      <div className="help" onClick={(e) => e.stopPropagation()}>
+        <div className="help-title">Keyboard</div>
+
+        <div className="help-section">Focus an address</div>
+        <Row keys={["nn", "nt", "nd", "nb"]}>focus the Notes / Today / Daily / Backlog capture</Row>
+        <Row keys={["t1–9", "d1–9"]}>focus a Today / Daily row</Row>
+        <Row keys={["b11–49"]}>focus a Backlog row — tier 4 is unprioritized</Row>
+        <Row keys={["n1–9", "g1–9"]}>focus a note / goal</Row>
+
+        <div className="help-section">Act on the focused thing</div>
+        <Row keys={["1–6"]}>task: ▶ timer · # project · ◷ remind · ◐ hide · ⋯ details · × delete</Row>
+        <Row keys={["1–3"]}>note: ⌃ expand · ◐ hide · × delete</Row>
+        <Row keys={["1–3"]}>goal: ✓ achieve · # project · × delete</Row>
+        <Row keys={["e"]}>edit it</Row>
+        <Row keys={["Enter"]}>complete the focused task</Row>
+
+        <div className="help-section">Move / leave</div>
+        <Row keys={["j", "k"]}>select next / previous task</Row>
+        <Row keys={["Esc"]}>editing → focused → nothing — digits do nothing unfocused</Row>
+
+        <div className="help-section">Everywhere</div>
+        <Row keys={["⌘P", "⌘F"]}>command palette · search</Row>
+        <Row keys={["⌘+", "⌘-", "⌘0"]}>zoom in / out / reset</Row>
+      </div>
+    </div>
+  );
+}

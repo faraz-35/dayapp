@@ -12,9 +12,8 @@
 // line. The card shrinks in place (same look, just shorter; no layout
 // swap), and the collapsed card is one big click target: expanding focuses
 // its textarea with the caret at the end, so collapsed → editing is one
-// click. Which notes are collapsed persists in localStorage; deliberately
-// no keybinding — a minor action gets a small button (⌃ in the card's hover
-// actions), not a key.
+// click. Which notes are collapsed persists in localStorage; no dedicated
+// key — the focus grammar reaches it as digit 1 on a focused note.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { notesApi, type Note } from "./notesApi";
@@ -26,7 +25,7 @@ import HideMenu from "./HideMenu";
 // stays untouched.
 const COLLAPSED_KEY = "dayapp-notes-collapsed";
 
-export default function Notes({ hiddenFilter }: { hiddenFilter: HiddenFilter }) {
+export default function Notes({ hiddenFilter, focusedId }: { hiddenFilter: HiddenFilter; focusedId?: string | null }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState("");
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => {
@@ -164,6 +163,7 @@ export default function Notes({ hiddenFilter }: { hiddenFilter: HiddenFilter }) 
       {hiddenFilter !== "only" && (
         <div className="capture">
           <textarea
+            data-capture="notes"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -175,7 +175,13 @@ export default function Notes({ hiddenFilter }: { hiddenFilter: HiddenFilter }) 
                   setDraft("");
                 }
               }
-              if (e.key === "Escape") setDraft("");
+              // Empty draft → blur instead: the Esc ladder's editing →
+              // nothing rung for captures (there's no focused-thing state
+              // between — a capture input isn't one of the grammar's targets).
+              if (e.key === "Escape") {
+                if (draft) setDraft("");
+                else e.currentTarget.blur();
+              }
             }}
             rows={3}
             spellCheck={false}
@@ -188,6 +194,7 @@ export default function Notes({ hiddenFilter }: { hiddenFilter: HiddenFilter }) 
           key={note.id}
           note={note}
           hovered={hoveredId === note.id}
+          focused={focusedId === note.id}
           collapsed={collapsedIds.has(note.id)}
           onToggleCollapse={() => toggleCollapse(note.id)}
           onUpdate={handleUpdate}
@@ -203,10 +210,11 @@ export default function Notes({ hiddenFilter }: { hiddenFilter: HiddenFilter }) 
 // ---- Single note textarea ------------------------------------------------
 
 function NoteInput({
-  note, hovered, collapsed, onToggleCollapse, onUpdate, onDelete, onHide, onUnhide,
+  note, hovered, focused, collapsed, onToggleCollapse, onUpdate, onDelete, onHide, onUnhide,
 }: {
   note: Note;
   hovered: boolean;
+  focused: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
   onUpdate: (id: string, body: string) => void;
@@ -263,7 +271,7 @@ function NoteInput({
 
   return (
     <div
-      className={`note${collapsed ? " collapsed" : ""}${hovered ? " hovered" : ""}${note.hidden ? " hidden" : ""}`}
+      className={`note${collapsed ? " collapsed" : ""}${hovered ? " hovered" : ""}${focused ? " focused" : ""}${note.hidden ? " hidden" : ""}`}
       data-note-id={note.id}
       // The collapsed card is one big click target: expand + caret at end.
       onClick={collapsed ? onToggleCollapse : undefined}
@@ -291,6 +299,10 @@ function NoteInput({
             // Save immediately on blur.
             onUpdate(note.id, val);
           }}
+          // Esc ladder: editing → focused. Blur flushes the debounced save;
+          // the note keeps its focus highlight (App's focusNoteId) so the
+          // digits still act on it; a second Esc clears that.
+          onKeyDown={(e) => { if (e.key === "Escape") e.currentTarget.blur(); }}
           placeholder="Write or paste anything…"
           spellCheck={false}
         />
@@ -303,25 +315,29 @@ function NoteInput({
       >
         <button
           className="item-action"
+          data-kb="1"
           onClick={onToggleCollapse}
           title={collapsed ? "Expand note" : "Collapse note"}
           aria-label={collapsed ? "Expand note" : "Collapse note"}
         >{collapsed ? "⌄" : "⌃"}</button>
         {/* Hidden notes swap the ◐ hide menu for ↺ restore, mirroring hidden
-            item rows in Show-All mode. */}
+            item rows in Show-All mode. data-kb 2 = the hide slot either way
+            (the focused grammar's digits follow the visual slots). */}
         {note.hidden ? (
           <button
             className="item-action unhide-btn"
+            data-kb="2"
             onClick={onUnhide}
             title="Unhide note"
             aria-label="Unhide note"
           >↺</button>
         ) : (
-          <HideMenu onHide={onHide} />
+          <HideMenu kb="2" onHide={onHide} />
         )}
         {val.trim() && (
           <button
             className="note-delete"
+            data-kb="3"
             onClick={onDelete}
             title="Delete note"
             aria-label="Delete note"

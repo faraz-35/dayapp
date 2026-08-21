@@ -1,6 +1,6 @@
-// App — the shell. Owns app-wide state (items, selection, view, zoom), effects
-// (load, sweep tick, self-update events), and global keyboard handlers (⌘P,
-// ⌘F, ⌘+/⌘-, j/k).
+// App — the shell. Owns app-wide state (items, focus, view, zoom), effects
+// (load, sweep tick, self-update events), and the global keyboard handler
+// (⌘P, ⌘F, ⌘+/⌘-, j/k, the focus grammar — see "Keyboard nav" below).
 // Everything else is delegated to focused components in ./components.
 //
 // Layout contract (see AGENTS.md "Layout architecture"): the header is pinned
@@ -19,6 +19,8 @@ import SearchMenu, { type SearchHit } from "./components/SearchMenu";
 import UpdateOverlay from "./UpdateOverlay";
 import MobileView from "./MobileView";
 import MobileSyncSettings from "./MobileSyncSettings";
+import KeyboardHelp from "./KeyboardHelp";
+import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, popoverOpen, scrollIntoViewEl } from "./focusNav";
 
 type View = "list" | "journal";
 
@@ -39,6 +41,11 @@ const clampZoom = (z: number) =>
 // Masthead brand rotation: the "Live @ " words the header steps out to, one
 // picked at random every 2 minutes before returning to "Faraz" (home).
 const MASTHEAD_THEMES = ["growth", "money", "journey", "learn"] as const;
+
+// The address prefixes of the focus grammar: n (notes + captures), t/d
+// (Today/Daily rows), b (Backlog rows, two digits: tier then index), g
+// (goals). Typed directly, no mode — see the key handler below.
+const ADDRESS_KEYS = new Set(["n", "t", "d", "b", "g"]);
 
 // The Backlog's display order, mirroring the backend's ORDER BY (db.rs list):
 // priority first (unmarked last), then manual order. Optimistic updates that
@@ -99,9 +106,15 @@ function DayApp() {
     backlog: [],
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The keyboard focus grammar's non-item targets: exactly one thing is
+  // focused app-wide — a row (selectedId), a note, or a goal — and the digits
+  // and `e` act on whichever it is. Notes/Goals own their data; App owns only
+  // the focus id, passed down for the highlight.
+  const [focusNoteId, setFocusNoteId] = useState<string | null>(null);
+  const [focusGoalId, setFocusGoalId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  // The row whose details body is expanded (⋯ hover button, the ⌄ hint, or the
-  // `d` key). Session-only — transient inspection, like editingId.
+  // The row whose details body is expanded (⋯ hover button, the ⌄ hint, or
+  // digit 5 on the focused row). Session-only — transient inspection, like editingId.
   const [detailsOpenId, setDetailsOpenId] = useState<string | null>(null);
   const [view, setView] = useState<View>("list");
   // ---- Show/Hide toggles (⌘P) ---------------------------------------------
@@ -154,6 +167,7 @@ function DayApp() {
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [syncSettingsOpen, setSyncSettingsOpen] = useState(false);
   // Transient feedback pill for palette-triggered flows (deploy/pull results).
@@ -485,6 +499,12 @@ function DayApp() {
       run: () => setSyncSettingsOpen(true),
     },
     { id: "view-journal", label: "View Journal", run: () => setView("journal") },
+    {
+      id: "keyboard-help",
+      label: "Keyboard Shortcuts",
+      hint: "the focus grammar",
+      run: () => setHelpOpen(true),
+    },
     {
       id: "update",
       label: "Update DayApp",
@@ -825,51 +845,196 @@ function DayApp() {
     setAgentFilter((f) => (f === mode ? null : mode));
   }, []);
 
-  // ---- Keyboard nav ----------------------------------------------------
+  // ---- Keyboard nav + the focus grammar ----------------------------------
+  //
+  // The grammar (⌘P → Keyboard Shortcuts is the reference card):
+  //   nn / nt / nd / nb   focus the Notes / Today / Daily / Backlog capture
+  //   t1-9 / d1-9         focus a Today / Daily row
+  //   b11-49              focus a Backlog row (tier 4 = unprioritized)
+  //   n1-9 / g1-9         focus a note / goal
+  //   1-6 / 1-3           fire the focused thing's buttons, in visual order
+  //   e                   edit the focused thing
+  //   Esc                 editing → focused → nothing — digits are inert
+  //                       unfocused, so a stray 1-6 can't do anything unseen
+  // Exactly one thing is focused app-wide (a row, a note, or a goal). The
+  // first key of any address clears focus, so a digit typed mid-sequence has
+  // no target; the grammar is fixed-length, so there are no timeouts.
 
   const allVisible = useMemo(
     () => [...renderItems.today, ...renderItems.daily, ...renderItems.backlog],
     [renderItems],
   );
 
+  // The half-typed address. Nothing renders from it; the handler consumes
+  // exactly one following key (`b` re-arms once for its tier digit). Modifier
+  // combos and leaving the list view cancel it.
+  const pendingAddr = useRef("");
+
+  const clearFocus = useCallback(() => {
+    setSelectedId(null);
+    setFocusNoteId(null);
+    setFocusGoalId(null);
+  }, []);
+
+  const focusItem = useCallback((id: string) => {
+    setSelectedId(id);
+    setFocusNoteId(null);
+    setFocusGoalId(null);
+    scrollIntoViewEl(document.querySelector(`[data-item-id="${id}"]`));
+  }, []);
+
+  const focusNote = useCallback((id: string) => {
+    setSelectedId(null);
+    setFocusGoalId(null);
+    setFocusNoteId(id);
+    scrollIntoViewEl(document.querySelector(`[data-note-id="${id}"]`));
+  }, []);
+
+  const focusGoal = useCallback((id: string) => {
+    setSelectedId(null);
+    setFocusNoteId(null);
+    setFocusGoalId(id);
+    scrollIntoViewEl(document.querySelector(`[data-goal-id="${id}"]`));
+  }, []);
+
+  // Resolve a complete address sequence. Row indexes come from renderItems
+  // (filters and toggled-off sections compose for free); notes and goals come
+  // from the DOM (Notes/Goals own their lists — DOM order is visual order).
+  // An address that lands nowhere (t9 with three rows, a hidden section's
+  // capture) is a silent no-op.
+  const resolveAddress = (seq: string) => {
+    const [p, a, b] = seq;
+    const n = Number(a);
+    if (p === "n") {
+      if (a === "n") focusCapture("notes");
+      else if (a === "t") focusCapture("today");
+      else if (a === "d") focusCapture("daily");
+      else if (a === "b") focusCapture("backlog");
+      else if (n >= 1 && n <= 9) {
+        const id = noteIdAt(n);
+        if (id) focusNote(id);
+      }
+    } else if ((p === "t" || p === "d") && n >= 1 && n <= 9) {
+      const item = renderItems[p === "t" ? "today" : "daily"][n - 1];
+      if (item) focusItem(item.id);
+    } else if (p === "g" && n >= 1 && n <= 9) {
+      const id = goalIdAt(n);
+      if (id) focusGoal(id);
+    } else if (p === "b" && n >= 1 && n <= 4) {
+      const idx = Number(b);
+      if (!(idx >= 1 && idx <= 9)) {
+        // Tier digit in, index still coming — hold the sequence open.
+        pendingAddr.current = seq;
+        return;
+      }
+      const tier = n === 4 ? null : (n as 1 | 2 | 3);
+      const item = renderItems.backlog.filter((i) => (i.priority ?? null) === tier)[idx - 1];
+      if (item) focusItem(item.id);
+    }
+  };
+
+  // The mouse follows the same one-focused-thing rule as the grammar:
+  // clicking a row, note, or goal makes it the digits' target, exactly as
+  // addressing it would. Clicks elsewhere leave focus alone — Esc is the
+  // explicit way down the ladder.
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      const el = e.target instanceof Element ? e.target : null;
+      const noteId = el?.closest("[data-note-id]")?.getAttribute("data-note-id");
+      if (noteId) {
+        setSelectedId(null); setFocusGoalId(null); setFocusNoteId(noteId);
+        return;
+      }
+      const goalId = el?.closest("[data-goal-id]")?.getAttribute("data-goal-id");
+      if (goalId) {
+        setSelectedId(null); setFocusNoteId(null); setFocusGoalId(goalId);
+        return;
+      }
+      const itemId = el?.closest("[data-item-id]")?.getAttribute("data-item-id");
+      if (itemId) {
+        setFocusNoteId(null); setFocusGoalId(null); setSelectedId(itemId);
+      }
+    };
+    window.addEventListener("pointerdown", onDown);
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, []);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (view !== "list") return;
+      if (view !== "list" || helpOpen || syncSettingsOpen) {
+        pendingAddr.current = "";
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        pendingAddr.current = "";
+        return;
+      }
       const target = e.target as HTMLElement;
       const typing = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
 
       if (typing) return;
 
+      // A pending address consumes exactly the next key — the first key of
+      // the sequence already cleared focus, so a digit here can never fire a
+      // button on the thing that had it.
+      const addr = pendingAddr.current;
+      if (addr) {
+        e.preventDefault();
+        pendingAddr.current = "";
+        resolveAddress(addr + e.key);
+        return;
+      }
+
       if (e.key === "j" || e.key === "ArrowDown") {
         e.preventDefault();
+        setFocusNoteId(null);
+        setFocusGoalId(null);
         moveSelection(1);
       } else if (e.key === "k" || e.key === "ArrowUp") {
         e.preventDefault();
+        setFocusNoteId(null);
+        setFocusGoalId(null);
         moveSelection(-1);
       } else if (e.key === "Enter" && selectedId) {
         const item = allVisible.find((i) => i.id === selectedId);
         // Archived rows aren't actionable — completing one would silently
         // vanish it (done + hidden, invisible in every mode). Unhide first.
         if (item && !item.hidden) { e.preventDefault(); handleComplete(item.id, item.section); }
-      } else if (e.key === "e" && selectedId) {
+      } else if (e.key === "e") {
+        // The one edit verb, on whichever thing is focused.
+        if (selectedId) { e.preventDefault(); setEditingId(selectedId); }
+        else if (focusNoteId) { e.preventDefault(); focusNoteEditor(focusNoteId); }
+        else if (focusGoalId) { e.preventDefault(); focusGoalEditor(focusGoalId); }
+      } else if (e.key === "Escape") {
+        // Ladder rung focused → nothing. (editing → focused is each edit
+        // surface's own Escape — cancel/flush and blur, landing on the thing
+        // still focused here.) An open duration/project/reminder popover
+        // closes itself on this same press; keep the focus under it.
+        if (popoverOpen()) return;
+        clearFocus();
+      } else if (/^[1-9]$/.test(e.key)) {
+        // Fire the focused thing's Nth button (data-kb markers, visual
+        // order). Nothing focused → nothing happens, by design.
+        const scope = selectedId
+          ? document.querySelector(`[data-item-id="${selectedId}"]`)
+          : focusNoteId
+            ? document.querySelector(`[data-note-id="${focusNoteId}"]`)
+            : focusGoalId
+              ? document.querySelector(`[data-goal-id="${focusGoalId}"]`)
+              : null;
+        if (scope) { e.preventDefault(); clickKbButton(scope, Number(e.key)); }
+      } else if (ADDRESS_KEYS.has(e.key)) {
+        // Address prefix. Clears focus first — the user's safety rule — then
+        // waits for the one or two keys that complete it.
         e.preventDefault();
-        setEditingId(selectedId);
-      } else if (e.key === "d" && selectedId) {
-        // Toggle the selected row's details body (the spec / agent prompt).
-        e.preventDefault();
-        handleToggleDetails(selectedId);
-      } else if ((e.key === "Backspace" || e.key === "Delete") && selectedId) {
-        const item = allVisible.find((i) => i.id === selectedId);
-        if (item) { e.preventDefault(); handleDelete(item.id, item.section); }
-      } else if (e.key === "t" && selectedId) {
-        const item = allVisible.find((i) => i.id === selectedId);
-        if (item) { e.preventDefault(); handleToggleTimer(item.id); }
+        clearFocus();
+        pendingAddr.current = e.key;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allVisible, selectedId, view, activeTimer]);
+  }, [allVisible, selectedId, focusNoteId, focusGoalId, view, helpOpen, syncSettingsOpen, renderItems, activeTimer]);
 
   const moveSelection = (delta: number) => {
     const idx = allVisible.findIndex((i) => i.id === selectedId);
@@ -951,7 +1116,7 @@ function DayApp() {
                 in the item visibility/priority/project filters — they're a
                 separate surface, shown as-is. */}
             {goalsVisible && (
-              <Goals projects={projects} onCreateProject={handleCreateProject} />
+              <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} />
             )}
             {/* Notes — the lowest-friction capture surface, right under the
                 goals. Lives above the DnD area so typing/pasting isn't a drag
@@ -959,7 +1124,7 @@ function DayApp() {
                 With Show Hidden Notes on, hidden notes render inline (dimmed)
                 instead of being excluded. */}
             {notesVisible && (
-              <Notes hiddenFilter={showHiddenNotes ? "include" : "exclude"} />
+              <Notes hiddenFilter={showHiddenNotes ? "include" : "exclude"} focusedId={focusNoteId} />
             )}
             {(hiddenPriorities.length > 0 || projectFilter !== null || agentFilter !== null) && allVisible.length === 0 && (
               <div className="empty">
@@ -1022,6 +1187,7 @@ function DayApp() {
         commands={commands}
         onClose={() => setPaletteOpen(false)}
       />
+      <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <UpdateOverlay
         status={updateStatus}
         onDismiss={() => setUpdateStatus(null)}

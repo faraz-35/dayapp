@@ -112,7 +112,7 @@ meta    key, value           — currently holds last_sweep_date
 - `details` — free-form body under the one-line title: the task's spec/context, and for
   agent-delegated rows **the prompt an autonomous session executes**. Edited in the GUI via
   the hover button (⋯ when the row has no body, ⌄ once it does — the icon itself signals
-  "has details") or the `d` key (auto-growing textarea under the
+  "has details") or digit `5` on the focused row (auto-growing textarea under the
   open row — Notes' debounce/autosave pattern; a sibling of the row, never inside the
   dragged element). Content like notes, not state: edits are housekeeping — **not** logged —
   and the field stays out of the phone export. `dayapp --task <query>` prints the row plus
@@ -299,7 +299,7 @@ logged to `actions` — the Journal surfaces time as a separate dimension via
   The retirement sweep (`run_sweep`/`purge_completed_today`) finalizes any orphaned open
   session on the rows it deletes — self-heal for data written before the rule existed.
 - Logic lives in `src-tauri/src/timers.rs`; the row control is in `src/components/ItemRow.tsx`,
-  the header chip + `t` keybinding in `src/App.tsx`. Live elapsed ticks once a second in the
+  the header chip + digit `1` on the focused row in `src/App.tsx`. Live elapsed ticks once a second in the
   frontend; the backend is stateless between ticks (it derives elapsed from `started_at`).
 
 ---
@@ -351,10 +351,11 @@ dayapp/
 ├── scripts/
 │   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
 ├── src/
-│   ├── App.tsx                     ← shell only: state, effects, keyboard handlers, header, view switching, timer chip
+│   ├── App.tsx                     ← shell only: state, effects, the focus grammar (key handler), header, view switching, timer chip
 │   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + goalsApi/parseGoalText + projectColor/formatReminder/formatDuration
 │   ├── notesApi.ts                 ← notes typed API wrapper
 │   ├── log.ts                      ← prefixed console logger (webview side)
+│   ├── focusNav.ts                 ← the grammar's DOM side: data-kb button dispatch, capture focus, nth note/goal, popover check
 │   ├── main.tsx                    ← React entry
 │   ├── index.css                   ← the dark theme + all component styles
 │   ├── Notes.tsx                   ← self-contained notes component (own state + persistence)
@@ -363,6 +364,7 @@ dayapp/
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
 │   ├── CommandPalette.tsx          ← ⌘P modal: filter + keyboard nav
+│   ├── KeyboardHelp.tsx            ← ⌘P keyboard reference card (the focus grammar, documented)
 │   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
 │   ├── MobileView.tsx              ← Android client: read-only list + capture bar (GitHub fetch, renders when UA is Android)
 │   ├── MobileSyncSettings.tsx      ← ⌘P sync-config modal (repo/branch/token + validate-by-deploy)
@@ -399,7 +401,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 
 | File | Owns | Does NOT own |
 |---|---|---|
-| `App.tsx` | state (incl. the active timer), effects, keyboard handlers, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
+| `App.tsx` | state (incl. the active timer + the one focused thing), effects, the focus grammar key handler, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
 | `Goals.tsx` | goals state + capture + horizon groups + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
 | `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + capture input + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers |
@@ -476,7 +478,7 @@ keyboard-first.** Every choice below is intentional.
    a visible button to be discoverable, reconsider whether it needs a button or a keybinding.
 2. **Reveal actions on hover, not by default.** Icon-only buttons appear on row hover and
    carry a `title` tooltip. Resting state shows only content. This keeps the list scannable.
-3. **Keyboard-first, but not keyboard-everything.** DnD exists, but `j`/`k`/`Enter`/`e`/`⌫`
+3. **Keyboard-first, but not keyboard-everything.** DnD exists, but `j`/`k`/`Enter`/`e`/digits
    are the primary path. A feature that's mouse-only is incomplete — but minor actions get
    small hover buttons, not dedicated keybinds. Keybindings are for the frequent core
    (nav, complete, edit, timer); ⌘P is the one door to the rest.
@@ -553,7 +555,7 @@ window; below 455px of width a media query hides the masthead.
   Enter/blur, cancels on Escape.
 - Details: the spec under the title — a full-width, full-strength writing surface
   under the open row (the hover button — ⋯ when empty, ⌄ once it has a body — or
-  `d`; Escape saves + collapses); zero chrome, the expanded task reads as a small
+  digit `5` on the focused row; Escape saves + collapses); zero chrome, the expanded task reads as a small
   document (headline + body) — **primary content, never styled secondary** (no dim
   text, no rail/border, no indent). The body sits on the row's own grid: same
   padding/gap/radius plus mirrored leading slots (a real invisible grip glyph + the
@@ -568,21 +570,45 @@ window; below 455px of width a media query hides the masthead.
 - Empty sections are droppable zones (`useDroppable` per section) with a subtle highlight on hover.
 - Optimistic reorder in React; `api.moveItem` persists; backend re-indexes sort_order.
 
-**Keyboard:**
+**Keyboard — the focus grammar (ViMac-style direct addressing, no mode):**
 
-| Key | Action |
+Exactly one thing is focused app-wide — a task row (`selectedId`), a note, or a
+goal (`focusNoteId`/`focusGoalId` in `App.tsx`) — and the digits + `e` act on
+whichever it is. Addresses are typed directly; the first key of an address
+clears focus (a digit mid-sequence can never fire a button), the grammar is
+fixed-length (no timeouts), and an address that lands nowhere is a silent
+no-op. Mouse clicks follow the same rule — clicking a row/note/goal focuses it.
+The Esc ladder is `editing → focused → nothing`: each edit surface's own Escape
+cancels/flushes and blurs onto the still-focused thing; a global Escape (with
+no popover open) clears focus entirely, and at that bottom rung digits are
+inert — a stray `1-6` can't do anything unseen. ⌘P → Keyboard Shortcuts is the
+in-app reference card (`KeyboardHelp.tsx`); the DOM side lives in
+`focusNav.ts` (digits dispatch through `data-kb` markers, so a hover button and
+its digit share the one real onClick handler).
+
+| Keys | Action |
 |---|---|
+| `nn` / `nt` / `nd` / `nb` | focus the Notes / Today / Daily / Backlog capture input |
+| `t1`–`9` / `d1`–`9` | focus a Today / Daily row (visible rows, filter-aware) |
+| `b11`–`49` | focus a Backlog row — tier digit first (4 = unprioritized), then row |
+| `n1`–`9` / `g1`–`9` | focus a note / goal (DOM order = visual order) |
+| `1`–`6` (task) | ▶ timer · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row (hidden rows: `4` = ↺, `6` = ×) |
+| `1`–`3` (note) | ⌃/⌄ expand · ◐ hide · × delete |
+| `1`–`3` (goal) | ✓ achieve · # project · × delete |
 | `j` / `↓` | select next |
 | `k` / `↑` | select previous |
-| `Enter` | complete selected (toggles a crossed Today row back to active) |
-| `e` | edit selected |
-| `d` | toggle selected row's details body (the spec / agent prompt) |
-| `t` | start/stop timer on selected (toggles; starting stops any other) |
-| `⌫` / `Delete` | delete selected |
-| single-click | select + enter edit mode (caret at end, not full-select) |
-| `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, …) |
+| `Enter` | complete focused task (toggles a crossed Today row back to active) |
+| `e` | edit the focused thing (task input / note textarea / goal row) |
+| `Esc` | editing → focused → nothing |
+| single-click | task: select + enter edit mode (caret at end, not full-select); note/goal: focus it |
+| `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, keyboard help, …) |
 | `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` flips it to the project filter picker, a leading `@` to the agent/my picker |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets) — CSS `zoom` on `<html>`, persisted in localStorage (`dayapp-zoom`); scales every px dimension together, so the design's proportions hold at any size |
+
+The single-key `t` (timer), `d` (details), and `⌫` (delete) verbs are retired
+(2026-08-21) — digits `1`, `5`, and `6` on the focused row do the same jobs.
+Do not reintroduce bare single-letter verbs that collide with the address
+prefixes `n`/`t`/`d`/`b`/`g`.
 
 **Show/Hide toggles (⌘P):** every layout surface is an independent, persisted toggle
 whose label reflects its state — `Goals`, `Notes`, `Today`/`Daily`/`Backlog` sections,
@@ -634,8 +660,8 @@ into Notes or edit fields isn't hijacked.
   the caret at end, so collapsed → editing is one click. Its hover actions remain (⌄ ◐ ×;
   action clicks stopPropagation so they don't double as the expand click). Collapsed ids
   persist in localStorage (`dayapp-notes-collapsed`), pruned on delete — a display
-  preference, like zoom. Deliberately **no keybinding**: minor actions get small buttons,
-  not keys (see principle 3).
+  preference, like zoom. No dedicated key — the focus grammar reaches it as digit `1`
+  on a focused note (`n1-9` then `1`).
 
 **Goals:**
 - The identity layer at the top of the main page, above Notes: horizon groups in the

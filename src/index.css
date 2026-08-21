@@ -272,6 +272,9 @@ button {
 }
 .item:hover { background: var(--bg-hover); }
 .item.selected { background: var(--bg-hover); }
+/* Keyboard-focused goal row (the grammar's `g1-9` + digits target) — same
+   tint as .item.selected: one focus language across rows, notes, goals. */
+.goal-row.focused { background: var(--bg-hover); }
 .item.done { color: var(--done); }
 
 .item-check {
@@ -575,6 +578,11 @@ button {
   transition: box-shadow 0.1s ease;
 }
 .note:focus-within { box-shadow: 0 0 0 1px var(--accent); }
+
+/* Keyboard-focused note (the grammar's `n1-9` + digits target) — the same
+   resting tint a selected row gets, so every focusable surface reads alike.
+   :focus-within still adds the accent ring while it's being edited. */
+.note.focused { background: var(--bg-hover); }
 
 .note-textarea {
   width: 100%;
@@ -1035,6 +1043,87 @@ button {
   color: var(--text-faint);
   font-size: 12px;
   font-style: italic;
+}
+
+/* ---- Keyboard help (⌘P → Keyboard Shortcuts) ---------------------------- */
+/* Mirrors the palette's floating-surface pattern; z sits under the palette
+   (100) — the help opens after the palette closes, so they never stack. */
+
+.help-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 95;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  -webkit-app-region: no-drag;
+}
+
+.help {
+  width: 90%;
+  max-width: 420px;
+  max-height: 76vh;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  padding: 14px 16px 16px;
+}
+
+.help-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding-bottom: 12px;
+}
+
+.help-section {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+.help-section:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+
+.help-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.help-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 88px;
+}
+
+.help kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 3px 5px;
+  white-space: nowrap;
+}
+
+.help-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.55;
 }
 
 /* ---- Update overlay --------------------------------------------------- */

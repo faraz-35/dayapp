@@ -17,7 +17,7 @@ const OPTIONS: { id: HideDuration; label: string; sub: string }[] = [
   { id: "month", label: "For a month", sub: "until next month" },
 ];
 
-export default function HideMenu({ onHide }: { onHide: (duration: HideDuration) => void }) {
+export default function HideMenu({ onHide, kb }: { onHide: (duration: HideDuration) => void; kb?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -44,6 +44,7 @@ export default function HideMenu({ onHide }: { onHide: (duration: HideDuration) 
     <div className="hide-menu-wrap" ref={ref}>
       <button
         className="item-action"
+        data-kb={kb}
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
         title="Hide"
         aria-label="Hide"

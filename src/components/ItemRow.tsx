@@ -1,6 +1,8 @@
 // ItemRow — a single task row: checkbox, text (or inline editor), metadata,
-// and the hover-revealed action buttons (edit / project / reminder / hide /
-// delete). Drag handle is the ⠿ grip; DnD is wired by the parent via useSortable.
+// and the hover-revealed action buttons (timer / project / reminder / hide /
+// details / delete). Drag handle is the ⠿ grip; DnD is wired by the parent
+// via useSortable. The buttons carry data-kb markers (1-6, visual order) so
+// the focus grammar's digits fire them through their real onClick handlers.
 //
 // Completed Today rows render like a done daily — crossed out, in place — until
 // the day-boundary sweep retires them; the checkbox (or Enter) toggles them back.
@@ -150,6 +152,7 @@ export default function ItemRow({
           {(isTiming || !item.hidden) && (
             <button
               className={`item-action timer-btn${isTiming ? " timing" : ""}`}
+              data-kb="1"
               onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
               title={isTiming ? "Stop timer" : "Start timer"}
               aria-label={isTiming ? "Stop timer" : "Start timer"}
@@ -159,12 +162,14 @@ export default function ItemRow({
             <>
               <button
                 className="item-action unhide-btn"
+                data-kb="4"
                 onClick={(e) => { e.stopPropagation(); onUnhide(); }}
                 title="Unhide"
                 aria-label="Unhide"
               >↺</button>
               <button
                 className="item-action danger"
+                data-kb="6"
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 title="Delete"
                 aria-label="Delete"
@@ -173,25 +178,28 @@ export default function ItemRow({
           ) : (
             <>
               <ProjectMenu
+                kb="2"
                 projects={projects}
                 projectId={item.projectId}
                 onAssign={onSetProject}
                 onCreateProject={onCreateProject}
               />
-              <ReminderMenu remindAt={item.remindAt} onSet={onSetReminder} />
-              <HideMenu onHide={onHide} />
+              <ReminderMenu kb="3" remindAt={item.remindAt} onSet={onSetReminder} />
+              <HideMenu kb="4" onHide={onHide} />
               <button
                 className={`item-action${detailsOpen ? " active" : ""}`}
+                data-kb="5"
                 onClick={(e) => { e.stopPropagation(); onToggleDetails(); }}
                 title={detailsOpen
                   ? "Collapse details"
                   : item.details
-                    ? "Expand details (d)"
+                    ? "Expand details"
                     : "Add details — the task's spec (for agent tasks, the prompt)"}
                 aria-label={detailsOpen ? "Collapse details" : item.details ? "Expand details" : "Add details"}
               >{detailsOpen ? <Chevron up /> : item.details ? <Chevron /> : "⋯"}</button>
               <button
                 className="item-action danger"
+                data-kb="6"
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 title="Delete"
                 aria-label="Delete"

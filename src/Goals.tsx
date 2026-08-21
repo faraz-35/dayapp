@@ -39,10 +39,11 @@ const HORIZON_GROUPS: { horizon: GoalHorizon; label: string }[] = [
 ];
 
 export default function Goals({
-  projects, onCreateProject,
+  projects, onCreateProject, focusedId,
 }: {
   projects: Project[];
   onCreateProject: (name: string) => Promise<Project>;
+  focusedId?: string | null;
 }) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [draft, setDraft] = useState("");
@@ -133,7 +134,8 @@ export default function Goals({
     return (
       <div
         key={goal.id}
-        className={`item goal-row${achieved ? " done" : ""}`}
+        data-goal-id={goal.id}
+        className={`item goal-row${achieved ? " done" : ""}${focusedId === goal.id ? " focused" : ""}`}
         onClick={() => { if (!editing) setEditingId(goal.id); }}
       >
         {goal.horizon === "timeless" ? (
@@ -144,6 +146,7 @@ export default function Goals({
         ) : (
           <button
             className={`item-check${achieved ? " checked" : ""}`}
+            data-kb="1"
             onClick={(e) => {
               e.stopPropagation();
               achieved ? handleUnachieve(goal) : handleAchieve(goal);
@@ -181,6 +184,7 @@ export default function Goals({
               )}
             </div>
             <ProjectMenu
+              kb="2"
               projects={projects}
               projectId={goal.projectId}
               onAssign={(projectId) => handleSetProject(goal, projectId)}
@@ -188,6 +192,7 @@ export default function Goals({
             />
             <button
               className="item-action danger"
+              data-kb="3"
               onClick={(e) => { e.stopPropagation(); handleDelete(goal); }}
               title="Delete goal"
               aria-label="Delete goal"
@@ -219,7 +224,12 @@ export default function Goals({
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); submit(); }
-            else if (e.key === "Escape") setDraft("");
+            // Empty draft → blur: the Esc ladder's editing → nothing rung
+            // for captures (a capture input isn't a grammar focus target).
+            else if (e.key === "Escape") {
+              if (draft) setDraft("");
+              else e.currentTarget.blur();
+            }
           }}
           spellCheck={false}
         />

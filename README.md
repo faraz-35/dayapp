@@ -116,25 +116,34 @@ dayapp/
 
 ## Keyboard shortcuts
 
-| Key | Action |
+Power-user navigation is a **focus grammar** — ViMac-style direct addressing,
+typed with no mode. Exactly one thing (a task, a note, or a goal) is focused
+at a time, and digits act on whatever is focused. ⌘P → **Keyboard
+Shortcuts** shows the reference card in-app.
+
+| Keys | Action |
 |---|---|
-| `j` / `↓` | select next |
-| `k` / `↑` | select previous |
-| `Enter` | complete selected (on a crossed Today row: un-complete) |
-| `e` | edit selected |
-| `d` | toggle selected task's details — the spec under the title (for 🤖 tasks, the agent's prompt) |
-| `t` | start/stop timer on selected (toggles; starting stops any other) |
-| hover **⌃** (note) | collapse the note to its first line, in place; click the collapsed note (or **⌄**) to expand it with the caret at the end — one click back to editing |
-| `⌫` / `Delete` | delete selected |
-| single-click | select + edit (caret at end) |
+| `nn` / `nt` / `nd` / `nb` | focus the Notes / Today / Daily / Backlog capture input |
+| `t1`–`t9` / `d1`–`d9` | focus a Today / Daily row |
+| `b11`–`b49` | focus a Backlog row — first digit is the tier (4 = unprioritized), second the row |
+| `n1`–`n9` / `g1`–`g9` | focus a note / goal |
+| `1`–`6` (task) | ▶ timer · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row |
+| `1`–`3` (note) | ⌃ expand/collapse · ◐ hide · × delete |
+| `1`–`3` (goal) | ✓ achieve · # project · × delete |
+| `e` | edit the focused thing (caret at end) |
+| `Enter` | complete the focused task (on a crossed Today row: un-complete) |
+| `j` / `k` | select next / previous task |
+| `Esc` | editing → focused → nothing — digits do nothing when nothing is focused |
+| single-click | a task: select + edit; a note/goal: focus it for the digits |
 | drag handle (⠿) | drag between sections |
-| hover **▶** | start / stop a timer on the item |
-| hover **#** | assign / clear / create project for the item |
-| hover **◷** | set a reminder (Tomorrow / 3 days / week / pick date) |
-| hover **◐** | hide item/note (forever / day / week / month) |
 | `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
 | `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` switches it to the project filter, a leading `@` to the agent/my filter |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets; persists across launches) |
+
+The first key of an address (`n`/`t`/`d`/`b`/`g`) clears focus, so a digit
+mid-sequence can never fire a button. The old single-key `t` (timer), `d`
+(details), and `⌫` (delete) retired — the digits `1`, `5`, and `6` on the
+focused row do the same jobs.
 
 ## Hiding
 

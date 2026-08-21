@@ -17,12 +17,13 @@ import { type Project } from "./lib";
 import { usePopoverFlip } from "./usePopoverFlip";
 
 export default function ProjectMenu({
-  projects, projectId, onAssign, onCreateProject,
+  projects, projectId, onAssign, onCreateProject, kb,
 }: {
   projects: Project[];
   projectId: string | null;
   onAssign: (projectId: string | null) => void;
   onCreateProject: (name: string) => Promise<Project>;
+  kb?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -68,6 +69,7 @@ export default function ProjectMenu({
     <div className="hide-menu-wrap" ref={ref}>
       <button
         className="item-action"
+        data-kb={kb}
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
         title="Set project"
         aria-label="Set project"
