@@ -288,7 +288,10 @@ button {
   align-items: center;
   justify-content: center;
 }
-.item:hover .item-check { border-color: var(--accent); }
+/* Hover OR keyboard focus reveals the actions: the grammar's digits target
+   those buttons, so the focused row/note/goal must show them (focus mirrors
+   hover exactly — same tint, same buttons, same metadata fades). */
+:is(.item:hover, .item.selected, .item.focused) .item-check { border-color: var(--accent); }
 .item-check.checked {
   border-color: var(--accent) !important;
   background: var(--accent);
@@ -338,7 +341,7 @@ button {
   font-size: 17px;
   line-height: 1;
 }
-.item:hover .item-action { opacity: 1; }
+:is(.item:hover, .item.selected, .item.focused) .item-action { opacity: 1; }
 .item-action:hover { background: var(--bg-elev); color: var(--text); }
 .item-action.danger:hover { color: var(--danger); }
 
@@ -350,7 +353,7 @@ button {
   padding: 0 1px;
   line-height: 1;
 }
-.item:hover .grip, .item.dragging .grip { opacity: 0.6; }
+:is(.item:hover, .item.selected, .item.dragging) .grip { opacity: 0.6; }
 .item.dragging { opacity: 0.3; }
 
 /* ---- Capture input (per section) -------------------------------------- */
@@ -620,7 +623,8 @@ button {
    in Notes.tsx), not :hover — WKWebKit's :hover chain goes stale when the
    auto-growing textareas resize under a stationary pointer, leaving buttons
    stuck on a note the pointer already left. */
-.note.hovered .note-delete { opacity: 1; }
+/* Focused reveals like hovered (the digits' targets must be visible). */
+:is(.note.hovered, .note.focused) .note-delete { opacity: 1; }
 .note-delete:hover { background: var(--bg-hover); color: var(--danger); }
 
 /* Two corner buttons (hide + delete) sit side by side. */
@@ -636,7 +640,7 @@ button {
 /* The HideMenu trigger inherits .item-action's hover-reveal, but a note isn't an
    .item, so reveal it on .note hover explicitly. */
 .note-actions .item-action { opacity: 0; }
-.note.hovered .note-actions .item-action { opacity: 1; }
+:is(.note.hovered, .note.focused) .note-actions .item-action { opacity: 1; }
 
 /* ---- Hide menu (shared by item rows + notes) -------------------------- */
 
@@ -712,7 +716,7 @@ button {
   flex-shrink: 0;
 }
 .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { transition: opacity 0.08s ease; }
-.item:hover .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { opacity: 0; }
+:is(.item:hover, .item.selected, .item.focused) .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { opacity: 0; }
 
 /* Priority signal bars — the row's urgency tier, set via !1/!2/!3 tokens in
    the text. Filled count = urgency (P1 = 3 filled … P3 = 1), filled in the one
@@ -928,12 +932,16 @@ button {
 
 .item.hidden .item-text { color: var(--text-faint); }
 .item.hidden .item-check,
-.item.hidden:hover .item-check {
+/* .selected mirrors :hover for the focus grammar — and keeps the same
+   "inert" treatment on hidden rows (faint checkbox, no grip) either way. */
+.item.hidden:hover .item-check,
+.item.hidden.selected .item-check {
   border-color: var(--text-faint);
   opacity: 0.6;
   cursor: default;
 }
-.item.hidden:hover .grip { opacity: 0; }
+.item.hidden:hover .grip,
+.item.hidden.selected .grip { opacity: 0; }
 .hidden-chip {
   font-size: 11px;
   color: var(--text-faint);

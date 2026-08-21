@@ -141,9 +141,10 @@ Shortcuts** shows the reference card in-app.
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets; persists across launches) |
 
 The first key of an address (`n`/`t`/`d`/`b`/`g`) clears focus, so a digit
-mid-sequence can never fire a button. The old single-key `t` (timer), `d`
-(details), and `⌫` (delete) retired — the digits `1`, `5`, and `6` on the
-focused row do the same jobs.
+mid-sequence can never fire a button. Whatever is focused **shows its hover
+buttons**, so the digit targets are visible on screen. The old single-key `t`
+(timer), `d` (details), and `⌫` (delete) retired — the digits `1`, `5`, and `6`
+on the focused row do the same jobs.
 
 ## Hiding
 

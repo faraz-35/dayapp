@@ -581,9 +581,11 @@ no-op. Mouse clicks follow the same rule — clicking a row/note/goal focuses it
 The Esc ladder is `editing → focused → nothing`: each edit surface's own Escape
 cancels/flushes and blurs onto the still-focused thing; a global Escape (with
 no popover open) clears focus entirely, and at that bottom rung digits are
-inert — a stray `1-6` can't do anything unseen. ⌘P → Keyboard Shortcuts is the
-in-app reference card (`KeyboardHelp.tsx`); the DOM side lives in
-`focusNav.ts` (digits dispatch through `data-kb` markers, so a hover button and
+inert — a stray `1-6` can't do anything unseen. The focused thing **shows its hover
+buttons** (focus mirrors hover exactly: same tint, same revealed actions, same
+metadata fades), so the digits' targets are visible on screen. ⌘P → Keyboard
+Shortcuts is the in-app reference card (`KeyboardHelp.tsx`); the DOM side lives
+in `focusNav.ts` (digits dispatch through `data-kb` markers, so a hover button and
 its digit share the one real onClick handler).
 
 | Keys | Action |
