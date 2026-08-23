@@ -854,13 +854,17 @@ function DayApp() {
       if (!fromSection) return s;
       const moved = s[fromSection].find((i) => i.id === id);
       if (!moved) return s;
-      // The backend clears remind_at when a row leaves the Backlog (inside
-      // move_item); mirror it so the reminder chip is gone immediately, not
-      // at the next 60s refresh.
+      // Crossing sections: patch the row's own fields to the destination so
+      // section-derived rendering is right immediately — slot 1's verb (▶ vs
+      // ↑), the priority bars, the reminder chip — not at the next 60s
+      // refresh. Mirrors move_item's backend writes exactly, including the
+      // reminder clear on leaving the Backlog.
       const migrated =
-        fromSection === "backlog" && toSection !== "backlog"
-          ? { ...moved, remindAt: null }
-          : moved;
+        fromSection === toSection
+          ? moved
+          : fromSection === "backlog"
+            ? { ...moved, section: toSection, remindAt: null }
+            : { ...moved, section: toSection };
       if (fromSection === toSection) {
         const list = s[fromSection].filter((i) => i.id !== id);
         list.splice(fullIndex, 0, moved);
