@@ -47,6 +47,11 @@ const MASTHEAD_THEMES = ["growth", "money", "journey", "learn"] as const;
 // (goals). Typed directly, no mode — see the key handler below.
 const ADDRESS_KEYS = new Set(["n", "t", "d", "b", "g"]);
 
+// Free-mode scroll step (px) for j/k + ↑/↓ when nothing is focused. Read in
+// .scroll's local space, so zoom scales it with the content — the step is
+// always ~4 rows regardless of zoom level.
+const SCROLL_STEP = 120;
+
 // The Backlog's display order, mirroring the backend's ORDER BY (db.rs list):
 // priority first (unmarked last), then manual order. Optimistic updates that
 // touch priority or ordering must re-apply it — the tier dividers in
@@ -939,6 +944,7 @@ function DayApp() {
   //   n1-9 / g1-9         focus a note / goal
   //   1-6 / 1-3           fire the focused thing's buttons, in visual order
   //   e                   edit the focused thing
+  //   j/k, ↑/↓            walk the rows; nothing focused → scroll the page
   //   Esc                 editing → focused → nothing — digits are inert
   //                       unfocused, so a stray 1-6 can't do anything unseen
   // Exactly one thing is focused app-wide (a row, a note, or a goal). The
@@ -1046,7 +1052,10 @@ function DayApp() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (view !== "list" || helpOpen || syncSettingsOpen) {
+      // A floating surface owns the keys while it's open. Its focused input
+      // already covered typing; this also catches a blurred input behind a
+      // backdrop and freezes the page under the update overlay's swap.
+      if (helpOpen || syncSettingsOpen || paletteOpen || searchOpen || updateStatus) {
         pendingAddr.current = "";
         return;
       }
@@ -1070,17 +1079,38 @@ function DayApp() {
         return;
       }
 
-      if (e.key === "j" || e.key === "ArrowDown") {
+      // j/k + ↑/↓: with something focused they walk the rows (clamped at
+      // the ends — Esc or a new address is the only way out of focus mode).
+      // With nothing focused — the Esc ladder's bottom rung — they scroll
+      // the page instead: a view-only verb, so free mode gains a use
+      // without anything being able to happen unseen. Works in every view
+      // (the journal has no focusable rows); an open popover owns its keys,
+      // so the page never slides under a menu.
+      const down = e.key === "j" || e.key === "ArrowDown";
+      const up = e.key === "k" || e.key === "ArrowUp";
+      if (down || up) {
         e.preventDefault();
-        setFocusNoteId(null);
-        setFocusGoalId(null);
-        moveSelection(1);
-      } else if (e.key === "k" || e.key === "ArrowUp") {
-        e.preventDefault();
-        setFocusNoteId(null);
-        setFocusGoalId(null);
-        moveSelection(-1);
-      } else if (e.key === "Enter" && selectedId) {
+        if (selectedId === null && focusNoteId === null && focusGoalId === null) {
+          if (!popoverOpen()) {
+            document.querySelector(".scroll")?.scrollBy({
+              top: down ? SCROLL_STEP : -SCROLL_STEP,
+              behavior: "smooth",
+            });
+          }
+        } else {
+          setFocusNoteId(null);
+          setFocusGoalId(null);
+          moveSelection(down ? 1 : -1);
+        }
+        return;
+      }
+
+      if (view !== "list") {
+        pendingAddr.current = "";
+        return;
+      }
+
+      if (e.key === "Enter" && selectedId) {
         const item = allVisible.find((i) => i.id === selectedId);
         // Archived rows aren't actionable — completing one would silently
         // vanish it (done + hidden, invisible in every mode). Unhide first.
@@ -1119,7 +1149,7 @@ function DayApp() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allVisible, selectedId, focusNoteId, focusGoalId, view, helpOpen, syncSettingsOpen, renderItems, activeTimer]);
+  }, [allVisible, selectedId, focusNoteId, focusGoalId, view, helpOpen, syncSettingsOpen, paletteOpen, searchOpen, updateStatus, renderItems, activeTimer]);
 
   const moveSelection = (delta: number) => {
     const idx = allVisible.findIndex((i) => i.id === selectedId);

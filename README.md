@@ -132,7 +132,7 @@ Shortcuts** shows the reference card in-app.
 | `1`–`3` (goal) | ✓ achieve · # project · × delete |
 | `e` | edit the focused thing (caret at end) |
 | `Enter` | complete the focused task (on a crossed Today row: un-complete) |
-| `j` / `k` | select next / previous task |
+| `j` / `k` | select next / previous task — with nothing focused, they (and `↑`/`↓`) scroll the list |
 | `Esc` | editing → focused → nothing — digits do nothing when nothing is focused |
 | single-click | a task: select + edit; a note/goal: focus it for the digits |
 | drag handle (⠿) | drag between sections |
@@ -142,7 +142,9 @@ Shortcuts** shows the reference card in-app.
 
 The first key of an address (`n`/`t`/`d`/`b`/`g`) clears focus, so a digit
 mid-sequence can never fire a button. Whatever is focused **shows its hover
-buttons**, so the digit targets are visible on screen. The old single-key `t`
+buttons**, so the digit targets are visible on screen. With nothing focused
+(after `Esc`), `j`/`k`/`↑`/`↓` scroll the page — free mode is for reading, and
+its one verb is view-only. The old single-key `t`
 (timer), `d` (details), and `⌫` (delete) retired — the digits `1`, `5`, and `6`
 on the focused row do the same jobs.
 

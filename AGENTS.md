@@ -629,7 +629,12 @@ no-op. Mouse clicks follow the same rule — clicking a row/note/goal focuses it
 The Esc ladder is `editing → focused → nothing`: each edit surface's own Escape
 cancels/flushes and blurs onto the still-focused thing; a global Escape (with
 no popover open) clears focus entirely, and at that bottom rung digits are
-inert — a stray `1-6` can't do anything unseen. The focused thing **shows its hover
+inert — a stray `1-6` can't do anything unseen. That bottom rung ("free mode")
+is a reading mode: `j`/`k`/`↑`/`↓` scroll the one `.scroll` container (120px,
+smooth — a view-only verb, so it can't act on anything unseen; it works in
+every view, Journal included, where nothing is ever focused). While a row is
+focused, `j`/`k` walk the rows and clamp at the ends — they never drop focus;
+Esc or a new address is the only way out. The focused thing **shows its hover
 buttons** (focus mirrors hover exactly: same tint, same revealed actions, same
 metadata fades), so the digits' targets are visible on screen. ⌘P → Keyboard
 Shortcuts is the in-app reference card (`KeyboardHelp.tsx`); the DOM side lives
@@ -645,8 +650,9 @@ its digit share the one real onClick handler).
 | `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row (hidden rows: `4` = ↺, `6` = ×) |
 | `1`–`3` (note) | ⌃/⌄ expand · ◐ hide · × delete |
 | `1`–`3` (goal) | ✓ achieve · # project · × delete |
-| `j` / `↓` | select next |
-| `k` / `↑` | select previous |
+| `j` / `↓` | select next — clamped at the last row; never drops focus |
+| `k` / `↑` | select previous — clamped at the first row |
+| `j`/`k`/`↑`/`↓` (nothing focused) | scroll the page (120px, smooth) — free mode, every view |
 | `Enter` | complete focused task (toggles a crossed Today row back to active) |
 | `e` | edit the focused thing (task input / note textarea / goal row) |
 | `Esc` | editing → focused → nothing |

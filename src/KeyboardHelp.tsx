@@ -46,7 +46,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
         <Row keys={["Enter"]}>complete the focused task</Row>
 
         <div className="help-section">Move / leave</div>
-        <Row keys={["j", "k"]}>select next / previous task</Row>
+        <Row keys={["j", "k", "↑", "↓"]}>next / previous task · nothing focused: scroll the list</Row>
         <Row keys={["Esc"]}>editing → focused → nothing — digits do nothing unfocused</Row>
 
         <div className="help-section">Everywhere</div>
