@@ -39,7 +39,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
         <Row keys={["n1–9", "g1–9"]}>focus a note / goal</Row>
 
         <div className="help-section">Act on the focused thing</div>
-        <Row keys={["1–6"]}>task: ▶ timer · # project · ◷ remind · ◐ hide · ⋯ details · × delete</Row>
+        <Row keys={["1–6"]}>task: ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete</Row>
         <Row keys={["1–3"]}>note: ⌃ expand · ◐ hide · × delete</Row>
         <Row keys={["1–3"]}>goal: ✓ achieve · # project · × delete</Row>
         <Row keys={["e"]}>edit it</Row>

@@ -378,9 +378,22 @@ impl Db {
             |r| Ok((r.get(0)?, r.get(1)?)))?;
 
         if from_section != to_section {
-            tx.execute(
-                "UPDATE items SET section = ?1, updated_at = ?2 WHERE id = ?3",
-                params![to_section, now, id])?;
+            // Leaving the Backlog retires any pending reminder: a reminder's
+            // whole job is "pull this row into Today on its date", and the row
+            // has now been pulled — by drag, the Backlog's send-to-Today
+            // button, or --move. The same clearing the sweep's promotion does,
+            // enforced in the transaction so every surface gets it and a
+            // reminder can never sit stale on a non-Backlog row
+            // (promote_due_reminders only scans the Backlog).
+            if from_section == "backlog" {
+                tx.execute(
+                    "UPDATE items SET section = ?1, remind_at = NULL, updated_at = ?2 WHERE id = ?3",
+                    params![to_section, now, id])?;
+            } else {
+                tx.execute(
+                    "UPDATE items SET section = ?1, updated_at = ?2 WHERE id = ?3",
+                    params![to_section, now, id])?;
+            }
             log_action(&tx, id, &text, "moved",
                        Some(&from_section), Some(to_section), None, None, &now)?;
         }

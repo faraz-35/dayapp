@@ -127,7 +127,7 @@ Shortcuts** shows the reference card in-app.
 | `t1`–`t9` / `d1`–`d9` | focus a Today / Daily row |
 | `b11`–`b49` | focus a Backlog row — first digit is the tier (4 = unprioritized), second the row |
 | `n1`–`n9` / `g1`–`g9` | focus a note / goal |
-| `1`–`6` (task) | ▶ timer · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row |
+| `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row |
 | `1`–`3` (note) | ⌃ expand/collapse · ◐ hide · × delete |
 | `1`–`3` (goal) | ✓ achieve · # project · × delete |
 | `e` | edit the focused thing (caret at end) |
@@ -297,7 +297,8 @@ on launch, `promote_due_reminders()` moves any backlog item whose date has come
 due into Today, clears the reminder so it fires once, and logs a `moved` action.
 There's no background daemon and no macOS notification — consistent with the
 app's no-cron model. If the app is closed on the due day, the promotion happens
-the next time you open it.
+the next time you open it. Pulling the item into Today yourself (drag, the
+Backlog's ↑ button, `--move`) also clears the reminder — it has done its job.
 
 ## Time tracking
 

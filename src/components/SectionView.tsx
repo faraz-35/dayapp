@@ -14,7 +14,7 @@ import ItemRow, { ItemDetailsBody, PriorityBars } from "./ItemRow";
 export default function SectionView({
   section, label, hint, items, projects, selectedId, editingId, detailsOpenId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
-  onSetProject, onCreateProject, onSetReminder, onToggleDetails, onSetDetails,
+  onSetProject, onCreateProject, onSetReminder, onPromote, onToggleDetails, onSetDetails,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
   section: Section;
@@ -36,6 +36,8 @@ export default function SectionView({
   onSetProject: (id: string, projectId: string | null) => void;
   onCreateProject: (name: string) => Promise<Project>;
   onSetReminder: (id: string, remindAt: string | null) => void;
+  /** Send a Backlog row to the end of Today — the section's slot-1 verb. */
+  onPromote: (id: string) => void;
   onToggleDetails: (id: string) => void;
   onSetDetails: (id: string, details: string) => void;
   activeTimerId: string | null;
@@ -124,6 +126,7 @@ export default function SectionView({
                 onSetReminder={(remindAt) => onSetReminder(item.id, remindAt)}
                 onToggleDetails={() => onToggleDetails(item.id)}
                 onToggleTimer={() => onToggleTimer(item.id)}
+                onPromote={() => onPromote(item.id)}
                 isTiming={timing}
                 elapsedSec={timing ? liveElapsed : 0}
                 totalSec={timeTotals[item.id] ?? 0}

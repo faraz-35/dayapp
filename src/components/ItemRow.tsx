@@ -1,8 +1,10 @@
 // ItemRow — a single task row: checkbox, text (or inline editor), metadata,
-// and the hover-revealed action buttons (timer / project / reminder / hide /
-// details / delete). Drag handle is the ⠿ grip; DnD is wired by the parent
-// via useSortable. The buttons carry data-kb markers (1-6, visual order) so
-// the focus grammar's digits fire them through their real onClick handlers.
+// and the hover-revealed action buttons (timer / promote / project / reminder /
+// hide / details / delete). Drag handle is the ⠿ grip; DnD is wired by the
+// parent via useSortable. The buttons carry data-kb markers (1-6, visual
+// order) so the focus grammar's digits fire them through their real onClick
+// handlers. Slot 1 is section-dependent: ▶ timer on Today/Daily, ↑ send to
+// Today on the Backlog (⏸ stop on whichever row is timing).
 //
 // Completed Today rows render like a done daily — crossed out, in place — until
 // the day-boundary sweep retires them; the checkbox (or Enter) toggles them back.
@@ -25,7 +27,7 @@ import ReminderMenu from "../ReminderMenu";
 export default function ItemRow({
   item, projects, selected, editing, detailsOpen,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide, onUnhide,
-  onSetProject, onCreateProject, onSetReminder, onToggleDetails, onToggleTimer, isTiming, elapsedSec, totalSec,
+  onSetProject, onCreateProject, onSetReminder, onToggleDetails, onToggleTimer, onPromote, isTiming, elapsedSec, totalSec,
 }: {
   item: Item;
   projects: Project[];
@@ -44,6 +46,8 @@ export default function ItemRow({
   onSetReminder: (remindAt: string | null) => void;
   onToggleDetails: () => void;
   onToggleTimer: () => void;
+  /** Send to Today (Backlog rows only) — slot 1's verb there. */
+  onPromote: () => void;
   isTiming: boolean;
   elapsedSec: number;
   totalSec: number;
@@ -149,15 +153,39 @@ export default function ItemRow({
           {isTiming && (
             <span className="timer-live" title="Elapsed">{formatLiveDuration(elapsedSec)}</span>
           )}
-          {(isTiming || !item.hidden) && (
-            <button
-              className={`item-action timer-btn${isTiming ? " timing" : ""}`}
-              data-kb="1"
-              onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
-              title={isTiming ? "Stop timer" : "Start timer"}
-              aria-label={isTiming ? "Stop timer" : "Start timer"}
-            >{isTiming ? "⏸" : "▶"}</button>
-          )}
+          {/* Slot 1 — the row's primary verb, in digit order. A timing row
+              always shows ⏸: the one always-visible stop control outranks
+              everything. Otherwise the Backlog's slot 1 is "send to Today" —
+              pulling work into the day is the one action a shelved row
+              offers; timing belongs to Today/Daily, where the work happens.
+              A hidden row never starts anything, so it only ever shows the
+              stop form. */}
+          {(isTiming || !item.hidden) &&
+            (isTiming ? (
+              <button
+                className="item-action timer-btn timing"
+                data-kb="1"
+                onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
+                title="Stop timer"
+                aria-label="Stop timer"
+              >⏸</button>
+            ) : item.section === "backlog" ? (
+              <button
+                className="item-action promote-btn"
+                data-kb="1"
+                onClick={(e) => { e.stopPropagation(); onPromote(); }}
+                title="Send to Today"
+                aria-label="Send to Today"
+              ><ArrowUp /></button>
+            ) : (
+              <button
+                className="item-action timer-btn"
+                data-kb="1"
+                onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
+                title="Start timer"
+                aria-label="Start timer"
+              >▶</button>
+            ))}
           {item.hidden ? (
             <>
               <button
@@ -230,6 +258,30 @@ function AgentBadge() {
         <circle className="agent-eye" cx="7.5" cy="6.8" r="1" />
       </svg>
     </span>
+  );
+}
+
+// The Backlog's send-to-Today arrow. Stroked SVG like the details chevron —
+// same weight, centers in the 22×22 .item-action — rather than a unicode ↑,
+// whose glyph metrics vary by font (the reason Chevron is drawn too).
+function ArrowUp() {
+  return (
+    <svg
+      className="action-chevron"
+      viewBox="0 0 12 12"
+      width="12"
+      height="12"
+      aria-hidden="true"
+    >
+      <path
+        d="M6 9.4V2.6M3.2 5.4 6 2.6 8.8 5.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

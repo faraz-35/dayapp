@@ -120,7 +120,10 @@ meta    key, value           — currently holds last_sweep_date
   its body, so an automation picks from `--list` and reads the spec from `--task`.
 - `remind_at` — ISO `YYYY-MM-DD` on which a backlog item auto-promotes to `today`. The
   promotion is logged as a `moved` action (backlog→today) and `remind_at` is cleared so it
-  fires once. Date-granular, fires on launch (no cron / no macOS notification).
+  fires once. Date-granular, fires on launch (no cron / no macOS notification). Leaving the
+  Backlog by any path clears it too (enforced inside `move_item`: drag, the Backlog's
+  send-to-Today button, `--move`) — a reminder's job is pulling the row into Today, done
+  once the row has been pulled.
 - `actions.action` ∈ `created | completed | uncompleted | moved | edited | deleted | fell_to_backlog |
   goal_created | goal_achieved | goal_unachieved | goal_edited | goal_deleted`
 - `actions` rows set exactly one subject: `item_id` on item rows, `goal_id` on goal rows
@@ -448,7 +451,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `Goals.tsx` | goals state + capture + horizon groups + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
 | `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + capture input + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers |
-| `ItemRow.tsx` | one row's render + ▶/⏸ timer control + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
+| `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
 | `JournalView.tsx` | fetching + filtering + grouping the actions log + per-task time totals | — |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
@@ -577,7 +580,9 @@ window; below 455px of width a media query hides the masthead.
   Backlog rows never show bars: every tier group there is introduced by a `.tier-divider`
   hairline labeled with the group's bars, empty track for unmarked (Backlog only — never
   Today/Daily). The robot badge shows in every section (there's no agent grouping).
-- Hover: row bg → `--bg-hover`; grip (⠿) + ▶ timer + project/reminder/hide + delete (×) buttons
+- Hover: row bg → `--bg-hover`; grip (⠿) + the slot-1 verb (▶ timer; on Backlog rows ↑ send
+  to Today — the deliberate "pull this into my day" action; timing belongs to Today/Daily,
+  where work happens) + project/reminder/hide + delete (×) buttons
   fade in. The robot badge + priority bars + project label stay visible (the row's identity,
   wanted while its actions are on screen); the time / reminder / hidden metadata fades out.
   Checkbox circle
@@ -637,7 +642,7 @@ its digit share the one real onClick handler).
 | `t1`–`9` / `d1`–`9` | focus a Today / Daily row (visible rows, filter-aware) |
 | `b11`–`49` | focus a Backlog row — tier digit first (4 = unprioritized), then row |
 | `n1`–`9` / `g1`–`9` | focus a note / goal (DOM order = visual order) |
-| `1`–`6` (task) | ▶ timer · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row (hidden rows: `4` = ↺, `6` = ×) |
+| `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row (hidden rows: `4` = ↺, `6` = ×) |
 | `1`–`3` (note) | ⌃/⌄ expand · ◐ hide · × delete |
 | `1`–`3` (goal) | ✓ achieve · # project · × delete |
 | `j` / `↓` | select next |

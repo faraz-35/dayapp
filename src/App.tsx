@@ -854,6 +854,13 @@ function DayApp() {
       if (!fromSection) return s;
       const moved = s[fromSection].find((i) => i.id === id);
       if (!moved) return s;
+      // The backend clears remind_at when a row leaves the Backlog (inside
+      // move_item); mirror it so the reminder chip is gone immediately, not
+      // at the next 60s refresh.
+      const migrated =
+        fromSection === "backlog" && toSection !== "backlog"
+          ? { ...moved, remindAt: null }
+          : moved;
       if (fromSection === toSection) {
         const list = s[fromSection].filter((i) => i.id !== id);
         list.splice(fullIndex, 0, moved);
@@ -864,7 +871,7 @@ function DayApp() {
       }
       const fromList = s[fromSection].filter((i) => i.id !== id);
       const toList = [...s[toSection]];
-      toList.splice(fullIndex, 0, moved);
+      toList.splice(fullIndex, 0, migrated);
       return {
         ...s,
         [fromSection]: fromList,
@@ -872,6 +879,14 @@ function DayApp() {
       };
     });
     await api.moveItem(id, toSection, fullIndex);
+  };
+
+  // Send a Backlog row to the end of Today — the deliberate "pull this into my
+  // day" verb (slot 1 on Backlog rows, where Today/Daily rows carry ▶). Rides
+  // the drag machinery end to end: optimistic append at Today's end, logged
+  // `moved`, and any pending reminder cleared by move_item.
+  const handlePromote = (id: string) => {
+    handleMoveItem(id, "today", displayItems.today.length);
   };
 
   // ---- Search -----------------------------------------------------------
@@ -1228,6 +1243,7 @@ function DayApp() {
               onToggleDetails={handleToggleDetails}
               onSetDetails={handleSetDetails}
               onMoveItem={handleMoveItem}
+              onPromote={handlePromote}
               activeTimerId={activeTimer?.itemId ?? null}
               liveElapsed={liveElapsed}
               timeTotals={timeTotals}

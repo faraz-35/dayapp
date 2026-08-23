@@ -32,7 +32,7 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
 export default function SectionList({
   items, visible, projects, selectedId, editingId, detailsOpenId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
-  onSetProject, onCreateProject, onSetReminder, onMoveItem, onToggleDetails, onSetDetails,
+  onSetProject, onCreateProject, onSetReminder, onMoveItem, onPromote, onToggleDetails, onSetDetails,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
   items: Record<Section, Item[]>;
@@ -56,6 +56,8 @@ export default function SectionList({
   onCreateProject: (name: string) => Promise<Project>;
   onSetReminder: (id: string, remindAt: string | null) => void;
   onMoveItem: (id: string, toSection: Section, newIndex: number) => void;
+  /** Send a Backlog row to the end of Today — the section's slot-1 verb. */
+  onPromote: (id: string) => void;
   onToggleDetails: (id: string) => void;
   onSetDetails: (id: string, details: string) => void;
   activeTimerId: string | null;
@@ -144,6 +146,7 @@ export default function SectionList({
             onSetProject={onSetProject}
             onCreateProject={onCreateProject}
             onSetReminder={onSetReminder}
+            onPromote={onPromote}
             onToggleDetails={onToggleDetails}
             onSetDetails={onSetDetails}
             activeTimerId={activeTimerId}
