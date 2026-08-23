@@ -478,9 +478,6 @@ their queue" discipline lives in the skill's instructions, not the binary.
 
 ## Not yet built (intentional)
 
-- Global hotkey to toggle the window (Phase 2)
-- Menu bar presence (Phase 2)
-- Undo toast on destructive ops (Phase 1)
 - Scheduled autonomous runs over the 🤖 queue — the delegation verbs and the dayapp
   skill exist; the hourly trigger is still manual
 - Completing/editing tasks from the phone (mobile stays capture + read; interactive
