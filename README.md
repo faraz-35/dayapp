@@ -82,7 +82,7 @@ dayapp/
 │   ├── App.tsx              ← shell: state, effects, the focus grammar key handler, header, view switching
 │   ├── lib.ts               ← typed Tauri invoke wrappers + types + date/color helpers
 │   ├── focusNav.ts          ← the grammar's DOM side: digit dispatch to data-kb buttons
-│   ├── Notes.tsx            ← free-form notes (own state + API)
+│   ├── Notes.tsx            ← free-form notes (own state + API; ⌘F-in-note find, ⬇ .txt export)
 │   ├── Goals.tsx            ← goals: horizon groups + capture + achieve (own state)
 │   ├── notesApi.ts          ← notes invoke wrappers
 │   ├── log.ts               ← prefixed console logger (webview side)
@@ -133,16 +133,16 @@ Shortcuts** shows the reference card in-app.
 | `b11`–`b49` | focus a Backlog row — first digit is the tier (4 = unprioritized), second the row |
 | `n1`–`n9` / `g1`–`g9` | focus a note / goal |
 | `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row |
-| `1`–`3` (note) | ⌃ expand/collapse · ◐ hide · × delete |
+| `1`–`4` (note) | ⌃ expand/collapse · ⬇ download .txt · ◐ hide · × delete |
 | `1`–`3` (goal) | ✓ achieve · # project · × delete |
 | `e` | edit the focused thing (caret at end) |
 | `Enter` | complete the focused task (on a crossed Today row: un-complete) |
 | `j` / `k` | select next / previous task — with nothing focused, they (and `↑`/`↓`) scroll the list |
-| `Esc` | editing → focused → nothing — digits do nothing when nothing is focused |
+| `Esc` | find bar (in a note) → editing → focused → nothing — digits do nothing when nothing is focused |
 | single-click | a task: select + edit; a note/goal: focus it for the digits |
 | drag handle (⠿) | drag between sections |
 | `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
-| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` switches it to the project filter, a leading `@` to the agent/my filter |
+| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` switches it to the project filter, a leading `@` to the agent/my filter. While you're editing a note, it's a find bar **inside that note** instead |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets; persists across launches) |
 
 The first key of an address (`n`/`t`/`d`/`b`/`g`) clears focus, so a digit
@@ -169,6 +169,14 @@ into a picker:
   [Delegating to the agent](#delegating-to-the-agent)).
 
 **⌘P → Show Default View** clears either filter along with everything else.
+
+One exception to ⌘F's scope: **while a note's textarea has focus, ⌘F finds inside
+that note** — a slim bar opens on the note card itself, every match tints through
+the text, Enter / ↓ and ↑ step between them (with a `n/m` count), and Esc closes
+the bar and drops you back into editing with the current match selected. The
+global task search owns ⌘F everywhere else. (Notes export too: the ⬇ hover
+button — digit `2` on a focused note — saves the note as a `.txt` through the
+native save panel, named after its first line.)
 
 ## Hiding
 

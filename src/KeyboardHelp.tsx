@@ -40,17 +40,17 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
 
         <div className="help-section">Act on the focused thing</div>
         <Row keys={["1–6"]}>task: ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete</Row>
-        <Row keys={["1–3"]}>note: ⌃ expand · ◐ hide · × delete</Row>
+        <Row keys={["1–4"]}>note: ⌃ expand · ⬇ download .txt · ◐ hide · × delete</Row>
         <Row keys={["1–3"]}>goal: ✓ achieve · # project · × delete</Row>
         <Row keys={["e"]}>edit it</Row>
         <Row keys={["Enter"]}>complete the focused task</Row>
 
         <div className="help-section">Move / leave</div>
         <Row keys={["j", "k", "↑", "↓"]}>next / previous task · nothing focused: scroll the list</Row>
-        <Row keys={["Esc"]}>editing → focused → nothing — digits do nothing unfocused</Row>
+        <Row keys={["Esc"]}>find bar → editing → focused → nothing — digits do nothing unfocused</Row>
 
         <div className="help-section">Everywhere</div>
-        <Row keys={["⌘P", "⌘F"]}>command palette · search</Row>
+        <Row keys={["⌘P", "⌘F"]}>command palette · search (⌘F while editing a note: find in that note)</Row>
         <Row keys={["⌘+", "⌘-", "⌘0"]}>zoom in / out / reset</Row>
       </div>
     </div>

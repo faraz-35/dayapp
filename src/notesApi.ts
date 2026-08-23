@@ -22,4 +22,7 @@ export const notesApi = {
   hide: (id: string, duration: HideDuration) =>
     invoke<void>("hide_note", { id, duration }),
   unhide: (id: string) => invoke<void>("unhide_note", { id }),
+  // Export a body to a .txt via the native save panel. false = user cancelled.
+  saveAs: (defaultName: string, contents: string) =>
+    invoke<boolean>("save_text_file", { defaultName, contents }),
 };

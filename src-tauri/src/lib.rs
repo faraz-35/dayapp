@@ -154,6 +154,31 @@ async fn unhide_note(db: State<'_, DbState>, id: String) -> Result<(), String> {
     with_db(db, move |db| db.unhide_note(&id)).await
 }
 
+/// Save plain text through the native save panel (the note-export ⬇ button).
+/// Returns false when the user cancels the panel — a cancel isn't an error.
+/// Content export, not db state: nothing touches the db or `actions`; one info
+/// line records the completed flow (the logging convention's only addition —
+/// routine CRUD stays unlogged).
+#[tauri::command]
+async fn save_text_file(default_name: String, contents: String) -> Result<bool, String> {
+    // rfd's async API dispatches the panel to the main thread itself, which is
+    // why this runs as a plain async command instead of through with_db.
+    let Some(handle) = rfd::AsyncFileDialog::new()
+        .set_file_name(&default_name)
+        .save_file()
+        .await
+    else {
+        return Ok(false);
+    };
+    let path = handle.path().to_path_buf();
+    std::fs::write(&path, contents).map_err(|e| format!("write failed: {e}"))?;
+    log::info!(
+        "notes: exported \"{}\"",
+        path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default()
+    );
+    Ok(true)
+}
+
 // ---- Project commands ----------------------------------------------------
 // A second organising axis alongside Sections. Assignment is housekeeping, so
 // none of these are logged to `actions` — the journal stays focused on
@@ -575,7 +600,7 @@ pub fn run() {
             hide_item, unhide_item,
             list_actions,
             list_notes, create_note, update_note, delete_note,
-            hide_note, unhide_note,
+            hide_note, unhide_note, save_text_file,
             list_projects, create_project, rename_project, delete_project, set_item_project,
             set_reminder, set_item_priority, set_item_agent, set_item_details,
             list_goals, create_goal, edit_goal, set_goal_project,

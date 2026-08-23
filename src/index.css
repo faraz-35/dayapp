@@ -607,6 +607,93 @@ button {
 }
 .note-textarea::placeholder { color: var(--text-faint); }
 
+/* ---- Find in note (⌘F while editing a note) ---------------------------- */
+/* A slim bar at the top of the card, in-flow while it lasts — inline chrome
+   that belongs to the note, not a page-level floating surface. While it's
+   open the matches paint through a transparent-text mirror under the textarea
+   (a textarea can't tint ranges itself). */
+
+.note-find {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+.note-find-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 8px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.1s ease;
+}
+.note-find-input:focus { border-color: var(--accent); }
+.note-find-input::placeholder { color: var(--text-faint); }
+.note-find-count {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.note-find-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background 0.08s ease, color 0.08s ease;
+}
+.note-find-btn:hover { background: var(--bg-hover); color: var(--text); }
+/* While the bar is open it owns the card's top row, so the hover-action
+   cluster (⌃ ⬇ ◐ ×, absolute at the top-right corner) steps down a row to sit
+   beside the first text line instead of on top of the bar's buttons — exactly
+   where it lives relative to the text when the bar is closed. */
+.note.finding .note-actions { top: 36px; }
+
+/* The mirror: absolutely under the textarea (which sits above it with
+   transparent background — z-index on a positioned element, the wrapper owns
+   both), laying out the same text with the same metrics — .note-textarea's
+   font, size, line-height, zero padding, pre-wrap + break-word — so each mark
+   lands exactly under its matched glyphs. Text color transparent: only the
+   marks' backgrounds read through. pointer-events none, so it never
+   intercepts the editor. */
+.note-body-wrap { position: relative; }
+.note-body-wrap .note-textarea { position: relative; z-index: 1; }
+.note-mirror {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: transparent;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 0;
+  margin: 0;
+  min-height: 28px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+}
+/* rgba() of --accent: the token is a plain hex, so the alphas are spelled out
+   here (same pattern as the reminder chip / dropzone tints). */
+.note-mirror mark {
+  background: rgba(123, 140, 255, 0.25);
+  color: transparent;
+  border-radius: 2px;
+}
+.note-mirror mark.note-find-cur { background: rgba(123, 140, 255, 0.55); }
+
 .note-delete {
   width: 18px;
   height: 18px;

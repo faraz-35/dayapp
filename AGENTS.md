@@ -140,7 +140,10 @@ notes   id, body, sort_order, created_at, updated_at
 ```
 
 Notes are **content**, not **activity**. They have their own table and are never written
-to `actions`. Do not add notes to the journal.
+to `actions`. Do not add notes to the journal. The ⬇ export (a .txt through the native
+save panel — `save_text_file` in `lib.rs`, no db involvement) and the note-local ⌘F find
+are pure reading/export verbs over that content: also never logged (one Rust info line
+records a completed export, per the logging convention).
 
 ### Projects (a second organising axis — NOT logged)
 
@@ -402,7 +405,7 @@ dayapp/
 │   ├── focusNav.ts                 ← the grammar's DOM side: data-kb button dispatch, capture focus, nth note/goal, popover check
 │   ├── main.tsx                    ← React entry
 │   ├── index.css                   ← the dark theme + all component styles
-│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence)
+│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export)
 │   ├── Goals.tsx                   ← goals: horizon groups + capture + achieve (own state; between Notes and the sections)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
@@ -626,7 +629,7 @@ whichever it is. Addresses are typed directly; the first key of an address
 clears focus (a digit mid-sequence can never fire a button), the grammar is
 fixed-length (no timeouts), and an address that lands nowhere is a silent
 no-op. Mouse clicks follow the same rule — clicking a row/note/goal focuses it.
-The Esc ladder is `editing → focused → nothing`: each edit surface's own Escape
+The Esc ladder is `find bar (in a note) → editing → focused → nothing`: each edit surface's own Escape
 cancels/flushes and blurs onto the still-focused thing; a global Escape (with
 no popover open) clears focus entirely, and at that bottom rung digits are
 inert — a stray `1-6` can't do anything unseen. That bottom rung ("free mode")
@@ -648,17 +651,17 @@ its digit share the one real onClick handler).
 | `b11`–`49` | focus a Backlog row — tier digit first (4 = unprioritized), then row |
 | `n1`–`9` / `g1`–`9` | focus a note / goal (DOM order = visual order) |
 | `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row (hidden rows: `4` = ↺, `6` = ×) |
-| `1`–`3` (note) | ⌃/⌄ expand · ◐ hide · × delete |
+| `1`–`4` (note) | ⌃/⌄ expand · ⬇ download .txt · ◐ hide · × delete — ⬇ and × need content (hidden notes: `3` = ↺, `4` = ×) |
 | `1`–`3` (goal) | ✓ achieve · # project · × delete |
 | `j` / `↓` | select next — clamped at the last row; never drops focus |
 | `k` / `↑` | select previous — clamped at the first row |
 | `j`/`k`/`↑`/`↓` (nothing focused) | scroll the page (120px, smooth) — free mode, every view |
 | `Enter` | complete focused task (toggles a crossed Today row back to active) |
 | `e` | edit the focused thing (task input / note textarea / goal row) |
-| `Esc` | editing → focused → nothing |
+| `Esc` | find bar (in a note) → editing → focused → nothing |
 | single-click | task: select + enter edit mode (caret at end, not full-select); note/goal: focus it |
 | `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, keyboard help, …) |
-| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` flips it to the project filter picker, a leading `@` to the agent/my picker |
+| `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` flips it to the project filter picker, a leading `@` to the agent/my picker. **While a note's textarea (or its find bar) has focus, ⌘F is note-local instead** — see Notes below |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets) — CSS `zoom` on `<html>`, persisted in localStorage (`dayapp-zoom`); scales every px dimension together, so the design's proportions hold at any size |
 
 The single-key `t` (timer), `d` (details), and `⌫` (delete) verbs are retired
@@ -720,11 +723,30 @@ into Notes or edit fields isn't hijacked.
 - Each note card collapses **in place**: the ⌃ button in its hover actions folds it to
   one line (its first non-empty line, ellipsized) — same card, just shorter, no layout
   swap. The collapsed card is one big click target: expanding focuses its textarea with
-  the caret at end, so collapsed → editing is one click. Its hover actions remain (⌄ ◐ ×;
+  the caret at end, so collapsed → editing is one click. Its hover actions remain (⌄ ⬇ ◐ ×;
   action clicks stopPropagation so they don't double as the expand click). Collapsed ids
   persist in localStorage (`dayapp-notes-collapsed`), pruned on delete — a display
   preference, like zoom. No dedicated key — the focus grammar reaches it as digit `1`
   on a focused note (`n1-9` then `1`).
+- **⬇ download (slot 2):** exports the note's body as a `.txt` through the native save
+  panel (`save_text_file` in `lib.rs` — `rfd`'s async panel, which dispatches to the
+  main thread itself; the command returns `false` on cancel, not an error). The
+  suggested filename is the note's first non-empty line (the same line the collapsed
+  preview shows), sanitized, `.txt` appended. Shown on hover / focused like every
+  action, only when the note has content (like ×); hidden notes skip it. Exporting
+  flushes any debounced edit first, so the file always matches what's on screen.
+- **⌘F is note-local while editing:** when a note's textarea (or the find bar itself)
+  has focus, ⌘F opens a find bar on that note instead of the global item search —
+  `Notes.tsx` captures the key on window (capture phase) ahead of App's global ⌘F.
+  The bar is inline chrome at the top of the card while it lasts (not a floating
+  surface — it belongs to the note). Matches paint through a transparent-text mirror
+  div laid out under the textarea with identical metrics (`.note-mirror` in
+  `index.css` — a textarea can't tint ranges itself): all matches a faint accent
+  tint, the current one stronger. Enter / ↓ and ↑ / ⇧Enter step matches (wrapping;
+  arrows only, never letters, in the field), the count reads `n/m`, and Esc closes
+  the bar and refocuses the textarea with the current match selected — the find bar
+  is the top rung of the Esc ladder. Query state is per note (persists across opens);
+  the match index and query live in `NoteInput` beside the live text, not in App.
 
 **Goals:**
 - The identity layer at the top of the main page, above Notes: horizon groups in the
