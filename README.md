@@ -42,13 +42,10 @@ npm run tauri build
 # → src-tauri/target/release/bundle/macos/DayApp.app
 ```
 
-The `.dmg` step will fail without Apple notarization credentials — that's expected; the
-`.app` itself builds fine. Run it with:
-
-```bash
-xattr -dr com.apple.quarantine path/to/DayApp.app   # clear Gatekeeper flag
-open path/to/DayApp.app
-```
+The build targets the `.app` bundle only (`tauri.conf.json` sets `"targets": ["app"]`) —
+no `.dmg`, no installer screen. To install or update `/Applications/DayApp.app`, use
+**⌘P → Update DayApp** from inside the app or `npm run update` from the repo (both are
+the next section).
 
 ## Update the installed app
 
@@ -71,24 +68,29 @@ Your data in `~/Library/.../dayapp.db` is never touched.
 
 VS Code / Linear–style: press **⌘P** anywhere, type to filter, ↑/↓ to move, Enter to run.
 Currently: Show Default View (the universal reset), the Show/Hide toggles — Goals, Notes,
-Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3, Agent Tasks — the mobile
-sync commands (Deploy Task List Now / Pull Captures Now / Configure Sync…), View Journal, and
-Update DayApp. Trivially extensible — add a command to the registry in `App.tsx`.
+Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3, Agent Tasks —
+Enter/Exit Demo Mode + Reset Demo Data, the mobile sync commands (Deploy Task List Now /
+Pull Captures Now / Configure Sync…), View Journal, Keyboard Shortcuts (the focus-grammar
+reference card), and Update DayApp. Trivially extensible — add a command to the registry
+in `App.tsx`.
 
 ## Where things live
 
 ```
 dayapp/
 ├── src/
-│   ├── App.tsx              ← shell: state, effects, keyboard handlers, header, view switching
+│   ├── App.tsx              ← shell: state, effects, the focus grammar key handler, header, view switching
 │   ├── lib.ts               ← typed Tauri invoke wrappers + types + date/color helpers
+│   ├── focusNav.ts          ← the grammar's DOM side: digit dispatch to data-kb buttons
 │   ├── Notes.tsx            ← free-form notes (own state + API)
 │   ├── Goals.tsx            ← goals: horizon groups + capture + achieve (own state)
 │   ├── notesApi.ts          ← notes invoke wrappers
+│   ├── log.ts               ← prefixed console logger (webview side)
 │   ├── HideMenu.tsx         ← shared ◐ hide-duration popover
 │   ├── ProjectMenu.tsx      ← # assign/clear/create project popover
 │   ├── ReminderMenu.tsx     ← ◷ reminder-date popover
 │   ├── CommandPalette.tsx   ← ⌘P command palette modal
+│   ├── KeyboardHelp.tsx     ← the keyboard reference card (⌘P → Keyboard Shortcuts)
 │   ├── UpdateOverlay.tsx    ← self-update progress modal
 │   ├── MobileView.tsx       ← Android client: read-only list + capture bar
 │   ├── MobileSyncSettings.tsx ← ⌘P sync-config modal (repo/branch/token)
@@ -98,16 +100,19 @@ dayapp/
 │   └── index.css            ← dark Linear-flavoured theme
 └── src-tauri/
     ├── src/
-    │   ├── lib.rs           ← Tauri commands + setup (sweeps, sync loop on launch)
+    │   ├── lib.rs           ← Tauri commands + setup (sweeps, reminders, sync loop on launch)
     │   ├── db.rs            ← DB layer: items, actions, sweep, hide, reminders, completions
     │   ├── notes.rs         ← notes DB logic
     │   ├── projects.rs      ← projects DB logic + item.project_id assignment
     │   ├── goals.rs         ← goals DB logic: horizons, achieve, project link
     │   ├── timers.rs        ← timer sessions: start/stop/discard/totals/per-day
     │   ├── sync.rs          ← mobile sync: tasks.json export/deploy + capture inbox pull
-    │   ├── cli.rs           ← headless --list/--add/--complete/--start/--goals for remote access
+    │   ├── demo.rs          ← demo mode: dayapp-demo.db swap under the connection lock
+    │   ├── cli.rs           ← headless CLI (--list/--task/--search/--journal/--notes/--projects/
+    │   │                      --add/--complete/--start/--move/--details/--goals/--deploy/--sync-pull-peek)
     │   └── main.rs          ← binary entrypoint (GUI, or CLI when given flags)
     ├── schema.sql           ← items + actions + meta + notes + projects + goals + sessions
+    ├── demo.sql             ← the demo seed (relative timestamps, embedded in the binary)
     ├── Cargo.toml
     └── tauri.conf.json
 ```
@@ -147,6 +152,23 @@ buttons**, so the digit targets are visible on screen. With nothing focused
 its one verb is view-only. The old single-key `t`
 (timer), `d` (details), and `⌫` (delete) retired — the digits `1`, `5`, and `6`
 on the focused row do the same jobs.
+
+## Search (⌘F)
+
+**⌘F** opens a floating modal over the list: type a substring over task text, ↑/↓
+through the hits, Enter (or a click) to jump — the row is selected and scrolled into
+view, focused and ready for the digits. Two leading characters flip the same list
+into a picker:
+
+- **`#`** — the project filter: the hits become your projects (color dot + name; keep
+  typing after the `#` to narrow). Picking one narrows the main list to that project's
+  tasks; picking the already-active one clears it. Session-only, composes with the
+  priority tiers (see [Projects](#projects)).
+- **`@`** — the executor filter: two fixed entries, **🤖 Agent tasks** and **My
+  tasks**, with the same toggle rule (see
+  [Delegating to the agent](#delegating-to-the-agent)).
+
+**⌘P → Show Default View** clears either filter along with everything else.
 
 ## Hiding
 
@@ -239,7 +261,7 @@ The point is triage and dispatch:
 
 - **Details are the prompt.** A one-line title isn't enough for an agent to execute
   well. Hover the row's **⋯** button (it reads **⌄** — expand — once details exist),
-  or press **`d`** on the selected row, to open the task's body: a full-width,
+  or press **`5`** on the focused row, to open the task's body: a full-width,
   full-strength writing surface under the row — the expanded task reads as a small
   document (headline + body), not an attachment. Context, constraints, definition
   of done. It autosaves like Notes and is **not**
@@ -305,11 +327,13 @@ Backlog's ↑ button, `--move`) also clears the reminder — it has done its job
 ## Time tracking
 
 Each task can carry a **single global timer** — start work on one thing at a
-time. Hover an item and click **▶** (or select it and press **`t`**) to start;
+time. Hover an item and click **▶** (or focus it and press **`1`**) to start;
 the running row shows a live `H:MM:SS` in the accent colour, and a chip in the
 header mirrors it so the timer survives scrolling away. Starting a timer on
 another task stops the current one. Click the chip to **stop** (the session is
 kept), or **×** to **discard** it (for the "left it running overnight" case).
+Backlog rows have no ▶ — their slot-1 verb is **↑ send to Today**; timing
+belongs to Today/Daily, where work happens.
 
 Tracked time shows up two ways: a faint `⏱ 2h 14m` cumulative label on each row
 that has any, and — in the Journal — a per-day total in each day header plus a
@@ -398,7 +422,7 @@ daily, backlog with every priority tier, notes, goals in all three horizons,
 a week of actions + timer sessions). It's embedded in the binary at build
 time, so it travels with the app.
 
-## Remote access (SSH / zcode)
+## Remote access & agent context (SSH / zcode)
 
 The same binary is a tiny CLI for checking and triggering tasks from a remote
 session — it opens the same db (WAL + busy-timeout make the two processes
@@ -430,11 +454,34 @@ dayapp --demo --list                  # any of the above against the demo db
                                       #   (writes land in dayapp-demo.db only)
 ```
 
+### The 🤖 queue — agents as first-class users
+
+The CLI is deliberately also the **agent surface**. `--list` marks delegable rows
+with **🤖** (the `@` token, above), `--search '@agent'` prints just that queue, and
+`--task` prints a row plus its details body — for a 🤖 row, the details **are the
+prompt** (context, constraints, definition of done). The write verbs close the loop
+remotely, one task per run:
+
+1. **Claim** — `--move <query> --to today` (appends to Today)
+2. **Read** — `--task <query>`
+3. **Record** — `--details <query> "<approach>"` if the body was empty (never
+   overwrite a non-empty body — those are Faraz's words)
+4. **Done** — `--complete <query>`; the journal and the phone mirror pick it up
+   on their own
+
+This protocol lives in the **dayapp skill** (`~/.agents/skills/dayapp` on the Mac),
+which teaches any agent session — zcode, opencode, anything that reads skills — to
+fetch the live list and work the 🤖 queue. The vetting is the mark itself: a 🤖 row
+is fully delegable end to end, everything unmarked is Faraz's own. The flags are
+deliberately ungated (the CLI is Faraz's remote access too); the "agents touch only
+their queue" discipline lives in the skill's instructions, not the binary.
+
 ## Not yet built (intentional)
 
 - Global hotkey to toggle the window (Phase 2)
 - Menu bar presence (Phase 2)
 - Undo toast on destructive ops (Phase 1)
-- Agent query tool — read-only bridge for external skills to query the DB (Phase 3)
+- Scheduled autonomous runs over the 🤖 queue — the delegation verbs and the dayapp
+  skill exist; the hourly trigger is still manual
 - Completing/editing tasks from the phone (mobile stays capture + read; interactive
   mobile is the hosted-API tier, see AGENTS.md)
