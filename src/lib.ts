@@ -242,6 +242,19 @@ export const syncApi = {
   status: () => invoke<SyncStatus>("sync_status"),
 };
 
+// ---- Demo mode --------------------------------------------------------------
+// A second, disposable db (dayapp-demo.db) swapped in by the backend under the
+// connection lock. Session-only (a launch always opens the real db); demo data
+// persists across sessions and "Reset Demo Data" re-seeds it. The backend emits
+// a "demo-mode" event on every toggle/reset so the shell can re-pull everything.
+
+export const demoApi = {
+  active: () => invoke<boolean>("demo_mode"),
+  enter: () => invoke<void>("enter_demo_mode"),
+  exit: () => invoke<void>("exit_demo_mode"),
+  reset: () => invoke<void>("reset_demo_data"),
+};
+
 /** Compact cumulative duration: "1h 23m", "42m", "45s". */
 export const formatDuration = (seconds: number): string => {
   const s = Math.max(0, Math.floor(seconds));

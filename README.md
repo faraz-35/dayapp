@@ -371,6 +371,30 @@ repo (authless download) — keep signing with that same keystore so updates
 install over the top (compare `apksigner verify --print-certs` SHA-256 against
 the previous release if in doubt).
 
+## Demo mode
+
+A fully interactive sample dataset for trying the app and showing it to others —
+⌘P → **Enter Demo Mode** swaps the backend to a second, disposable database
+(`dayapp-demo.db` next to your real one; your data is never touched). The
+masthead reads **Live @ Demo** the whole time. Everything works on the sample
+data — complete tasks, run timers, browse the journal (it comes pre-seeded with
+a week of history) — and mutations persist in the demo db across sessions.
+
+- ⌘P → **Exit Demo Mode** swaps back instantly. Demo mode is session-only:
+  launching the app always opens your real db.
+- ⌘P → **Reset Demo Data** (demo mode only) re-seeds the sample dataset. Seeded
+  dates are relative to the reset day, so this also freshens a demo that has
+  aged — run it before showing someone.
+- **First run:** with no real db in place, the app opens straight into demo
+  mode as a tour; "Exit Demo Mode" is the on-ramp to your empty real list.
+- The phone mirror is fully gated while demo mode is active — demo tasks never
+  reach `tasks.json`, and captures queue until you exit.
+
+The seed lives in `src-tauri/demo.sql` (a founder/builder persona: today,
+daily, backlog with every priority tier, notes, goals in all three horizons,
+a week of actions + timer sessions). It's embedded in the binary at build
+time, so it travels with the app.
+
 ## Remote access (SSH / zcode)
 
 The same binary is a tiny CLI for checking and triggering tasks from a remote
@@ -399,6 +423,8 @@ dayapp --details "call bank" "..."    # replace the details body — the agent p
 dayapp --goals                        # print goals grouped by horizon (achieved last)
 dayapp --deploy                       # force-push tasks.json now
 dayapp --sync-pull-peek               # peek at the phone's pending captures
+dayapp --demo --list                  # any of the above against the demo db
+                                      #   (writes land in dayapp-demo.db only)
 ```
 
 ## Not yet built (intentional)

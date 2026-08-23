@@ -8,7 +8,7 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type HideDuration, type Item, type Project, type Section } from "./lib";
+import { api, demoApi, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type HideDuration, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import Notes from "./Notes";
 import Goals from "./Goals";
@@ -178,6 +178,12 @@ function DayApp() {
     window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 2600);
   }, []);
+  // Demo mode (⌘P → Enter/Exit): the backend swapped the whole database to the
+  // disposable demo file. Session-only — the initial query catches the first-run
+  // tour, the "demo-mode" event catches toggles/resets. `dataEpoch` bumps on
+  // every swap so the self-contained surfaces (Notes, Goals) reload too.
+  const [demoMode, setDemoMode] = useState(false);
+  const [dataEpoch, setDataEpoch] = useState(0);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null);
   const [timeTotals, setTimeTotals] = useState<Record<string, number>>({});
@@ -220,27 +226,60 @@ function DayApp() {
 
   useEffect(() => {
     refresh().catch((e) => log.error("initial load failed", e));
+    // Demo mode is session-only, so the backend decides — this catches the
+    // first-run tour before the first paint settles.
+    demoApi.active().then(setDemoMode).catch((e) => log.warn("demo mode query failed", e));
     // Re-check the day boundary while the app stays open. If local time crosses
     // midnight, run the sweep so Today items fall to Backlog without a relaunch.
     // The same tick drains the phone's capture inbox, so a capture made while
-    // walking lands within a minute of the Mac app being open.
+    // walking lands within a minute of the Mac app being open — except in demo
+    // mode, where the phone's inbox waits (its captures belong to the real db).
     const tick = setInterval(() => {
       api.runSweep().then(refresh).catch((e) => log.warn("sweep tick failed", e));
       // The open session row is the timer's source of truth — reconcile the
       // chip with CLI writes (--start/--complete from an SSH session) that the
       // GUI's state never saw.
       timersApi.active().then(setActiveTimer).catch((e) => log.warn("active timer reconcile failed", e));
-      ingestRef.current()
-        .then((n) => { if (n > 0) refresh(); })
-        .catch((e) => log.warn("sync: capture pull failed", e));
+      if (!demoMode) {
+        ingestRef.current()
+          .then((n) => { if (n > 0) refresh(); })
+          .catch((e) => log.warn("sync: capture pull failed", e));
+      }
     }, 60_000);
     // One pull shortly after launch (captures queued while the app was closed).
     const first = setTimeout(() => {
+      if (demoMode) return;
       ingestRef.current()
         .then((n) => { if (n > 0) refresh(); })
         .catch((e) => log.warn("sync: capture pull failed", e));
     }, 4_000);
     return () => { clearInterval(tick); clearTimeout(first); };
+  }, [refresh, demoMode]);
+
+  // A demo-mode toggle (or reset) swapped the entire database under the app:
+  // re-pull everything and drop every id-scoped UI state — selection, focus,
+  // open editor, project filter — since ids from the other db don't exist here.
+  // The masthead (demoMode) and the ⌘P entries follow from the same flag.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      unlisten = await listen<{ active: boolean }>("demo-mode", (e) => {
+        setDemoMode(e.payload.active);
+        setSelectedId(null);
+        setFocusNoteId(null);
+        setFocusGoalId(null);
+        setEditingId(null);
+        setDetailsOpenId(null);
+        setProjectFilter(null);
+        setDataEpoch((n) => n + 1);
+        refresh();
+        // The active timer lives in whichever db is now active (a real timer
+        // left running stays honest across the whole demo session).
+        timersApi.active().then(setActiveTimer).catch((err) => log.warn("active timer load failed", err));
+      });
+    })();
+    return () => { unlisten?.(); };
   }, [refresh]);
 
   // The active timer persists across app restarts (its open session row is the
@@ -470,34 +509,61 @@ function DayApp() {
       run: () => { setView("list"); setAgentTasksVisible((v) => !v); },
     },
     {
-      id: "mobile-deploy",
-      label: "Mobile: Deploy Task List Now",
-      hint: "push to GitHub",
+      // Demo mode: the backend swaps to the disposable demo db and emits
+      // "demo-mode", which re-pulls everything and swaps the masthead. The
+      // state change rides the event — run() only fires the toggle.
+      id: "demo-toggle",
+      label: demoMode ? "Exit Demo Mode" : "Enter Demo Mode",
+      hint: demoMode ? "back to your real data" : "sample data — your db untouched",
       run: () => {
-        syncApi.deploy(true)
-          .then((m) => { log.info(`sync: deploy — ${m}`); showToast(`Deploy: ${m}`); })
-          .catch((e) => { log.error("sync: deploy failed", e); showToast(`Deploy failed: ${e}`); });
+        setView("list");
+        const toggle = demoMode ? demoApi.exit : demoApi.enter;
+        toggle().catch((e) => log.error("demo toggle failed", e));
       },
     },
-    {
-      id: "mobile-pull",
-      label: "Mobile: Pull Captures Now",
-      hint: "ingest from phone",
+    // Demo-only: restore the sample dataset (re-seeded relative to today, so a
+    // reset also freshens a demo whose history has aged or drifted).
+    ...(demoMode ? [{
+      id: "demo-reset",
+      label: "Reset Demo Data",
+      hint: "restore the sample dataset",
       run: () => {
-        ingestRef.current()
-          .then((n) => {
-            if (n > 0) refresh();
-            showToast(n ? `Ingested ${n} capture${n === 1 ? "" : "s"}` : "No new captures");
-          })
-          .catch((e) => { log.error("sync: pull failed", e); showToast(`Pull failed: ${e}`); });
+        demoApi.reset().catch((e) => log.error("demo reset failed", e));
       },
-    },
-    {
-      id: "mobile-configure",
-      label: "Mobile: Configure Sync…",
-      hint: "repo + token",
-      run: () => setSyncSettingsOpen(true),
-    },
+    }] : []),
+    // Mobile sync belongs to the real db — hide its entries while demo mode is
+    // active (the backend gates deploy/pull/config hard as well).
+    ...(demoMode ? [] : [
+      {
+        id: "mobile-deploy",
+        label: "Mobile: Deploy Task List Now",
+        hint: "push to GitHub",
+        run: () => {
+          syncApi.deploy(true)
+            .then((m) => { log.info(`sync: deploy — ${m}`); showToast(`Deploy: ${m}`); })
+            .catch((e) => { log.error("sync: deploy failed", e); showToast(`Deploy failed: ${e}`); });
+        },
+      },
+      {
+        id: "mobile-pull",
+        label: "Mobile: Pull Captures Now",
+        hint: "ingest from phone",
+        run: () => {
+          ingestRef.current()
+            .then((n) => {
+              if (n > 0) refresh();
+              showToast(n ? `Ingested ${n} capture${n === 1 ? "" : "s"}` : "No new captures");
+            })
+            .catch((e) => { log.error("sync: pull failed", e); showToast(`Pull failed: ${e}`); });
+        },
+      },
+      {
+        id: "mobile-configure",
+        label: "Mobile: Configure Sync…",
+        hint: "repo + token",
+        run: () => setSyncSettingsOpen(true),
+      },
+    ]),
     { id: "view-journal", label: "View Journal", run: () => setView("journal") },
     {
       id: "keyboard-help",
@@ -511,7 +577,7 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, agentTasksVisible]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, agentTasksVisible, demoMode]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1053,9 +1119,13 @@ function DayApp() {
             journal view carries its own title. Always rendered — the timer
             chip carries no task-name text (tooltip only), so the two coexist
             on the 480px window. Below ~455px the media query in index.css
-            hides the masthead. */}
-        <span className="title" key={view === "journal" ? "journal" : liveAt}>
-          {view === "journal" ? "Journal" : `Live @ ${liveAt}`}
+            hides the masthead.
+            
+            Demo mode outranks both: the masthead reads "Live @ Demo" in every
+            view while the disposable demo db is active — the one unmissable
+            (but calm) signal of which data is on screen. */}
+        <span className="title" key={demoMode ? "demo" : view === "journal" ? "journal" : liveAt}>
+          {demoMode ? "Live @ Demo" : view === "journal" ? "Journal" : `Live @ ${liveAt}`}
         </span>
         <div className="header-right">
           {/* The running timer is always visible here — survives scrolling away
@@ -1116,7 +1186,7 @@ function DayApp() {
                 in the item visibility/priority/project filters — they're a
                 separate surface, shown as-is. */}
             {goalsVisible && (
-              <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} />
+              <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} reloadEpoch={dataEpoch} />
             )}
             {/* Notes — the lowest-friction capture surface, right under the
                 goals. Lives above the DnD area so typing/pasting isn't a drag
@@ -1124,7 +1194,7 @@ function DayApp() {
                 With Show Hidden Notes on, hidden notes render inline (dimmed)
                 instead of being excluded. */}
             {notesVisible && (
-              <Notes hiddenFilter={showHiddenNotes ? "include" : "exclude"} focusedId={focusNoteId} />
+              <Notes hiddenFilter={showHiddenNotes ? "include" : "exclude"} focusedId={focusNoteId} reloadEpoch={dataEpoch} />
             )}
             {(hiddenPriorities.length > 0 || projectFilter !== null || agentFilter !== null) && allVisible.length === 0 && (
               <div className="empty">

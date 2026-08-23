@@ -15,6 +15,7 @@
 //   dayapp --goals                          print goals grouped by horizon
 //   dayapp --deploy                         force-push tasks.json now (read-only)
 //   dayapp --sync-pull-peek                 print the phone's pending captures
+//   dayapp --demo <any of the above>        run against the demo db instead
 //
 // The read flags mirror the GUI's surfaces so a remote session can reach any
 // information the app can show: --search is ⌘F, --journal is the journal
@@ -26,16 +27,25 @@
 // text; Today rows win ties. Runs against the same db the GUI holds (WAL +
 // busy_timeout make the two processes safe together), and after a write it
 // fires one best-effort deploy so the phone sees the change within seconds.
+// `--demo` (anywhere in the args) opens dayapp-demo.db instead — the seeded
+// sample dataset from ⌘P → Enter Demo Mode, created on first use; writes land
+// in the demo db only, and the deploy hint stays silent (demo data never
+// reaches the phone).
 //
 // Note: --add writes raw text (no `#tag`/`!N` parsing — that lives in the
 // frontend). Tokens typed here stay literal until edited in the GUI.
 
 use crate::db::{Db, HiddenFilter, Item};
+use crate::demo;
 use crate::goals::{Goal, HORIZONS};
 use crate::sync::{self, DeployOutcome};
 
 pub fn run(args: Vec<String>) -> i32 {
-    let Some(db) = open_db() else { return 1 };
+    // `--demo` is a global modifier, not a command — filter it out before
+    // dispatch and let open_db pick the file.
+    let demo_mode = args.iter().any(|a| a == "--demo");
+    let args: Vec<String> = args.into_iter().filter(|a| a != "--demo").collect();
+    let Some(db) = open_db(demo_mode) else { return 1 };
     let mut it = args.into_iter();
     let Some(cmd) = it.next() else { return usage() };
     let rest: Vec<String> = it.collect();
@@ -77,7 +87,7 @@ pub fn run(args: Vec<String>) -> i32 {
 }
 
 const USAGE: &str = "\
-usage: dayapp <command> [args]
+usage: dayapp [--demo] <command> [args]
   --list [section] [--hidden]    tasks (▶/✓ marks, !prio, 🤖 agent, #project)
   --task <query>                 one task in full, incl. its details
   --search <query>               ⌘F: text substring, #project, or @agent/@my
@@ -92,7 +102,8 @@ usage: dayapp <command> [args]
   --move <query> --to <section>  move a task (appends at the destination)
   --details <query> <body>       replace a task's details body (\"\" clears)
   --deploy                       force-push tasks.json now
-  --sync-pull-peek               print the phone's pending captures";
+  --sync-pull-peek               print the phone's pending captures
+  --demo                         run against the demo db (global modifier)";
 
 fn usage() -> i32 {
     eprintln!("{USAGE}");
@@ -374,19 +385,27 @@ fn peek(db: &Db) -> anyhow::Result<()> {
 
 /// Open the shared db. Tauri's app_data_dir is ~/Library/Application Support/
 /// <identifier>; older installs may have used the product name, so accept both.
-fn open_db() -> Option<Db> {
+/// With `demo`, opens the sibling demo db instead (created + seeded on first
+/// use — the same dataset as ⌘P → Enter Demo Mode).
+fn open_db(demo_mode: bool) -> Option<Db> {
     let home = std::env::var_os("HOME")?;
     let base = std::path::PathBuf::from(home).join("Library/Application Support");
     let candidates = [
         base.join("com.farazshah.dayapp").join("dayapp.db"),
         base.join("DayApp").join("dayapp.db"),
     ];
-    let path = candidates
+    let real = candidates
         .iter()
         .find(|p| p.exists())
         .cloned()
         .unwrap_or_else(|| candidates[0].clone());
-    match Db::open(&path) {
+    let (path, result) = if demo_mode {
+        let p = demo::demo_db_path(&real);
+        (p.clone(), Db::open_demo(&real))
+    } else {
+        (real.clone(), Db::open(&real))
+    };
+    match result {
         Ok(db) => Some(db),
         Err(e) => {
             eprintln!("dayapp: cannot open {}: {e:#}", path.display());

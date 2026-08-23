@@ -23,7 +23,7 @@ impl Db {
 
     /// All projects ordered by sort_order, then created_at.
     pub fn list_projects(&self) -> anyhow::Result<Vec<Project>> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, name, sort_order, created_at
              FROM projects ORDER BY sort_order, created_at",
@@ -43,7 +43,7 @@ impl Db {
 
     /// Create a project at the bottom of the list. Returns the new project.
     pub fn create_project(&self, name: &str) -> anyhow::Result<Project> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let id = ulid::Ulid::new().to_string();
         let max_order: i64 = conn.query_row(
@@ -63,7 +63,7 @@ impl Db {
 
     /// Rename a project in place.
     pub fn rename_project(&self, id: &str, name: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.execute(
             "UPDATE projects SET name = ?1 WHERE id = ?2",
             params![name, id],
@@ -75,7 +75,7 @@ impl Db {
     /// referenced it. The rows themselves are kept. Not logged to actions
     /// (housekeeping).
     pub fn delete_project(&self, id: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
         tx.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
         tx.execute(
@@ -95,7 +95,7 @@ impl Db {
     pub fn set_item_project(
         &self, item_id: &str, project_id: Option<&str>,
     ) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         conn.execute(
             "UPDATE items SET project_id = ?1, updated_at = ?2 WHERE id = ?3",

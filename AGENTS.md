@@ -37,7 +37,8 @@ writes itself), not fight it.
   dependency, trivially snapshotted).
 - **DnD:** `@dnd-kit` (core + sortable + utilities).
 - **DB location:** `~/Library/Application Support/com.farazshah.dayapp/dayapp.db`
-  (driven by the `identifier` in `tauri.conf.json`).
+  (driven by the `identifier` in `tauri.conf.json`); `dayapp-demo.db` sits beside
+  it as demo mode's disposable twin (see "Demo mode" under Data model).
 - **Mobile (Android APK):** built and shipped 2026-08 — a read-only mirror +
   capture inbox over a private GitHub repo (`faraz-35/dayapp-sync`), not a sync
   engine. The Mac app is the single writer of the database; see "Mobile sync"
@@ -234,11 +235,51 @@ architecture — don't grow this one into it.
 - Logic lives in `src-tauri/src/sync.rs`; the phone UI is `src/MobileView.tsx`
   (renders when the webview UA is Android — same bundle as desktop).
 
+### Demo mode (a second disposable db, swapped under the connection lock)
+
+⌘P → **Enter/Exit Demo Mode** swaps the app onto `dayapp-demo.db` — a sibling
+of the real file — so the app can be tried and shown without touching real
+data. The seed is `src-tauri/demo.sql` (embedded via `include_str!`, so it
+travels in the binary; git tracks it for reviewable history — never commit the
+generated `.db`). All timestamps in it are relative to seed day, so a freshly
+seeded demo always shows a live-looking week of journal history.
+
+- **The swap lives under the one connection lock** (`Db::conn` in `db.rs`):
+  commands lock it and use whatever `Connection` is inside, so the
+  `mem::replace` in `demo.rs` is atomic from any command's point of view and
+  no command needs to know demo mode exists. The parked side stays open —
+  swap-back is instant, and a real timer left running keeps counting honestly
+  across the whole demo session. Entering/exiting runs the launch sweeps
+  against the newly-active db (each behaves as if relaunched).
+- **Demo mode is session-only.** Every launch opens the real db; the flag
+  never persists. The single exception is by design: **first run** (no real db
+  exists at launch) opens straight into demo mode as the tour, and "Exit Demo
+  Mode" is the on-ramp to the clean, empty real db. Do not add any other
+  launch path into demo.
+- **Demo data persists** across sessions (no auto-reset — deliberate).
+  ⌘P → **Reset Demo Data** (demo mode only) re-runs the seed; because seed
+  dates are relative to seed day, a reset also freshens an aged demo. A stale
+  demo db sweeps forward on entry exactly like a relaunched real db.
+- **Mobile sync is hard-gated in `sync.rs`**: `deploy`/`pull_captures`/
+  `mark_ingested` no-op and `sync_set_config` refuses while demo is active
+  (deploy re-checks before the PUT too — a toggle can land mid-build). The
+  ⌘P mobile entries and the frontend ingest tick hide/skip in demo as the UX
+  layer over the same gate. Demo tasks must never reach the phone.
+- **The CLI takes `--demo`** (a global modifier, any position): opens/creates
+  the demo db directly via `Db::open_demo` — the same seeding path, with the
+  real db never opened. The post-write deploy hint stays silent (gated).
+- The frontend swaps the masthead to **Live @ Demo** (every view) and re-pulls
+  everything on the backend's `demo-mode` event — including the
+  self-contained surfaces (Notes/Goals re-fetch via a `reloadEpoch` prop) and
+  every id-scoped UI state (selection, focus, filters), since ids from the
+  other db don't exist. Logic lives in `src-tauri/src/demo.rs` +
+  `src-tauri/demo.sql`.
+
 ### CLI (remote access)
 
 The binary doubles as a headless CLI (`--list`, `--task`, `--search`, `--journal`, `--notes`,
 `--projects`, `--add`, `--complete`, `--start`, `--move`, `--details`, `--goals`, `--deploy`,
-`--sync-pull-peek`) for
+`--sync-pull-peek`, plus the global `--demo` modifier) for
 SSH/zcode sessions — see `cli.rs`. It opens the
 same db the GUI holds: WAL + `busy_timeout(5s)` make the two processes safe together,
 and the GUI's 60s deploy loop picks up CLI writes. `--add` stores text **raw** (token
@@ -376,16 +417,18 @@ dayapp/
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
 └── src-tauri/
     ├── src/
-    │   ├── lib.rs                  ← Tauri commands + setup (sweep, reminders, logging plugin) + self_update
-    │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, reminders, completions + Db struct
+    │   ├── lib.rs                  ← Tauri commands + setup (first-run demo, sweeps, reminders, logging plugin) + self_update
+    │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, reminders, completions + Db struct (conn swap, launch_sweeps)
     │   ├── notes.rs                ← notes DB logic (methods on Db, touches only notes table)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
     │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
-    │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API)
-    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--notes/--projects/--add/--complete/--start/--move/--details/--goals/--deploy/--sync-pull-peek
+    │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API; demo-gated)
+    │   ├── demo.rs                 ← demo mode: dayapp-demo.db open/seed + enter/exit/reset swap under the conn lock
+    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--notes/--projects/--add/--complete/--start/--move/--details/--goals/--deploy/--sync-pull-peek (+ global --demo)
     │   └── main.rs                 ← binary entrypoint (GUI, or cli::run when given flags)
     ├── schema.sql                  ← items + actions + meta + notes + projects + goals + sessions
+    ├── demo.sql                    ← the demo seed (relative timestamps; embedded via include_str!, never commit the .db)
     ├── Cargo.toml
     ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target
     └── capabilities/default.json
@@ -620,6 +663,13 @@ the 🤖-marked rows — the "what's actually mine" focus view). All persist in
 localStorage (display preferences, like zoom). The header ◐ button toggles both hidden
 surfaces at once. There is no hidden-only mode and no separate archive screen —
 inline-or-excluded is the whole visibility story.
+
+**Demo mode (⌘P):** `Enter/Exit Demo Mode` swaps the whole database to the disposable
+demo twin (see "Demo mode" under Data model); while active, `Reset Demo Data` re-seeds
+it and the three Mobile entries hide (the phone belongs to the real db). The masthead
+reads `Live @ Demo` in every view — the one indicator, calm by design. Everything else
+(sections, grammar, DnD, journal) runs unchanged on the demo data; that identical-
+ness is what makes it a faithful demo.
 
 **Priority visibility (⌘P):** `Show/Hide Priority 1/2/3` are three independent toggles —
 each hides (or shows) just that tier's rows; unmarked rows are never touched and

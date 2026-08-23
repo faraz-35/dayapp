@@ -25,7 +25,7 @@ import HideMenu from "./HideMenu";
 // stays untouched.
 const COLLAPSED_KEY = "dayapp-notes-collapsed";
 
-export default function Notes({ hiddenFilter, focusedId }: { hiddenFilter: HiddenFilter; focusedId?: string | null }) {
+export default function Notes({ hiddenFilter, focusedId, reloadEpoch = 0 }: { hiddenFilter: HiddenFilter; focusedId?: string | null; reloadEpoch?: number }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState("");
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => {
@@ -103,7 +103,9 @@ export default function Notes({ hiddenFilter, focusedId }: { hiddenFilter: Hidde
     setNotes(list);
   }, [hiddenFilter]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  // reloadEpoch bumps when the whole database is swapped under the app (demo
+  // mode toggle/reset) — refetch alongside the hiddenFilter-driven reloads.
+  useEffect(() => { refresh(); }, [refresh, reloadEpoch]);
 
   // Type + Enter creates a real note at the bottom of the list. The capture
   // field stays open for the next note, so capture stays zero-inertia.

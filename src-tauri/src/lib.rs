@@ -2,6 +2,7 @@
 // DB work (rusqlite is sync) is dispatched to a blocking thread so the UI stays fluid.
 
 mod db;
+mod demo;
 mod goals;
 mod notes;
 mod projects;
@@ -343,6 +344,49 @@ async fn sync_status(db: State<'_, DbState>) -> Result<SyncStatus, String> {
     with_db(db, move |db| Ok(db.sync_status())).await
 }
 
+// ---- Demo mode -----------------------------------------------------------
+// A second, disposable db (dayapp-demo.db) swapped in under the connection
+// lock — see demo.rs for the invariants. The "demo-mode" event tells the
+// frontend to re-pull everything and swap the masthead; toggling never touches
+// the real db's file beyond parking its (already open) connection.
+
+#[tauri::command]
+async fn demo_mode(db: State<'_, DbState>) -> Result<bool, String> {
+    with_db(db, move |db| Ok(db.is_demo())).await
+}
+
+#[tauri::command]
+async fn enter_demo_mode(app: AppHandle, db: State<'_, DbState>) -> Result<(), String> {
+    toggle_demo(app, db, true).await
+}
+
+#[tauri::command]
+async fn exit_demo_mode(app: AppHandle, db: State<'_, DbState>) -> Result<(), String> {
+    toggle_demo(app, db, false).await
+}
+
+async fn toggle_demo(app: AppHandle, state: State<'_, DbState>, on: bool) -> Result<(), String> {
+    let db = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || if on { db.enter_demo() } else { db.exit_demo() })
+        .await
+        .map_err(|e| format!("task join error: {e}"))?
+        .map_err(|e| format!("{e:#}"))?;
+    let _ = app.emit("demo-mode", serde_json::json!({ "active": on }));
+    Ok(())
+}
+
+#[tauri::command]
+async fn reset_demo_data(app: AppHandle, db: State<'_, DbState>) -> Result<(), String> {
+    let db = db.0.clone();
+    tauri::async_runtime::spawn_blocking(move || db.reset_demo())
+        .await
+        .map_err(|e| format!("task join error: {e}"))?
+        .map_err(|e| format!("{e:#}"))?;
+    // Same event as a toggle: the frontend re-pulls the re-seeded data.
+    let _ = app.emit("demo-mode", serde_json::json!({ "active": true }));
+    Ok(())
+}
+
 // ---- Self-update ---------------------------------------------------------
 //
 // In-app "rebuild and relaunch" — no Terminal, no dragging. Runs the build in
@@ -478,25 +522,19 @@ pub fn run() {
             log::info!("DayApp starting (version {})", app.package_info().version);
             let db_path = db_path(app.handle());
             log::debug!("db path: {}", db_path.display());
+            // First run (no real db yet): open straight into the demo tour —
+            // the demo db is seeded and swapped in, and "Exit Demo Mode" is
+            // the on-ramp to a clean, empty real db. Checked before open,
+            // which creates the file. This is the only path that ever starts
+            // a launch in demo mode; demo mode never persists otherwise.
+            let first_run = !db_path.exists();
             let db = Db::open(&db_path)?;
-            // Today → Backlog sweep on every launch. Idempotent — cheap if already run today.
-            let fell = db.run_sweep()?;
-            if fell > 0 { log::info!("sweep: {fell} today item(s) fell to backlog"); }
-            // Retire completed Today items left from before today. Un-gated
-            // (idempotent) like the reminder sweep — catches rows written by
-            // older versions even on a day whose boundary sweep already ran.
-            let purged = db.purge_completed_today()?;
-            if purged > 0 { log::info!("sweep: {purged} completed today item(s) cleared"); }
-            // Restore any items/notes whose time-limited hide expired. Runs
-            // independently of run_sweep's once-per-day guard so expired hides
-            // clear even if the day-boundary sweep already ran.
-            let ih = db.unhide_expired_items()?;
-            let nh = db.unhide_expired_notes()?;
-            if ih + nh > 0 { log::info!("unhide sweep: {ih} item(s), {nh} note(s) restored"); }
-            // Promote any backlog items whose reminder date has come due. Un-gated
-            // (idempotent) so it runs on every launch, independent of the day sweep.
-            let rp = db.promote_due_reminders()?;
-            if rp > 0 { log::info!("reminders: {rp} backlog item(s) promoted to today"); }
+            // Launch sweeps: today → Backlog fall, done-today retirement,
+            // expired-hide restore, reminder promotion. Idempotent.
+            db.launch_sweeps()?;
+            if first_run {
+                db.enter_demo()?;
+            }
             let db = Arc::new(db);
             // One-way export loop: push tasks.json once a minute when it
             // changed. A plain sleeping thread is enough (single user, one
@@ -546,6 +584,7 @@ pub fn run() {
             time_totals, session_time_by_day,
             sync_get_config, sync_set_config, sync_deploy,
             sync_pull_captures, sync_mark_ingested, sync_status,
+            demo_mode, enter_demo_mode, exit_demo_mode, reset_demo_data,
             self_update,
         ])
         .run(tauri::generate_context!())

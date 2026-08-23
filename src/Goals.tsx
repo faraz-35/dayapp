@@ -39,11 +39,13 @@ const HORIZON_GROUPS: { horizon: GoalHorizon; label: string }[] = [
 ];
 
 export default function Goals({
-  projects, onCreateProject, focusedId,
+  projects, onCreateProject, focusedId, reloadEpoch = 0,
 }: {
   projects: Project[];
   onCreateProject: (name: string) => Promise<Project>;
   focusedId?: string | null;
+  /** Bumps when the whole database is swapped under the app (demo mode). */
+  reloadEpoch?: number;
 }) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [draft, setDraft] = useState("");
@@ -51,7 +53,7 @@ export default function Goals({
 
   useEffect(() => {
     goalsApi.list().then(setGoals).catch((e) => log.error("goals load failed", e));
-  }, []);
+  }, [reloadEpoch]);
 
   // Optimistic patch helper — mutations keep the flat list's order truthful
   // (sort_order never changes optimistically), and the horizon grouping

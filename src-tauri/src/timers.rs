@@ -42,7 +42,7 @@ impl Db {
     /// Start timing `item_id`. Single active timer: finalizes any open session
     /// first, then opens a new one. Returns the new active timer.
     pub fn start_timer(&self, item_id: &str) -> anyhow::Result<ActiveTimer> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let tx = conn.unchecked_transaction()?;
         finalize_open_session(&tx, &now)?;
@@ -67,7 +67,7 @@ impl Db {
     /// Stop the active timer, finalizing its session (kept in history).
     /// Idempotent — a no-op when nothing's running.
     pub fn stop_timer(&self) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let tx = conn.unchecked_transaction()?;
         finalize_open_session(&tx, &now)?;
@@ -79,7 +79,7 @@ impl Db {
     /// For the "left it running overnight" case where the elapsed is obviously
     /// wrong. Idempotent — a no-op when nothing's running.
     pub fn discard_timer(&self) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM sessions WHERE ended_at IS NULL", [])?;
         Ok(())
     }
@@ -87,7 +87,7 @@ impl Db {
     /// The currently-timing item, if any. Resolves live text via a LEFT JOIN so
     /// edits are reflected; falls back to the snapshot if the item was deleted.
     pub fn get_active_timer(&self) -> anyhow::Result<Option<ActiveTimer>> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let row = conn
             .query_row(
                 "SELECT s.item_id, COALESCE(i.text, s.item_text), s.started_at
@@ -110,7 +110,7 @@ impl Db {
     /// completed sessions plus the live elapsed of the open session, so the
     /// running row's total keeps ticking while you watch.
     pub fn time_totals(&self, item_ids: &[String]) -> anyhow::Result<HashMap<String, i64>> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let mut out: HashMap<String, i64> = HashMap::new();
         if !item_ids.is_empty() {
             let placeholders = item_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
@@ -155,7 +155,7 @@ impl Db {
         since: Option<&str>,
         until: Option<&str>,
     ) -> anyhow::Result<Vec<DayTaskTime>> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = parse_ts(&now_iso());
 
         // Only the upper bound is applied in SQL (start before the window end).
@@ -364,7 +364,7 @@ mod tests {
     }
 
     fn open_session_count(db: &Db) -> i64 {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn.lock().unwrap();
         conn.query_row("SELECT COUNT(*) FROM sessions WHERE ended_at IS NULL", [], |r| r.get(0))
             .unwrap()
     }
@@ -397,7 +397,7 @@ mod tests {
         assert_eq!(open_session_count(&db), 0, "completing the timing item must stop it");
         // The stopped session is kept, finalized — not deleted. (duration_secs
         // is second-granular, so a fast test yields 0; NULL is the open-row mark.)
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn.lock().unwrap();
         let kept: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM sessions
@@ -428,7 +428,7 @@ mod tests {
         // Simulate the pre-rule bug: complete the row via raw SQL so no path
         // stops the timer — status done, dated yesterday, session still open.
         {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn.lock().unwrap();
             conn.execute(
                 "UPDATE items SET status = 'done', last_completed_date = '2000-01-01' WHERE id = ?1",
                 params![a.id],
@@ -439,7 +439,7 @@ mod tests {
 
         db.purge_completed_today().unwrap();
         assert_eq!(open_session_count(&db), 0, "the retiring pass must stop the orphan");
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn.lock().unwrap();
         let kept: i64 = conn
             .query_row("SELECT COUNT(*) FROM sessions WHERE item_id = ?1", params![a.id], |r| r.get(0))
             .unwrap();

@@ -64,6 +64,9 @@ pub enum DeployOutcome {
     NotConfigured,
     Unchanged,
     Pushed(usize),
+    /// Demo mode is active — deploys are fully gated so demo tasks can never
+    /// reach the phone mirror.
+    DemoSkipped,
 }
 
 impl DeployOutcome {
@@ -72,6 +75,7 @@ impl DeployOutcome {
             DeployOutcome::NotConfigured => "not configured — run Mobile: Configure Sync…".into(),
             DeployOutcome::Unchanged => "no changes".into(),
             DeployOutcome::Pushed(n) => format!("pushed {n} items"),
+            DeployOutcome::DemoSkipped => "skipped — demo mode".into(),
         }
     }
 }
@@ -128,6 +132,12 @@ impl Db {
     }
 
     pub fn sync_set_config(&self, cfg: &SyncConfig) -> anyhow::Result<()> {
+        // Demo mode: refuse outright — writing the config (which can carry a
+        // PAT) into the disposable demo db is never what anyone wants, and the
+        // settings modal is unreachable there anyway (the ⌘P entries hide).
+        if self.is_demo() {
+            anyhow::bail!("sync can't be configured while demo mode is active");
+        }
         let repo = cfg.repo.trim().to_string();
         if !repo.is_empty() && !repo.contains('/') {
             anyhow::bail!("repo must look like owner/name (got \"{repo}\")");
@@ -164,7 +174,7 @@ impl Db {
 /// Build the tasks.json body. Returns the body plus the item count (for logs).
 pub fn build_export(db: &Db) -> anyhow::Result<(String, usize)> {
     let items: Vec<ExportItem> = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, text, section, status, last_completed_date, priority, assigned_to_agent, project_id, remind_at
              FROM items WHERE hidden = 0
@@ -215,6 +225,11 @@ pub fn build_export(db: &Db) -> anyhow::Result<(String, usize)> {
 
 /// Push tasks.json when it changed since the last push (or always, forced).
 pub fn deploy(db: &Db, force: bool) -> anyhow::Result<DeployOutcome> {
+    // Demo mode never pushes — this gates the 60s loop, the ⌘P force-push, and
+    // the CLI in one place.
+    if db.is_demo() {
+        return Ok(DeployOutcome::DemoSkipped);
+    }
     let cfg = db.sync_config();
     if cfg.repo.is_empty() {
         return Ok(DeployOutcome::NotConfigured);
@@ -224,6 +239,12 @@ pub fn deploy(db: &Db, force: bool) -> anyhow::Result<DeployOutcome> {
     let last = db.meta_get("sync_last_push_hash")?.unwrap_or_default();
     if !force && last == hash {
         return Ok(DeployOutcome::Unchanged);
+    }
+    // A demo toggle can land mid-build (the export reads run outside one
+    // transaction); re-check before anything leaves the machine, so the wrong
+    // db's items can never be pushed even in that window.
+    if db.is_demo() {
+        return Ok(DeployOutcome::DemoSkipped);
     }
     let token = resolve_token(&cfg)?;
     let sha = gh_get_file(&token, &cfg, TASKS_PATH)?.map(|f| f.sha);
@@ -235,7 +256,11 @@ pub fn deploy(db: &Db, force: bool) -> anyhow::Result<DeployOutcome> {
 
 /// New, never-ingested captures from the phone's inbox. Empty when unconfigured
 /// or when the repo has no captures.json yet — pulling is always safe to call.
+/// In demo mode the inbox waits: captures belong to the real db.
 pub fn pull_captures(db: &Db) -> anyhow::Result<Vec<Capture>> {
+    if db.is_demo() {
+        return Ok(Vec::new());
+    }
     let cfg = db.sync_config();
     if cfg.repo.is_empty() {
         return Ok(Vec::new());
@@ -255,6 +280,12 @@ pub fn pull_captures(db: &Db) -> anyhow::Result<Vec<Capture>> {
 /// against the phone, the guard still holds — next pull filters the same ids.
 pub fn mark_ingested(db: &Db, ids: &[String]) -> anyhow::Result<()> {
     if ids.is_empty() {
+        return Ok(());
+    }
+    // Demo mode never drains the shared inbox file — the captures stay queued
+    // for the real db. (The frontend's ingest loop is gated too; this is the
+    // hard guarantee under it.)
+    if db.is_demo() {
         return Ok(());
     }
     let mut known: Vec<String> = db

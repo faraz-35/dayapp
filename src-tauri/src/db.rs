@@ -71,11 +71,46 @@ impl HiddenFilter {
 
 // Single shared connection behind a mutex. DayApp is single-user, single-process,
 // low concurrency — a Mutex<Connection> is fine and avoids a pool dependency.
+//
+// `conn` is the connection every command uses. Demo mode (see demo.rs) swaps
+// the Connection inside that same mutex — real ↔ demo — so no command can
+// observe a half-swapped state and none of them needs to know demo exists.
+// The parked side stays open in `demo` for an instant swap back.
 #[derive(Debug)]
-pub struct Db(pub Mutex<Connection>);
+pub struct Db {
+    /// The ACTIVE connection — the real db's, or the demo db's while demo
+    /// mode is on.
+    pub conn: Mutex<Connection>,
+    /// Demo-mode state behind its own lock (commands never touch it): the
+    /// mode flag plus the inactive connection, parked while swapped.
+    pub demo: Mutex<DemoSlot>,
+    /// The real db's path — the demo file (dayapp-demo.db) is its sibling.
+    pub real_path: std::path::PathBuf,
+}
+
+#[derive(Debug, Default)]
+pub struct DemoSlot {
+    /// Whether `Db::conn` currently holds the demo db.
+    pub active: bool,
+    /// The inactive connection (the real one while demo is on, the demo one
+    /// while it's off). None when the other db was never opened.
+    pub parked: Option<Connection>,
+}
 
 impl Db {
     pub fn open(path: &std::path::Path) -> anyhow::Result<Self> {
+        let conn = Self::open_conn(path)?;
+        Ok(Self {
+            conn: Mutex::new(conn),
+            demo: Mutex::new(DemoSlot::default()),
+            real_path: path.to_path_buf(),
+        })
+    }
+
+    /// Open a connection with DayApp's pragmas and schema migrations applied.
+    /// Shared by the real db and the demo db — both must stay schema-identical,
+    /// so migrations apply to either through the same path.
+    pub(crate) fn open_conn(path: &std::path::Path) -> anyhow::Result<Connection> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -86,7 +121,24 @@ impl Db {
         conn.pragma_update(None, "journal_mode", "WAL")?;     // crash-safe, fast
         conn.pragma_update(None, "foreign_keys", "ON")?;
         Self::migrate(&conn)?;
-        Ok(Self(Mutex::new(conn)))
+        Ok(conn)
+    }
+
+    /// The launch sweep family: day-boundary sweep, done-today retirement,
+    /// expired-hide restore, reminder promotion. Runs against whichever db is
+    /// active — on every launch (real), and on every demo-mode toggle (each
+    /// db behaves as if the app relaunched into it).
+    pub fn launch_sweeps(&self) -> anyhow::Result<()> {
+        let fell = self.run_sweep()?;
+        if fell > 0 { log::info!("sweep: {fell} today item(s) fell to backlog"); }
+        let purged = self.purge_completed_today()?;
+        if purged > 0 { log::info!("sweep: {purged} completed today item(s) cleared"); }
+        let ih = self.unhide_expired_items()?;
+        let nh = self.unhide_expired_notes()?;
+        if ih + nh > 0 { log::info!("unhide sweep: {ih} item(s), {nh} note(s) restored"); }
+        let rp = self.promote_due_reminders()?;
+        if rp > 0 { log::info!("reminders: {rp} backlog item(s) promoted to today"); }
+        Ok(())
     }
 
     fn migrate(conn: &Connection) -> anyhow::Result<()> {
@@ -180,7 +232,7 @@ impl Db {
     /// manual order — priority is the primary axis there, DnD orders within a
     /// tier. Today/Daily are purely manual (sort_order).
     pub fn list(&self, section: &str, include_done: bool, hidden: HiddenFilter) -> anyhow::Result<Vec<Item>> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let mut sql = String::from(
             "SELECT id,text,section,status,last_completed_date,sort_order,created_at,updated_at,hidden,hidden_until,project_id,remind_at,priority,assigned_to_agent,details
              FROM items WHERE section = ?1");
@@ -206,7 +258,7 @@ impl Db {
     // it must never drift from the live row. These are wrapped in a transaction.
 
     pub fn create_item(&self, text: &str, section: &str) -> anyhow::Result<Item> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let id = ulid::Ulid::new().to_string();
         let max_order: i64 = conn
@@ -236,7 +288,7 @@ impl Db {
     }
 
     pub fn edit_item(&self, id: &str, text: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let tx = conn.unchecked_transaction()?;
         let (old_text, section): (String, String) = tx.query_row(
@@ -263,7 +315,7 @@ impl Db {
     /// the same transaction (kept in history). The rule lives here, not in the
     /// calling surface — the GUI's view of the active timer can be stale.
     pub fn complete_item(&self, id: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let today = today_iso();
         let tx = conn.unchecked_transaction()?;
@@ -299,7 +351,7 @@ impl Db {
     /// a crossed row toggles it back. Logs `uncompleted`, the inverse of the
     /// completion entry, so the journal shows the correction.
     pub fn uncomplete_item(&self, id: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let tx = conn.unchecked_transaction()?;
         let (text, section, status): (String, String, String) = tx.query_row(
@@ -317,7 +369,7 @@ impl Db {
     /// Move an item to a different section (drag, or programmatic).
     /// Re-indexes sort_order in the destination so it stays contiguous.
     pub fn move_item(&self, id: &str, to_section: &str, new_index: i64) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let tx = conn.unchecked_transaction()?;
 
@@ -366,7 +418,7 @@ impl Db {
     /// transaction (the session is kept — its item_text snapshot survives the
     /// deletion, like actions), so a running timer can never outlive its row.
     pub fn delete_item(&self, id: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let tx = conn.unchecked_transaction()?;
         let (text, section): (String, String) = tx.query_row(
@@ -388,7 +440,7 @@ impl Db {
 
     /// Hide an item. `duration` is one of: forever | day | week | month.
     pub fn hide_item(&self, id: &str, duration: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let hidden_until = hidden_until_for(duration);
         conn.execute(
@@ -400,7 +452,7 @@ impl Db {
 
     /// Unhide an item — clears both the flag and the expiry.
     pub fn unhide_item(&self, id: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         conn.execute(
             "UPDATE items SET hidden = 0, hidden_until = NULL, updated_at = ?1 WHERE id = ?2",
@@ -413,7 +465,7 @@ impl Db {
     /// Called by the launch + 60s-tick sweep, so hides auto-restore at midnight
     /// without a cron job. Idempotent. Returns the number of rows restored.
     pub fn unhide_expired_items(&self) -> anyhow::Result<usize> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let today = today_iso();
         let n = conn.execute(
@@ -428,7 +480,7 @@ impl Db {
     /// which a backlog item auto-promotes to Today, or None to clear.
     /// Housekeeping — not logged to actions.
     pub fn set_reminder(&self, id: &str, remind_at: Option<&str>) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         conn.execute(
             "UPDATE items SET remind_at = ?1, updated_at = ?2 WHERE id = ?3",
@@ -440,7 +492,7 @@ impl Db {
     /// Set (or clear) an item's priority (1–3, or None). Housekeeping like the
     /// project assignment — not logged to `actions`.
     pub fn set_item_priority(&self, id: &str, priority: Option<i64>) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         conn.execute(
             "UPDATE items SET priority = ?1, updated_at = ?2 WHERE id = ?3",
@@ -452,7 +504,7 @@ impl Db {
     /// Assign an item to (or take it back from) the AI agent — the delegation
     /// axis, set via the `@` token. Housekeeping like priority — not logged.
     pub fn set_item_agent(&self, id: &str, assigned: bool) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         conn.execute(
             "UPDATE items SET assigned_to_agent = ?1, updated_at = ?2 WHERE id = ?3",
@@ -465,7 +517,7 @@ impl Db {
     /// agent-delegated rows, the prompt an autonomous session executes.
     /// Content like notes (not item-state): housekeeping, never logged.
     pub fn set_item_details(&self, id: &str, details: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         conn.execute(
             "UPDATE items SET details = ?1, updated_at = ?2 WHERE id = ?3",
@@ -480,7 +532,7 @@ impl Db {
     /// Idempotent (clearing remind_at prevents re-promotion). Called un-gated on
     /// launch and inside run_sweep (harmless to call twice).
     pub fn promote_due_reminders(&self) -> anyhow::Result<usize> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let today = today_iso();
 
@@ -518,7 +570,7 @@ impl Db {
     /// The core "today resets" behaviour. Called on app startup.
     /// Idempotent: safe to call any number of times on the same day.
     pub fn run_sweep(&self) -> anyhow::Result<usize> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let today = today_iso();
 
@@ -596,7 +648,7 @@ impl Db {
     /// already ran). Idempotent. Finalizes any still-open session on the
     /// retiring rows, same as the sweep.
     pub fn purge_completed_today(&self) -> anyhow::Result<usize> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let today = today_iso();
         let tx = conn.unchecked_transaction()?;
@@ -616,7 +668,7 @@ impl Db {
     // the raw accessors.
 
     pub fn meta_get(&self, key: &str) -> anyhow::Result<Option<String>> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let v = conn.query_row(
             "SELECT value FROM meta WHERE key = ?1", params![key], |r| r.get(0),
         ).optional()?;
@@ -624,7 +676,7 @@ impl Db {
     }
 
     pub fn meta_set(&self, key: &str, value: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO meta(key,value) VALUES(?1,?2)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -642,7 +694,7 @@ impl Db {
     pub fn list_actions(
         &self, limit: Option<i64>, since: Option<&str>, until: Option<&str>,
     ) -> anyhow::Result<Vec<Action>> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let limit = limit.unwrap_or(500);
 
         // Build the WHERE clause dynamically so each bound is optional; collect

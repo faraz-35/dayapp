@@ -27,13 +27,13 @@ impl Db {
     /// All notes ordered by sort_order. `hidden` picks the ⌘P visibility mode —
     /// Include/Only render archived notes inline in the notes list.
     pub fn list_notes(&self, hidden: HiddenFilter) -> anyhow::Result<Vec<Note>> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         list_notes_inner(&conn, hidden)
     }
 
     /// Create a new note with the given body at the bottom of the list.
     pub fn create_note(&self, body: &str) -> anyhow::Result<Note> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let id = ulid::Ulid::new().to_string();
         let max_order: i64 = conn.query_row(
@@ -61,7 +61,7 @@ impl Db {
 
     /// Update a note's body. No journal entry — notes aren't activity.
     pub fn update_note(&self, id: &str, body: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         conn.execute(
             "UPDATE notes SET body = ?1, updated_at = ?2 WHERE id = ?3",
@@ -71,7 +71,7 @@ impl Db {
     }
 
     pub fn delete_note(&self, id: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM notes WHERE id = ?1", params![id])?;
         Ok(())
     }
@@ -84,7 +84,7 @@ impl Db {
     // are content, not activity (see notes.rs module header).
 
     pub fn hide_note(&self, id: &str, duration: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let hidden_until = hidden_until_for(duration);
         conn.execute(
@@ -95,7 +95,7 @@ impl Db {
     }
 
     pub fn unhide_note(&self, id: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         conn.execute(
             "UPDATE notes SET hidden = 0, hidden_until = NULL, updated_at = ?1 WHERE id = ?2",
@@ -108,7 +108,7 @@ impl Db {
     /// day boundary; this is the standalone path called on launch.) Returns the
     /// number of rows restored.
     pub fn unhide_expired_notes(&self) -> anyhow::Result<usize> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let today = crate::db::today_iso();
         let n = conn.execute(

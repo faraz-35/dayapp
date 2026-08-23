@@ -73,7 +73,7 @@ impl Db {
     /// the end) is a display concern — the frontend groups, and the CLI sorts
     /// with `HORIZONS`.
     pub fn list_goals(&self) -> anyhow::Result<Vec<Goal>> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, text, horizon, status, project_id, sort_order, created_at, updated_at, achieved_at
              FROM goals ORDER BY sort_order, created_at",
@@ -92,7 +92,7 @@ impl Db {
         if !HORIZONS.contains(&horizon) {
             anyhow::bail!("horizon must be short, long, or timeless (got \"{horizon}\")");
         }
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let id = ulid::Ulid::new().to_string();
         let max_order: i64 = conn.query_row(
@@ -128,7 +128,7 @@ impl Db {
                 anyhow::bail!("horizon must be short, long, or timeless (got \"{h}\")");
             }
         }
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let tx = conn.unchecked_transaction()?;
         let (old_text, old_horizon): (String, String) = tx.query_row(
@@ -152,7 +152,7 @@ impl Db {
     pub fn set_goal_project(
         &self, id: &str, project_id: Option<&str>,
     ) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         conn.execute(
             "UPDATE goals SET project_id = ?1, updated_at = ?2 WHERE id = ?3",
@@ -164,7 +164,7 @@ impl Db {
     /// Mark a goal achieved. Short/long only — a timeless goal is a direction,
     /// not a destination; it can only be revised or deleted.
     pub fn achieve_goal(&self, id: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let tx = conn.unchecked_transaction()?;
         let (text, horizon, status): (String, String, String) = tx.query_row(
@@ -186,7 +186,7 @@ impl Db {
     /// Undo an achievement: back to active, achieved_at cleared. Logs
     /// `goal_unachieved`, the inverse entry — the journal shows the correction.
     pub fn unachieve_goal(&self, id: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let tx = conn.unchecked_transaction()?;
         let (text, horizon, status): (String, String, String) = tx.query_row(
@@ -204,7 +204,7 @@ impl Db {
 
     /// Delete a goal outright (the timeless "this no longer resonates" exit).
     pub fn delete_goal(&self, id: &str) -> anyhow::Result<()> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let tx = conn.unchecked_transaction()?;
         let (text, horizon): (String, String) = tx.query_row(
