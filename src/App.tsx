@@ -521,8 +521,9 @@ function DayApp() {
       id: `prio-${n}`,
       // Mirrors the row's signal bars: filled count = urgency (P1 = 3).
       // Independent like the section toggles: flipping one tier never
-      // touches the others (or the unmarked rows).
-      label: hiddenPriorities.includes(n) ? `Show Priority ${n}` : `Hide Priority ${n}`,
+      // touches the others (or the unmarked rows). The "Tasks" suffix pairs
+      // with the Notes toggles below now that both axes exist.
+      label: hiddenPriorities.includes(n) ? `Show Priority ${n} Tasks` : `Hide Priority ${n} Tasks`,
       hint: "▮".repeat(4 - n),
       run: () => {
         setView("list");

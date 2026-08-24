@@ -68,7 +68,7 @@ Your data in `~/Library/.../dayapp.db` is never touched.
 
 VS Code / Linear–style: press **⌘P** anywhere, type to filter, ↑/↓ to move, Enter to run.
 Currently: Show Default View (the universal reset), the Show/Hide toggles — Goals, Notes,
-Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3, Priority 1/2/3 Notes,
+Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3 Tasks, Priority 1/2/3 Notes,
 Agent Tasks — **Enter/Exit Focus Mode** (the deep-work lens: P1 notes + Today + Daily +
 P1 Backlog only),
 Enter/Exit Demo Mode + Reset Demo Data, the mobile sync commands (Deploy Task List Now /
@@ -250,7 +250,7 @@ structurally, no divider can be mistaken for the capture input, and a drag
 across a divider snapping back to its tier is visible, not surprising. A
 Backlog whose items all share one tier renders undivided.
 
-**⌘P → Show/Hide Priority 1/2/3** are three independent toggles: each hides
+**⌘P → Show/Hide Priority 1/2/3 Tasks** are three independent toggles: each hides
 (or shows) just that tier's rows, leaving the other tiers and unmarked tasks
 alone (each command's hint shows its bars; the toggles persist across
 launches). **Show Default View** clears them all. Priorities are

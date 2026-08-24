@@ -699,7 +699,7 @@ prefixes `n`/`t`/`d`/`b`/`g`.
 **Show/Hide toggles (⌘P):** every layout surface is an independent, persisted toggle
 whose label reflects its state — `Goals`, `Notes`, `Today`/`Daily`/`Backlog` sections,
 `Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
-dimmed, ↺/× actions), the per-tier `Priority 1/2/3` toggles, the notes' own
+dimmed, ↺/× actions), the per-tier `Priority 1/2/3 Tasks` toggles, the notes' own
 `Priority 1/2/3 Notes` toggles (independent of the task tiers, like Hidden Notes ≠
 Hidden Tasks), and `Agent Tasks` (hides the 🤖-marked rows — the "what's actually mine"
 focus view). All persist in localStorage (display preferences, like zoom). The header ◐
@@ -713,7 +713,7 @@ reads `Live @ Demo` in every view — the one indicator, calm by design. Everyth
 (sections, grammar, DnD, journal) runs unchanged on the demo data; that identical-
 ness is what makes it a faithful demo.
 
-**Priority visibility (⌘P):** `Show/Hide Priority 1/2/3` are three independent toggles —
+**Priority visibility (⌘P):** `Show/Hide Priority 1/2/3 Tasks` are three independent toggles —
 each hides (or shows) just that tier's rows; unmarked rows are never touched and
 toggling one tier leaves the others alone (`hiddenPriorities` in `App.tsx`; DnD indexes
 map back to full-list space in `handleMoveItem`). The set persists across launches.
