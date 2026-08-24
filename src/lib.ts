@@ -494,78 +494,99 @@ function resolveProjectByName(tag: string, projects: Project[]): Project | null 
   return prefixes.length === 1 ? prefixes[0] : null;
 }
 
-// ---- The note metadata footer ----------------------------------------------
+// ---- Note tokens ------------------------------------------------------------
 //
-// A note body may end with: a blank line, then a final line holding ONLY `!1..3`
-// and/or `#tag` tokens — the note-body counterpart of the items' end-of-line
-// tokens (bodies are prose, so the tokens get their own trailing line instead).
-// The footer is stored verbatim and the backend derives priority/project_id
-// from it on every save; these helpers are the TS mirror of that grammar
-// (parse_note_footer in notes.rs) for the surfaces that render or produce
-// bodies. Strict shape: any prose on the line makes it just text, so a
-// markdown-ish "# Heading" or a stray "wow!!" never parses.
+// Notes set priority/project with the same token grammar as tasks, generalized
+// to multi-line bodies: in the CAPTURE field the tokens sit inline (exactly
+// item capture, `@` excepted — notes have no delegation axis and `@word` stays
+// literal), and in an existing note you type them on their own final line
+// after a blank line ("after all the content"). Tokens are input syntax only —
+// caught at capture/blur into the columns, never stored or rendered. No token
+// leaves the current values alone (like task edits); `!0` clears the priority
+// and `#0` clears the project (tasks' `!0` rule plus its project twin — notes
+// have no popover to clear through).
 
-/** Split a body into its footer metadata and the prose above it. `body` has the
- *  footer (and its separating blank line) removed — the source for the
- *  collapsed preview line and .txt export name. With no valid footer, `body` is
- *  the input unchanged and both metadata fields are null. */
-export function splitNoteFooter(body: string): { body: string; priority: 1 | 2 | 3 | null; tag: string | null } {
+/** Split a body's trailing token line: the last non-empty line, when a blank
+ *  line separates it from the prose above and it holds ONLY `!0..3` / `#tag`
+ *  tokens. Returns the body without it plus the parsed values — `body` is what
+ *  renders/previews/exports; the token fields are what the blur-catch applies.
+ *  With no valid footer, `body` is the input unchanged and both fields are
+ *  null. Strict shape: any prose on the line makes it just text, so a
+ *  markdown-ish "# Heading" or a stray "wow!!" never parses. */
+export function splitNoteFooter(body: string): {
+  body: string;
+  /** 0 = the explicit `!0` clear; null = no priority token on the line. */
+  priority: 0 | 1 | 2 | 3 | null;
+  tag: string | null;
+  /** A `#0` token — the explicit project clear. */
+  clearProject: boolean;
+} {
   const lines = body.split("\n");
   let last = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
     if (lines[i].trim()) { last = i; break; }
   }
-  // The footer: the last non-empty line, not the body's first, with a blank
-  // line directly above it.
   if (last > 0 && !lines[last - 1].trim()) {
-    let priority: 1 | 2 | 3 | null = null;
+    let priority: 0 | 1 | 2 | 3 | null = null;
     let tag: string | null = null;
+    let clearProject = false;
     let ok = true;
     for (const tok of lines[last].trim().split(/\s+/)) {
-      if (/^![1-3]$/.test(tok)) priority = Number(tok[1]) as 1 | 2 | 3;      // last wins
-      else if (/^#[\w-]+$/.test(tok)) tag = tok.slice(1);                     // last wins
+      if (/^![0-3]$/.test(tok)) priority = Number(tok[1]) as 0 | 1 | 2 | 3; // last wins
+      else if (tok === "#0") clearProject = true;
+      else if (/^#[\w-]+$/.test(tok)) tag = tok.slice(1);                   // last wins
       else { ok = false; break; }
     }
-    if (ok && (priority !== null || tag !== null)) {
-      return { body: lines.slice(0, last - 1).join("\n").trimEnd(), priority, tag };
+    if (ok && (priority !== null || tag !== null || clearProject)) {
+      return { body: lines.slice(0, last - 1).join("\n").trimEnd(), priority, tag, clearProject };
     }
   }
-  return { body, priority: null, tag: null };
+  return { body, priority: null, tag: null, clearProject: false };
 }
 
-/** Serialize a split footer back to its canonical line form ("!2 #growth"). */
-export const noteFooterText = (s: { priority: 1 | 2 | 3 | null; tag: string | null }): string =>
-  [s.priority ? `!${s.priority}` : "", s.tag ? `#${s.tag}` : ""].filter(Boolean).join(" ");
+/** The note capture parser — items' grammar minus the delegation axis: `!0..3`
+ *  and `#tag` resolve and strip from the line exactly like task capture
+ *  (anywhere in the line, last wins, unmatched trailing tag creates), but a
+ *  bare `@` / `@word` stays literal. A `#0` (project clear) is stripped and
+ *  ignored — a fresh note has nothing to clear, like `!0` at task capture. */
+export function parseNoteCapture(
+  text: string,
+  projects: Project[],
+): { text: string; priority: 0 | 1 | 2 | 3 | null; projectId: string | null; createProjectName?: string } {
+  // Strip standalone `#0` tokens first so parseProjectTag can't resolve or
+  // create a project literally named "0".
+  const noClear = stripNoteClearTags(text);
+  const stripped = parsePriorityTag(noClear);
+  const project = parseProjectTag(stripped.text, projects);
+  return { ...project, priority: stripped.priority };
+}
 
-/** Re-join a prose body with its footer line ("body\n\n!2 #tag"); with no footer
- *  tokens the body passes through verbatim. The inverse of splitNoteFooter for
- *  the save path (the two-field editor in Notes.tsx joins on every save). */
-export const joinNoteBody = (body: string, footer: string): string => {
-  const f = footer.trim();
-  return f ? `${body.replace(/\s+$/, "")}\n\n${f}` : body;
-};
-
-/** Note-capture normalization: trailing `!N`/`#tag` tokens on the capture line
- *  (task muscle memory — they sit at the end there too) are rewritten as the
- *  note's metadata footer: blank line + token line appended to the body. `@`
- *  tokens are deliberately not parsed — notes have no delegation axis, and
- *  `@word` stays literal. A line that is nothing but tokens keeps verbatim (the
- *  input is never lost); at most one of each kind travels to the footer (second
- *  occurrence ends the trailing run). */
-export function normalizeNoteCapture(text: string): string {
-  const trimmed = text.trim();
-  const words = trimmed.split(/\s+/);
-  let i = words.length;
-  let prio: string | null = null;
-  let tag: string | null = null;
-  while (i > 0) {
-    const w = words[i - 1];
-    if (prio === null && /^![1-3]$/.test(w)) { prio = w; i--; continue; }
-    if (tag === null && /^#[\w-]+$/.test(w)) { tag = w; i--; continue; }
-    break;
+function stripNoteClearTags(text: string): string {
+  const re = /(?:^|\s)#0(?=\s|$)/g;
+  const spans: { start: number; end: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    spans.push({ start: m.index, end: m.index + m[0].length });
   }
-  if (i === words.length) return trimmed; // no trailing tokens — body as typed
-  const rest = words.slice(0, i).join(" ").trim();
-  if (!rest) return trimmed;              // tokens only — keep the line literal
-  return `${rest}\n\n${[prio, tag].filter(Boolean).join(" ")}`;
+  if (spans.length === 0) return text;
+  let out = "";
+  let pos = 0;
+  for (const s of spans) {
+    out += text.slice(pos, s.start);
+    pos = s.end;
+  }
+  out += text.slice(pos);
+  return out.replace(/\s+/g, " ").trim() || text.trim();
+}
+
+/** Resolve a footer/capture `#tag` for notes: the item-tag semantics as a
+ *  plain lookup — case-insensitive exact name, else a unique prefix, else
+ *  create (the caller creates through App's handleCreateProject so the
+ *  projects state stays the single source). */
+export function resolveNoteTag(
+  tag: string,
+  projects: Project[],
+): { projectId: string | null; createProjectName?: string } {
+  const p = resolveProjectByName(tag, projects);
+  return p ? { projectId: p.id } : { projectId: null, createProjectName: tag };
 }

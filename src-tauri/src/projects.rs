@@ -122,10 +122,9 @@ fn insert_project(conn: &rusqlite::Connection, name: &str) -> anyhow::Result<Pro
 /// Resolve a `#tag` to a project id with exactly the semantics the frontend's
 /// `parseProjectTag` gives item capture text (lib.ts): case-insensitive exact
 /// name match, else a *unique* case-insensitive name prefix; an unmatched tag
-/// creates a brand-new project named verbatim after it — the footer's tag sits
-/// at the end of its line by construction, so it always satisfies the
-/// "trailing tag may create" rule. Used by note-footer derivation, so it takes
-/// the raw connection (the caller holds the lock).
+/// creates a brand-new project named verbatim after it. Used by the stored-
+/// footer migration in notes.rs, so it takes the raw connection (the caller
+/// holds the lock).
 pub(crate) fn resolve_or_create_project(
     conn: &rusqlite::Connection, tag: &str,
 ) -> anyhow::Result<String> {

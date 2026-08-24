@@ -154,18 +154,15 @@ INSERT INTO items (id, text, section, status, last_completed_date, sort_order, c
 
 -- ---- Notes -------------------------------------------------------------------
 -- Scratch in the app's own voice: an idea list, standup scribbles, one hidden.
--- Two carry the metadata footer (blank line + `!N #tag` tokens) so the demo
--- shows tier grouping and project labels: priority/project_id match what the
--- app derives from those footers on write.
+-- Two carry priority + a project link (the same axes tasks have — the token
+-- line is input syntax, consumed at capture; bodies stay pure prose).
 
 INSERT INTO notes (id, body, sort_order, created_at, updated_at, hidden, hidden_until, priority, project_id) VALUES
   ('demo-n-idea',
    'Waitlist page ideas
 - add a 30-second demo GIF above the fold
 - social proof line: "join 1,200 builders"
-- A/B a plain-text email against the designed template
-
-!1 #growth',
+- A/B a plain-text email against the designed template',
    0,
    date('now','localtime','-3 days') || 'T10:22:00',
    date('now','localtime','-3 days') || 'T10:31:00', 0, NULL, 1, 'demo-p-growth'),
@@ -173,9 +170,7 @@ INSERT INTO notes (id, body, sort_order, created_at, updated_at, hidden, hidden_
    'Standup notes
 - search ranking fix ships today, PR is green
 - mobile beta still blocked on the capture-inbox bug, repro is in the ticket
-- record the screencast for this week''s changelog
-
-!2 #meridian',
+- record the screencast for this week''s changelog',
    1,
    date('now','localtime','-1 days') || 'T09:50:00',
    date('now','localtime','-1 days') || 'T09:58:00', 0, NULL, 2, 'demo-p-meridian'),

@@ -145,31 +145,28 @@ save panel — `save_text_file` in `lib.rs`, no db involvement) and the note-loc
 are pure reading/export verbs over that content: also never logged (one Rust info line
 records a completed export, per the logging convention).
 
-Notes carry the items' priority/project axes through the **metadata footer**: a body may
-end with a blank line and then a final line holding only `!1..3` and/or `#tag` tokens
-(the note-body counterpart of items' end-of-line tokens — bodies are prose, so the tokens
-get their own trailing line). The footer is stored verbatim but **never renders as body
-text**: the expanded card edits it on a dim token line under the prose
-(`.note-meta-input` in `Notes.tsx` — no popover), and tokens typed at the end of the
-prose migrate into that line on blur (`flushAndCatch` — the "caught" moment; junk typed
-in the line falls back into the body as prose). `priority`/`project_id`
-are derived from the footer inside every body write (`parse_note_footer` +
-`derive_note_meta` in `notes.rs`; the body is the source of truth, the columns a cache,
-so they can never drift). The grammar is strict — the footer must be the last non-empty
-line, preceded by a blank one, and any prose on it makes the whole line text (a
-markdown-ish `# Heading` or `wow!!` never parses; repeated tokens of a kind: last wins;
-there is deliberately no `!0`/`#0` clear — removing the token IS the clear). The tag
-resolves with exactly the items' trailing-`#tag` semantics (`resolve_or_create_project`
-in `projects.rs`: case-insensitive exact, unique prefix, else create — so a footer tag
-whose project was deleted recreates it on the next save; deleting the tag from the body
-is what drops the link for good). The capture field normalizes trailing tokens into a
-footer (`normalizeNoteCapture` in `lib.ts`), so capture keeps task muscle memory. Notes
+Notes carry the items' priority/project axes through the **same token grammar**, generalized
+to multi-line bodies: in the capture field the tokens sit inline (exactly item capture —
+parsed and stripped by `parseNoteCapture` in `lib.ts`, `@` excepted because notes have no
+delegation axis), and in an existing note you type them on their own final line after a
+blank line ("after all the content"). Tokens are **input syntax, never stored or rendered**:
+on blur the line is caught (`flushAndCatch` in `Notes.tsx` → `splitNoteFooter`) — stripped
+from the body and applied to the columns through `set_note_priority`/`set_note_project`
+(frontend-parse + setters, exactly the items' model; `parse_note_footer` survives in
+notes.rs only to migrate bodies an earlier footer-storing build wrote). No token leaves the
+current values alone (so ordinary edits never wipe metadata); `!0` clears the priority and
+`#0` the project — tasks' `!0` rule plus its project twin, since notes have no popover.
+The tag resolves with exactly the items' trailing-`#tag` semantics (`resolveNoteTag` in
+`lib.ts`: case-insensitive exact, unique prefix, else create through App's
+handleCreateProject — so a tag whose project was deleted recreates it on the next catch;
+`#0` is the durable unlink). Notes
 group by tier exactly like the Backlog (`ORDER BY COALESCE(priority, 99), sort_order` —
 P1 → P3 → unmarked, tier dividers labeled with the bars, single-tier undivided); the
-cards carry no bars, and the collapsed card shows the project label (right-aligned, the
-row language) while the expanded card is pure content with the footer as plain text.
-Priority/project on notes are housekeeping — **not** logged — and stay out of the phone
-export (mobile is a task mirror).
+cards carry no bars and no metadata chrome beyond the collapsed card's project label
+(right-aligned, the row language). Priority/project on notes are housekeeping —
+**not logged** — and stay out of the phone export (mobile is a task mirror).
+`dayapp --notes` reconstructs the token line after each body from the columns, so agents
+still read the axes off the text.
 
 ### Projects (a second organising axis — NOT logged)
 
@@ -181,7 +178,7 @@ Projects let each item carry a color-coded label on the far right of its row (de
 hue per project, so the eye groups items across sections). Assignment is housekeeping (like
 hide) — **never** logged to `actions`. `items.project_id` is the nullable FK (no enforced
 cascade; deleting a project runs `UPDATE items SET project_id = NULL` — and the same for
-`goals` and `notes`). Notes link through their `#tag` footer (see "Notes" above); goals
+`goals` and `notes`). Notes link through their `#tag` token (see "Notes" above); goals
 through the # popover. Logic lives in
 `src-tauri/src/projects.rs`; the popover is `src/ProjectMenu.tsx`.
 
@@ -335,9 +332,9 @@ axis — bare `#` lists projects, `#name` lists that project's rows — and `@ag
 flip to the delegation axis), `--journal [today|week|month|all|YYYY-MM-DD]` is the
 Journal view (actions grouped newest-first by day with the per-task ⏱ breakdown and day
 total, the same verbs, default `today` like the GUI), `--notes`/`--projects` are their
-sections (`--notes` prints tier-ordered — the same ORDER BY the GUI groups from — with
-the metadata footer lines verbatim in each body, so priority/project read straight off
-the text), and the `--hidden` modifier on `--list`/`--notes` is the ⌘P "Show Hidden"
+sections (`--notes` prints tier-ordered — the same ORDER BY the GUI groups from — and
+reconstructs each note's `!N #name` token line after the body from the columns, so
+priority/project read straight off the text), and the `--hidden` modifier on `--list`/`--notes` is the ⌘P "Show Hidden"
 reveal (archived rows marked ◐). `--task` also carries the row's ⏱ cumulative time and
 pending reminder. The read flags stay read-only; writes are `--add`/`--complete`/`--start`
 plus the two delegation verbs: `--move <query> --to <section>` is the drag, headless — the
@@ -435,7 +432,7 @@ dayapp/
 │   ├── focusNav.ts                 ← the grammar's DOM side: data-kb button dispatch, capture focus, nth note/goal, popover check
 │   ├── main.tsx                    ← React entry
 │   ├── index.css                   ← the dark theme + all component styles
-│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + footer-driven tier groups)
+│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + token-caught tier groups)
 │   ├── Goals.tsx                   ← goals: horizon groups + capture + achieve (own state; between Notes and the sections)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
@@ -455,7 +452,7 @@ dayapp/
     ├── src/
     │   ├── lib.rs                  ← Tauri commands + setup (first-run demo, sweeps, reminders, logging plugin) + self_update
     │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, reminders, completions + Db struct (conn swap, launch_sweeps)
-    │   ├── notes.rs                ← notes DB logic + the metadata footer parser/derivation (methods on Db)
+    │   ├── notes.rs                ← notes DB logic + setters + the stored-footer migration (methods on Db)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
     │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
@@ -765,7 +762,7 @@ into Notes or edit fields isn't hijacked.
 - An always-open capture field sits at the top of Notes: type + Enter creates a
   note. (Replaced the old `+` button + seed empty note.)
 - Each note card collapses **in place**: the ⌃ button in its hover actions folds it to
-  one line (its first non-empty **prose** line — the metadata footer never previews),
+  one line (its first non-empty **prose** line — a pending token line never previews),
   ellipsized — same card, just shorter, no layout
   swap. The collapsed card is one big click target: expanding focuses its textarea with
   the caret at end, so collapsed → editing is one click. Its hover actions remain (⌄ ⬇ ◐ ×;
@@ -773,20 +770,18 @@ into Notes or edit fields isn't hijacked.
   persist in localStorage (`dayapp-notes-collapsed`), pruned on delete — a display
   preference, like zoom. No dedicated key — the focus grammar reaches it as digit `1`
   on a focused note (`n1-9` then `1`).
-- **Priority + projects via the metadata footer** (see "Notes" under Data model): the
-  body may end with a blank line + a `!N`/`#tag` token line; the footer never renders as
-  body text — the expanded card edits it on the dim `.note-meta-input` line under the
-  prose (rendered only when the note has tokens or is hovered/focused; no popover), and
-  tokens typed at the end of the prose migrate there on blur (`flushAndCatch`). The
-  capture field normalizes trailing
-  tokens into it. The list **groups by tier like the Backlog** — P1 → P3 → unmarked
+- **Priority + projects via the token grammar** (see "Notes" under Data model):
+  inline tokens at capture, or a blank line + tokens-only final line in an existing note,
+  caught on blur — stripped from the body, applied to the columns (`flushAndCatch` →
+  `handleCatchTokens`). No token leaves values alone; `!0`/`#0` clear. There is no
+  metadata UI at all: the tier group is the priority signal, the collapsed label the
+  project signal. The list **groups by tier like the Backlog** — P1 → P3 → unmarked
   under tier dividers labeled with the bars, single-tier undivided; the cards carry no
   bars (the sections are the tier signal). The collapsed card shows the project label
   (right-aligned, the row language; the preview line yields the hover-action cluster
-  its corner while revealed). A footer edit that moves the tier re-lands the
-  card in its group as soon as the debounced save returns (the save returns the
-  re-derived row; `sortNotes` mirrors the SQL ordering — the optimistic list is what
-  the next refresh returns). The list narrows under the ⌘P `Priority 1/2/3 Notes`
+  its corner while revealed). A caught token that moves the tier re-lands the card in
+  its group immediately (`sortNotes` mirrors the SQL ordering — the optimistic list is
+  what the next refresh returns). The list narrows under the ⌘P `Priority 1/2/3 Notes`
   toggles, the ⌘F `#` project filter, and Focus Mode. Slot 1's collapse/expand glyph
   is the shared SVG chevron (flipped, flex-centered) — never unicode ⌃/⌄, which are
   two mismatched glyphs riding the font baseline.
@@ -832,8 +827,7 @@ into Notes or edit fields isn't hijacked.
 - No second accent colour. No status colours per section.
 - No tags or arbitrary due-date fields. (Projects are a first-class filter axis; reminders
   are a date-granular promotion; timers are a measurement layer; priorities are a `!1..3`
-  text token + Backlog sort — extended to notes 2026-08-24 via the metadata footer (same
-  token grammar, own trailing line) with Backlog-style tier grouping; goals are the horizon layer above the sections; agent
+  text token + Backlog sort — extended to notes 2026-08-24 with the same token grammar (inline at capture, own trailing line in a body) and Backlog-style tier grouping; goals are the horizon layer above the sections; agent
   delegation is a `@` token + robot badge — the "who executes" axis that the Phase 3
   agent-writes bridge will dispatch off. These are
   the deliberate scope expansions. Don't pile on more organising metadata on top.)

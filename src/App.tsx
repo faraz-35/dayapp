@@ -683,14 +683,6 @@ function DayApp() {
     return (await handleCreateProject(name)).id;
   };
 
-  // A note's `#tag` footer can create a project backend-side (its save derives
-  // the link inside update_note/create_note) — Notes calls this so the label
-  // renders without waiting for the next 60s tick. App's list stays the single
-  // source; this is just a re-pull of it.
-  const refreshProjects = useCallback(() => {
-    projectsApi.list().then(setProjects).catch((e) => log.warn("projects refresh failed", e));
-  }, []);
-
   const handleCreate = async (section: Section, raw: string) => {
     // Resolve `#tag` → project, `!1..3` → priority, and `@` → agent assignment
     // on capture (e.g. "fix bug #day !2 @" → dayapp project, priority 2,
@@ -1314,7 +1306,7 @@ function DayApp() {
                 projectFilter={projectFilter}
                 hiddenPriorities={hiddenNotePriorities}
                 focusMode={focusMode}
-                onProjectsStale={refreshProjects}
+                onCreateProject={handleCreateProject}
               />
             )}
             {(hiddenPriorities.length > 0 || projectFilter !== null || agentFilter !== null) && allVisible.length === 0 && (

@@ -8,19 +8,20 @@
 // HiddenFilter — "include" (⌘P → Show Hidden Notes) renders hidden notes
 // inline (dimmed, ↺ to restore) instead of excluding them.
 //
-// Notes carry the items' priority/project axes through the metadata footer: a
-// body may end with a blank line and a final `!N`/`#tag` token line (the
-// backend derives priority/project_id from it on every save — see notes.rs).
+// Notes carry the items' priority/project axes through the same token grammar,
+// generalized to multi-line bodies: in the capture field the tokens sit inline
+// (exactly item capture — parsed and stripped, `@` excepted), and in an
+// existing note you type them on their own final line after a blank line. The
+// tokens are input syntax, never stored or rendered — on blur the line is
+// caught: stripped from the body and applied to the note's columns (no token
+// leaves current values alone; `!0` clears priority, `#0` clears project).
 // The list groups by tier the way the Backlog does — P1 → P3 → unmarked under
 // tier dividers labeled with the bars; the cards themselves carry no bars (the
-// sections are the tier signal). The collapsed card shows the note's project
-// label (right-aligned, the row language); the expanded card is pure prose —
-// the footer never renders as body text. Its tokens are edited on a dim
-// metadata line under the prose (.note-meta-input, no popover), and tokens
-// typed at the end of the prose migrate there on blur — the "caught" moment.
-// The parent narrows the list with the ⌘P note-tier toggles, the ⌘F `#`
-// project filter, and Focus Mode (P1 notes only), the same displayItems
-// pipeline the sections use.
+// sections are the tier signal) and no metadata chrome at all beyond the
+// collapsed card's project label (right-aligned, the row language). The parent
+// narrows the list with the ⌘P note-tier toggles, the ⌘F `#` project filter,
+// and Focus Mode (P1 notes only), the same displayItems pipeline the sections
+// use.
 //
 // Each note card can be collapsed to a single line — its first non-empty
 // prose line (the footer never previews). The card shrinks in place (same
@@ -38,7 +39,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { notesApi, type Note } from "./notesApi";
-import { type HideDuration, type HiddenFilter, joinNoteBody, normalizeNoteCapture, noteFooterText, projectColor, splitNoteFooter, type Project } from "./lib";
+import { type HideDuration, type HiddenFilter, parseNoteCapture, projectColor, resolveNoteTag, splitNoteFooter, type Project } from "./lib";
 import { log } from "./log";
 import HideMenu from "./HideMenu";
 import { PriorityBars } from "./components/ItemRow";
@@ -62,7 +63,7 @@ const sortNotes = (list: Note[]) =>
   );
 
 export default function Notes({
-  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, focusMode, onProjectsStale,
+  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, focusMode, onCreateProject,
 }: {
   hiddenFilter: HiddenFilter;
   focusedId?: string | null;
@@ -77,9 +78,10 @@ export default function Notes({
   hiddenPriorities: (1 | 2 | 3)[];
   /** ⌘P → Focus Mode: only P1 notes show (the lens, not a toggle mutation). */
   focusMode: boolean;
-  /** A note save can create a project from its `#tag` footer (backend-side);
-   *  called so App re-pulls the list and the just-linked note gets its label. */
-  onProjectsStale: () => void;
+  /** App's create-project path (its state is the single source, like Goals) —
+   *  a footer/capture `#tag` that matches nothing creates its project through
+   *  this, so the label renders immediately. */
+  onCreateProject: (name: string) => Promise<Project>;
 }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState("");
@@ -193,28 +195,60 @@ export default function Notes({
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, []);
 
-  // Type + Enter creates a real note. Trailing `!N`/`#tag` tokens on the
-  // capture line are normalized into the body's metadata footer (task muscle
-  // memory — the same tokens, end of line); the note lands in its tier group
-  // right away via sortNotes, not at the bottom until the next refresh.
+  // Type + Enter creates a real note. Inline `#tag`/`!N` tokens parse exactly
+  // like task capture (`@` stays literal — notes have no delegation axis):
+  // stripped from the body, applied through the setters, and the note lands in
+  // its tier group right away via sortNotes — App.handleCreate's shape.
   const handleCreate = async (raw: string) => {
-    const note = await notesApi.create(normalizeNoteCapture(raw));
-    setNotes((s) => sortNotes([...s, note]));
-    // The footer's `#tag` may have created a project backend-side — App's
-    // list doesn't know it yet, and the label renders from that list.
-    if (note.projectId && !projects.some((p) => p.id === note.projectId)) onProjectsStale();
+    const { text, projectId, createProjectName, priority } = parseNoteCapture(raw, projects);
+    const note = await notesApi.create(text);
+    const assignId = projectId ?? (createProjectName ? (await onCreateProject(createProjectName)).id : null);
+    // !0 ("clear") is a no-op at capture — a fresh note has no priority yet.
+    const tier = priority === null || priority === 0 ? null : priority;
+    const patch: Partial<Note> = {};
+    if (assignId) patch.projectId = assignId;
+    if (tier) patch.priority = tier;
+    setNotes((s) => sortNotes([...s, { ...note, ...patch }]));
+    if (assignId) notesApi.setProject(note.id, assignId);
+    if (tier) notesApi.setPriority(note.id, tier);
   };
 
   const handleUpdate = useCallback(async (id: string, body: string) => {
-    // Optimistic local update; debounce is in the textarea component. The save
-    // returns the row with priority/project re-derived from the body's footer
-    // — reconcile from it (re-sorted, so a footer edit that moved the tier
-    // lands the card in its group immediately) instead of refetching.
+    // Optimistic local update; debounce is in the textarea component. Body
+    // edits never touch the columns — only the token catch does.
     setNotes((s) => s.map((n) => (n.id === id ? { ...n, body } : n)));
-    const saved = await notesApi.update(id, body);
-    setNotes((s) => sortNotes(s.map((n) => (n.id === id ? saved : n))));
-    if (saved.projectId && !projects.some((p) => p.id === saved.projectId)) onProjectsStale();
-  }, [projects, onProjectsStale]);
+    await notesApi.update(id, body);
+  }, []);
+
+  // The blur-catch: a trailing token line (blank line + `!N`/`#tag`-only last
+  // line) applies to the columns and vanishes from the body — the note's
+  // "just like tasks" edit path. No token leaves values alone; `!0` clears
+  // the priority, `#0` the project. An unmatched tag creates its project
+  // through App's path so the label renders immediately. Mirrors
+  // App.handleCommitEdit's patch logic.
+  const handleCatchTokens = useCallback(async (
+    id: string,
+    parsed: { priority: 0 | 1 | 2 | 3 | null; tag: string | null; clearProject: boolean },
+  ) => {
+    const tier = parsed.priority === null ? null : parsed.priority === 0 ? null : parsed.priority;
+    let projectId: string | null | undefined; // undefined = leave alone
+    if (parsed.clearProject) projectId = null;
+    else if (parsed.tag) {
+      const r = resolveNoteTag(parsed.tag, projects);
+      projectId = r.projectId ?? (await onCreateProject(r.createProjectName!)).id;
+    }
+    setNotes((s) =>
+      sortNotes(s.map((n) => {
+        if (n.id !== id) return n;
+        const patch: Partial<Note> = {};
+        if (parsed.priority !== null) patch.priority = tier;
+        if (projectId !== undefined) patch.projectId = projectId;
+        return { ...n, ...patch };
+      })),
+    );
+    if (parsed.priority !== null) notesApi.setPriority(id, tier);
+    if (projectId !== undefined) notesApi.setProject(id, projectId);
+  }, [projects, onCreateProject]);
 
   // Collapse/expand a note card in place. Persisted so a relaunch keeps the
   // list as compact as the user left it.
@@ -330,6 +364,7 @@ export default function Notes({
               findOpen={findId === note.id}
               onToggleCollapse={() => toggleCollapse(note.id)}
               onUpdate={handleUpdate}
+              onCatchTokens={handleCatchTokens}
               onDelete={() => handleDelete(note.id)}
               onHide={(duration) => handleHide(note.id, duration)}
               onUnhide={() => handleUnhide(note.id)}
@@ -345,7 +380,7 @@ export default function Notes({
 // ---- Single note textarea ------------------------------------------------
 
 function NoteInput({
-  note, projects, hovered, focused, collapsed, findOpen, onToggleCollapse, onUpdate, onDelete, onHide, onUnhide, onFindClose,
+  note, projects, hovered, focused, collapsed, findOpen, onToggleCollapse, onUpdate, onCatchTokens, onDelete, onHide, onUnhide, onFindClose,
 }: {
   note: Note;
   projects: Project[];
@@ -356,32 +391,25 @@ function NoteInput({
   findOpen: boolean;
   onToggleCollapse: () => void;
   onUpdate: (id: string, body: string) => void;
+  /** Applies a caught trailing token line to the columns (see Notes). */
+  onCatchTokens: (id: string, parsed: { priority: 0 | 1 | 2 | 3 | null; tag: string | null; clearProject: boolean }) => void;
   onDelete: () => void;
   onHide: (duration: HideDuration) => void;
   onUnhide: () => void;
   onFindClose: () => void;
 }) {
-  // The body is edited as two fields joined back into the one stored body on
-  // every save: the prose (the textarea) and the footer's token line (the dim
-  // .note-meta-input under it). The footer never renders as body text —
-  // tokens "disappear" into the metadata line once caught (capture normalizes
-  // them there on creation; tokens typed at the end of the prose migrate
-  // there on blur — flushAndCatch below). Editing that line is how you change
-  // them; there is no popover.
-  const [bodyText, setBodyText] = useState(() => splitNoteFooter(note.body).body);
-  const [metaText, setMetaText] = useState(() => noteFooterText(splitNoteFooter(note.body)));
+  const [val, setVal] = useState(note.body);
   const ref = useRef<HTMLTextAreaElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestBody = useRef(note.body);
   // The note's project, resolved against App's list (the single source, like
   // Goals). The collapsed card's label renders from it; a link to a project
-  // not in the list (deleted moments ago, or created backend-side by this very
-  // note's footer before the staleness refresh lands) just shows no label.
+  // not in the list (deleted moments ago) just shows no label.
   const project = projects.find((p) => p.id === note.projectId) ?? null;
 
   // ---- Find in this note (⌘F while editing it) ------------------------------
   // The query and match index live here, not in Notes, because the matches are
-  // computed against the live prose (`bodyText`) — only this component holds
+  // computed against the live prose (`val`) — only this component holds
   // the text as typed (the parent lags by the debounce). Metadata tokens are
   // not the note's content and don't take part in the find. While the bar is
   // open its input owns focus; matches paint through a transparent-text mirror
@@ -391,10 +419,12 @@ function NoteInput({
   const [findIdx, setFindIdx] = useState(0);
   const findInputRef = useRef<HTMLInputElement>(null);
 
-  // Case-insensitive substring matches as [start, end) offsets into bodyText.
+  // Case-insensitive substring matches as [start, end) offsets into val. The
+  // tokens, if a line of them is still pending, are visible on screen and so
+  // take part — they're flushed at blur.
   const matches = useMemo(() => {
     if (!findOpen || !findQuery) return [] as Array<[number, number]>;
-    const hay = bodyText.toLowerCase();
+    const hay = val.toLowerCase();
     const needle = findQuery.toLowerCase();
     const out: Array<[number, number]> = [];
     let i = hay.indexOf(needle);
@@ -403,7 +433,7 @@ function NoteInput({
       i = hay.indexOf(needle, i + needle.length);
     }
     return out;
-  }, [findOpen, findQuery, bodyText]);
+  }, [findOpen, findQuery, val]);
 
   // The render-time index: a query or text edit can shrink the match set
   // below the stored one, so clamp before every use.
@@ -447,36 +477,32 @@ function NoteInput({
     else ta.setSelectionRange(ta.value.length, ta.value.length);
   };
 
-  // Blur is the "caught" boundary, shared by both fields: tokens typed at the
-  // end of the prose migrate into the metadata line (the freshest typing wins,
-  // last-wins like the parsers), junk in the metadata line falls back into the
-  // body as prose (the strict grammar, applied honestly), and the pending
-  // debounced save flushes normalized. Returns the normalized full body.
+  // Blur is the "caught" boundary: a trailing token line (blank line + only
+  // `!N`/`#tag` tokens) is stripped from the body and applied to the columns —
+  // the tokens vanish into the note's tier/label, exactly the way task
+  // capture eats them. A last line that isn't pure tokens is just prose and
+  // stays. Flushes the debounced save either way. Returns the body that
+  // should be on screen afterwards.
   const flushAndCatch = (): string => {
-    let bt = bodyText;
-    let mt = metaText;
-    const caught = splitNoteFooter(bt);
-    if (caught.priority !== null || caught.tag !== null) {
-      bt = caught.body;
-      mt = noteFooterText(caught);
-    }
-    const s = splitNoteFooter(joinNoteBody(bt, mt));
-    bt = s.body;
-    mt = noteFooterText(s);
-    setBodyText(bt);
-    setMetaText(mt);
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
-    onUpdate(note.id, joinNoteBody(bt, mt));
-    return joinNoteBody(bt, mt);
+    const s = splitNoteFooter(val);
+    if (s.priority !== null || s.tag !== null || s.clearProject) {
+      setVal(s.body);
+      onUpdate(note.id, s.body);
+      onCatchTokens(note.id, { priority: s.priority, tag: s.tag, clearProject: s.clearProject });
+      return s.body;
+    }
+    onUpdate(note.id, val);
+    return val;
   };
 
   // Export the note as a .txt through the native save panel. The name seeds
   // from the first non-empty prose line — the same line the collapsed preview
   // shows — so the file is recognizable in Finder without opening it. The
-  // file carries the prose only: metadata tokens "disappear" here too.
+  // file carries the prose only; tokens never reach it.
   const handleDownload = async () => {
     // Flush any debounced edit first: the file should match what's on screen.
     const full = flushAndCatch();
@@ -506,28 +532,19 @@ function NoteInput({
     if (wasCollapsed.current && !collapsed) {
       autosize();
       ref.current?.focus();
-      ref.current?.setSelectionRange(bodyText.length, bodyText.length);
+      ref.current?.setSelectionRange(val.length, val.length);
     }
     wasCollapsed.current = collapsed;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collapsed]);
 
-  // Keep the fields in sync if the note changes externally (60s refresh, demo
-  // swap). The comparison is semantic — split both sides — because the save
-  // path normalizes (trailing blanks, token order) and adopting our own
-  // normalization mid-typing would revert live keystrokes; a body that only
-  // differs by that normalization keeps the local text as typed.
+  // Keep local state in sync if the note changes externally.
   useEffect(() => {
-    if (latestBody.current === note.body) return;
-    const local = splitNoteFooter(joinNoteBody(bodyText, metaText));
-    const incoming = splitNoteFooter(note.body);
-    const same =
-      local.body === incoming.body && noteFooterText(local) === noteFooterText(incoming);
-    latestBody.current = note.body;
-    if (same) return;
-    setBodyText(incoming.body);
-    setMetaText(noteFooterText(incoming));
-    autosize();
+    if (latestBody.current !== note.body) {
+      setVal(note.body);
+      latestBody.current = note.body;
+      autosize();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.body]);
 
@@ -538,28 +555,28 @@ function NoteInput({
     saveTimer.current = setTimeout(() => onUpdate(note.id, body), 600);
   };
 
-  // The mirror's children: the prose split at match boundaries, each match a
+  // The mirror's children: the text split at match boundaries, each match a
   // <mark> (the current one distinct). Rendered only while finding — zero cost
   // to the normal editing path.
   const mirrorNodes = useMemo(() => {
     if (!findOpen || matches.length === 0) return null;
     // A trailing newline collapses at the mirror's block end (the textarea
     // still reserves the line); a zero-width tail makes the mirror take it.
-    const tail = bodyText.endsWith("\n") ? "\u200b" : "";
+    const tail = val.endsWith("\n") ? "\u200b" : "";
     const parts: ReactNode[] = [];
     let pos = 0;
     matches.forEach(([s, e], i) => {
-      if (s > pos) parts.push(bodyText.slice(pos, s));
+      if (s > pos) parts.push(val.slice(pos, s));
       parts.push(
         <mark key={i} className={i === cur ? "note-find-cur" : undefined}>
-          {bodyText.slice(s, e)}
+          {val.slice(s, e)}
         </mark>,
       );
       pos = e;
     });
-    parts.push(bodyText.slice(pos) + tail);
+    parts.push(val.slice(pos) + tail);
     return parts;
-  }, [findOpen, matches, cur, bodyText]);
+  }, [findOpen, matches, cur, val]);
 
   return (
     <div
@@ -599,14 +616,13 @@ function NoteInput({
       )}
       {collapsed ? (
         <div className="note-preview">
-          {/* The first non-empty PROSE line — the metadata footer never
-              previews (it's the note's metadata, shown only as the label
-              beside this line). The project label is the collapsed card's one
-              piece of chrome, the row language: same hue-per-project as item
-              rows, right-aligned; the preview yields the hover-action cluster
-              its corner while revealed (CSS on .note-preview). */}
+          {/* The first non-empty PROSE line — a pending token line never
+              previews. The project label is the collapsed card's one piece of
+              chrome, the row language: same hue-per-project as item rows,
+              right-aligned; the preview yields the hover-action cluster its
+              corner while revealed (CSS on .note-preview). */}
           <span className="note-preview-text">
-            {splitNoteFooter(joinNoteBody(bodyText, metaText)).body
+            {splitNoteFooter(val).body
               .split("\n")
               .find((l) => l.trim().length > 0)
               ?.trim() ?? ""}
@@ -618,70 +634,39 @@ function NoteInput({
           )}
         </div>
       ) : (
-        <>
-          <div className="note-body-wrap">
-            {/* The match highlight: a transparent-text copy of the prose laid
-                out exactly under the textarea (same font/wrap — see
-                .note-mirror in index.css), marks tinted through it.
-                pointer-events: none in CSS, so it never intercepts the
-                editor. */}
-            {mirrorNodes !== null && (
-              <div className="note-mirror" aria-hidden="true">{mirrorNodes}</div>
-            )}
-            <textarea
-              ref={ref}
-              className="note-textarea"
-              value={bodyText}
-              onChange={(e) => {
-                setBodyText(e.target.value);
-                autosize();
-                scheduleSave(joinNoteBody(e.target.value, metaText));
-              }}
-              onBlur={flushAndCatch}
-              // Esc ladder: find bar → editing → focused. Blur flushes the
-              // debounced save (and catches footer tokens typed at the end of
-              // the prose); the note keeps its focus highlight (App's
-              // focusNoteId) so the digits still act on it; a second Esc
-              // clears that.
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  if (findOpen) { e.preventDefault(); e.stopPropagation(); onFindClose(); }
-                  else e.currentTarget.blur();
-                }
-              }}
-              placeholder="Write or paste anything…"
-              spellCheck={false}
-            />
-          </div>
-          {/* The footer's editing surface: the note's `!N #tag` tokens on a dim
-              line under the prose — metadata, not content. Rendered only when
-              the note has tokens or is hovered/focused (an empty line on every
-              note would be chrome at rest); its placeholder is the only
-              affordance for adding metadata to a bare note besides typing
-              tokens at the end of the prose (they migrate here on blur).
-              Hidden notes don't render it — their cards are read-mostly. */}
-          {!note.hidden && (metaText.trim() !== "" || hovered || focused) && (
-            <input
-              className="note-meta-input"
-              value={metaText}
-              placeholder="!N #tag"
-              spellCheck={false}
-              onChange={(e) => {
-                setMetaText(e.target.value);
-                scheduleSave(joinNoteBody(bodyText, e.target.value));
-              }}
-              onBlur={flushAndCatch}
-              onKeyDown={(e) => {
-                // Enter commits (blur), Esc steps down the ladder the same way
-                // the textarea's Escape does.
-                if (e.key === "Enter" || e.key === "Escape") {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-              }}
-            />
+        <div className="note-body-wrap">
+          {/* The match highlight: a transparent-text copy of the text laid out
+              exactly under the textarea (same font/wrap — see .note-mirror in
+              index.css), marks tinted through it. pointer-events: none in CSS,
+              so it never intercepts the editor. */}
+          {mirrorNodes !== null && (
+            <div className="note-mirror" aria-hidden="true">{mirrorNodes}</div>
           )}
-        </>
+          <textarea
+            ref={ref}
+            className="note-textarea"
+            value={val}
+            onChange={(e) => {
+              setVal(e.target.value);
+              autosize();
+              scheduleSave(e.target.value);
+            }}
+            onBlur={flushAndCatch}
+            // Esc ladder: find bar → editing → focused. Blur flushes the
+            // debounced save (and catches a trailing token line — see
+            // flushAndCatch); the note keeps its focus highlight (App's
+            // focusNoteId) so the digits still act on it; a second Esc clears
+            // that.
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                if (findOpen) { e.preventDefault(); e.stopPropagation(); onFindClose(); }
+                else e.currentTarget.blur();
+              }
+            }}
+            placeholder="Write or paste anything…"
+            spellCheck={false}
+          />
+        </div>
       )}
       <div
         className="note-actions"
@@ -700,7 +685,7 @@ function NoteInput({
             a focused note. Only for notes with content, like the delete slot;
             hidden notes skip it entirely (their slots are restore/delete
             only). */}
-        {!note.hidden && (bodyText.trim() !== "" || metaText.trim() !== "") && (
+        {!note.hidden && val.trim() && (
           <button
             className="item-action"
             data-kb="2"
@@ -725,7 +710,7 @@ function NoteInput({
         ) : (
           <HideMenu kb="3" onHide={onHide} />
         )}
-        {(bodyText.trim() !== "" || metaText.trim() !== "") && (
+        {val.trim() && (
           <button
             className="note-delete"
             data-kb="4"

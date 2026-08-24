@@ -320,17 +320,32 @@ fn pretty_date(iso: &str) -> String {
         .unwrap_or_else(|_| iso.to_string())
 }
 
-/// The notes surface as text: full bodies in list order, blocks separated by
-/// a blank line. An optional query filters by body substring (⌘F-style);
-/// `--hidden` includes archived notes, each introduced by a ◐ line.
+/// The notes surface as text: full bodies in tier order, blocks separated by a
+/// blank line. A note's priority/project (set via the token grammar, consumed
+/// into columns — never stored in the body) rides as a reconstructed token
+/// line after the body, where the footer used to read, so a remote session
+/// still sees the axes in the text. An optional query filters by substring
+/// (body + that line, ⌘F-style); `--hidden` includes archived notes, each
+/// introduced by a ◐ line.
 fn notes(db: &Db, rest: &[String]) -> anyhow::Result<()> {
     let (query, hidden) = split_query_flag(rest)?;
     let filter = if hidden { HiddenFilter::Include } else { HiddenFilter::Exclude };
     let all = db.list_notes(filter)?;
-    let selected = match &query {
+    let projects = project_names(db)?;
+    let meta_line = |n: &crate::notes::Note| {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(p) = n.priority { parts.push(format!("!{p}")); }
+        if let Some(name) = n.project_id.as_ref().and_then(|pid| projects.get(pid)) {
+            parts.push(format!("#{name}"));
+        }
+        parts.join(" ")
+    };
+    let selected: Vec<_> = match &query {
         Some(q) => {
             let lower = q.to_lowercase();
-            all.into_iter().filter(|n| n.body.to_lowercase().contains(&lower)).collect::<Vec<_>>()
+            all.into_iter()
+                .filter(|n| format!("{}\n{}", n.body, meta_line(n)).to_lowercase().contains(&lower))
+                .collect()
         }
         None => all,
     };
@@ -351,6 +366,11 @@ fn notes(db: &Db, rest: &[String]) -> anyhow::Result<()> {
             for line in n.body.lines() {
                 println!("{line}");
             }
+        }
+        let meta = meta_line(n);
+        if !meta.is_empty() {
+            println!();
+            println!("{meta}");
         }
     }
     Ok(())

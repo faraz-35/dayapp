@@ -133,8 +133,22 @@ async fn create_note(db: State<'_, DbState>, body: String) -> Result<Note, Strin
 }
 
 #[tauri::command]
-async fn update_note(db: State<'_, DbState>, id: String, body: String) -> Result<Note, String> {
+async fn update_note(db: State<'_, DbState>, id: String, body: String) -> Result<(), String> {
     with_db(db, move |db| db.update_note(&id, &body)).await
+}
+
+#[tauri::command]
+async fn set_note_priority(
+    db: State<'_, DbState>, id: String, priority: Option<i64>,
+) -> Result<(), String> {
+    with_db(db, move |db| db.set_note_priority(&id, priority)).await
+}
+
+#[tauri::command]
+async fn set_note_project(
+    db: State<'_, DbState>, id: String, projectId: Option<String>,
+) -> Result<(), String> {
+    with_db(db, move |db| db.set_note_project(&id, projectId.as_deref())).await
 }
 
 #[tauri::command]
@@ -599,7 +613,7 @@ pub fn run() {
             move_item, delete_item, run_sweep,
             hide_item, unhide_item,
             list_actions,
-            list_notes, create_note, update_note, delete_note,
+            list_notes, create_note, update_note, set_note_priority, set_note_project, delete_note,
             hide_note, unhide_note, save_text_file,
             list_projects, create_project, rename_project, delete_project, set_item_project,
             set_reminder, set_item_priority, set_item_agent, set_item_details,

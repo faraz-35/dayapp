@@ -218,6 +218,13 @@ impl Db {
         ensure_column(conn, "notes", "hidden_until", "TEXT")?;
         ensure_column(conn, "notes", "priority", "INTEGER")?;
         ensure_column(conn, "notes", "project_id", "TEXT")?;
+        // Consume token lines an earlier footer-storing build left in note
+        // bodies (see notes.rs) — idempotent, so this is silent from the
+        // second open on.
+        let consumed = crate::notes::consume_stored_note_footers(conn)?;
+        if consumed > 0 {
+            log::info!("migrate: consumed {consumed} stored note footer(s) into columns");
+        }
         Ok(())
     }
 

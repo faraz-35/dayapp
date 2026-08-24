@@ -593,27 +593,6 @@ button {
 .note-preview .project-label { flex-shrink: 0; }
 .note.hidden .note-preview { color: var(--text-faint); }
 
-/* The footer's editing surface: the note's !N/#tag tokens on a dim line under
-   the prose — metadata, not content (the tokens "disappear" into it once
-   caught). Rendered only when the note has tokens or is hovered/focused, so
-   notes without metadata carry no extra chrome at rest. */
-.note-meta-input {
-  width: 100%;
-  background: none;
-  border: none;
-  outline: none;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-dim);
-  padding: 0;
-  margin: 4px 0 0;
-  user-select: text;
-}
-.note-meta-input:focus { color: var(--text); }
-.note-meta-input::placeholder { color: var(--text-faint); }
-.note.hidden .note-meta-input { color: var(--text-faint); }
-
 .note {
   position: relative;
   margin: 4px 0;

@@ -261,23 +261,22 @@ housekeeping, like projects: not logged to the journal.
 Notes are the free-form surface — auto-growing textareas with debounced
 autosave, a zero-inertia capture field, per-note ⌘F find, and ⬇ `.txt` export.
 They carry the same priority/project axes as tasks, generalized to multi-line
-content via the **metadata footer**:
+content:
 
-- A note's body may end with a **blank line and then a final line of only
-  `!N` / `#tag` tokens** — `ship essay !2` typed in the capture field becomes
-  a note whose body ends with a blank line + `!2` (task muscle memory, same
-  tokens). The tokens never show as content: they're caught into a **dim
-  metadata line** under the prose, which is also where you edit them (no
-  popover) — typing tokens at the end of a note migrates them there when you
-  click away. Any prose on that line makes it just text, so a markdown-ish
-  `# Heading` or a stray `wow!!` never parses; emptying the line clears both.
+- Priority and project are set with **the same token grammar as tasks**: inline
+  in the capture field (`ship essay !2 #writing` — parsed and eaten, `@`
+  excepted), or in an existing note by typing the tokens on their own final
+  line after a blank line — when you click away, the line is caught: it
+  vanishes from the body and the note moves into its tier group / gains its
+  project. Tokens are never stored or displayed; a tokenless edit leaves the
+  current values alone, `!0` clears the priority, and `#0` clears the project.
 - Notes **group by priority exactly like the Backlog** — P1 → P3 → unmarked
   under tier dividers labeled with the group's bars, single-tier lists
   undivided. The cards themselves carry no bars; the sections are the tier
   signal.
 - The collapsed card shows the note's **project label** (right-aligned, the
-  same hue-per-project as task rows). An unmatched footer `#tag` creates its
-  project, exactly like a trailing tag on a task; the tag matching is the same
+  same hue-per-project as task rows). An unmatched `#tag` creates its project,
+  exactly like a trailing tag on a task; the matching is the same
   (case-insensitive exact or unique prefix).
 - **⌘P → Show/Hide Priority 1/2/3 Notes** — the notes' own three tier toggles,
   independent of the task tiers. **⌘F's `#` project filter narrows notes too**.
@@ -286,7 +285,7 @@ content via the **metadata footer**:
   toggle changes — exiting restores whatever your toggles were, and Show
   Default View exits it.
 
-Like everything note-shaped, the footer and its derived priority/project are
+Like everything note-shaped, the token-set priority/project are
 content + housekeeping: never logged to the journal, and not exported to the
 phone (mobile is a task mirror).
 

@@ -12,21 +12,26 @@ export interface Note {
   updatedAt: string;
   hidden: boolean;
   hiddenUntil: string | null;
-  /** Urgency tier derived from the body's `!N` footer token (the same axis as
-   *  items' priority; notes group by it Backlog-style). Not logged. */
+  /** Urgency tier set via the `!N` token (same axis as items' priority; notes
+   *  group by it Backlog-style). Housekeeping — not logged. */
   priority: 1 | 2 | 3 | null;
-  /** Project derived from the body's `#tag` footer token — the same projects
-   *  table items/goals use. Not logged. */
+  /** Project set via the `#tag` token — the same projects table items/goals
+   *  use. Housekeeping — not logged. */
   projectId: string | null;
 }
 
 export const notesApi = {
   list: (hidden: HiddenFilter = "exclude") => invoke<Note[]>("list_notes", { hidden }),
   create: (body: string) => invoke<Note>("create_note", { body }),
-  /** Saves the body verbatim and returns the row with its footer-derived
-   *  priority/project re-derived in the same write — the caller reconciles
-   *  tier grouping and labels from the return, not a refetch. */
-  update: (id: string, body: string) => invoke<Note>("update_note", { id, body }),
+  update: (id: string, body: string) => invoke<void>("update_note", { id, body }),
+  /** Set (or clear with null) the priority tier — the `!N` token's landing
+   *  spot. Housekeeping, not logged, like items' priority. */
+  setPriority: (id: string, priority: 1 | 2 | 3 | null) =>
+    invoke<void>("set_note_priority", { id, priority }),
+  /** Assign (or clear with null) the project — the `#tag` token's landing
+   *  spot. Shares the projects table with items/goals; not logged. */
+  setProject: (id: string, projectId: string | null) =>
+    invoke<void>("set_note_project", { id, projectId }),
   delete: (id: string) => invoke<void>("delete_note", { id }),
   hide: (id: string, duration: HideDuration) =>
     invoke<void>("hide_note", { id, duration }),

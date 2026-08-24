@@ -78,15 +78,15 @@ CREATE TABLE IF NOT EXISTS meta (
 -- logged in `actions` — notes are content, not activity. Independent of the
 -- items/actions lifecycle.
 --
--- priority + project_id are the same axes items carry, generalized to multi-line
--- content: the body may END with a metadata footer (a blank line, then a final
--- line of only `!1..3` and/or `#tag` tokens — the note-body equivalent of items'
--- trailing tokens). The footer is stored verbatim (editing the line IS how you
--- change the metadata — no popover); these columns are derived from it inside
--- every body write, so they can never drift. Housekeeping like the item
--- counterparts — not logged. Notes group by priority the way the Backlog does
+-- priority + project_id are the same axes items carry, set with the same token
+-- grammar (`!1..3` / `#tag`): inline at capture, or a blank line + tokens-only
+-- final line in an existing note, caught on blur. Tokens are input syntax —
+-- never stored in the body (it stays pure prose); the columns are set through
+-- `set_note_priority`/`set_note_project` exactly like the item setters, and
+-- nothing here is logged. Notes group by priority the way the Backlog does
 -- (tier sections P1 → P3 → unmarked); the project link shares the projects
--- table, and deleting a project nulls it here too.
+-- table, and deleting a project nulls it here too. One migration in db.rs
+-- consumed token lines an earlier footer-storing build wrote into bodies.
 CREATE TABLE IF NOT EXISTS notes (
     id           TEXT PRIMARY KEY,                       -- ULID
     body         TEXT NOT NULL DEFAULT '',
