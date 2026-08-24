@@ -266,10 +266,11 @@ content via the **metadata footer**:
 - A note's body may end with a **blank line and then a final line of only
   `!N` / `#tag` tokens** — `ship essay !2` typed in the capture field becomes
   a note whose body ends with a blank line + `!2` (task muscle memory, same
-  tokens). The footer is plain text in the body: **editing that line is how
-  you change the metadata** — there's no popover. Any prose on the last line
-  makes it just text, so a markdown-ish `# Heading` or a stray `wow!!` never
-  parses; removing the footer clears both.
+  tokens). The tokens never show as content: they're caught into a **dim
+  metadata line** under the prose, which is also where you edit them (no
+  popover) — typing tokens at the end of a note migrates them there when you
+  click away. Any prose on that line makes it just text, so a markdown-ish
+  `# Heading` or a stray `wow!!` never parses; emptying the line clears both.
 - Notes **group by priority exactly like the Backlog** — P1 → P3 → unmarked
   under tier dividers labeled with the group's bars, single-tier lists
   undivided. The cards themselves carry no bars; the sections are the tier

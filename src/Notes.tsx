@@ -14,11 +14,13 @@
 // The list groups by tier the way the Backlog does — P1 → P3 → unmarked under
 // tier dividers labeled with the bars; the cards themselves carry no bars (the
 // sections are the tier signal). The collapsed card shows the note's project
-// label (right-aligned, the row language); the expanded card is pure content —
-// the footer line included as text, because editing it IS how you set it. The
-// parent narrows the list with the ⌘P note-tier toggles, the ⌘F `#` project
-// filter, and Focus Mode (P1 notes only), the same displayItems pipeline the
-// sections use.
+// label (right-aligned, the row language); the expanded card is pure prose —
+// the footer never renders as body text. Its tokens are edited on a dim
+// metadata line under the prose (.note-meta-input, no popover), and tokens
+// typed at the end of the prose migrate there on blur — the "caught" moment.
+// The parent narrows the list with the ⌘P note-tier toggles, the ⌘F `#`
+// project filter, and Focus Mode (P1 notes only), the same displayItems
+// pipeline the sections use.
 //
 // Each note card can be collapsed to a single line — its first non-empty
 // prose line (the footer never previews). The card shrinks in place (same
@@ -36,7 +38,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { notesApi, type Note } from "./notesApi";
-import { type HideDuration, type HiddenFilter, normalizeNoteCapture, projectColor, splitNoteFooter, type Project } from "./lib";
+import { type HideDuration, type HiddenFilter, joinNoteBody, normalizeNoteCapture, noteFooterText, projectColor, splitNoteFooter, type Project } from "./lib";
 import { log } from "./log";
 import HideMenu from "./HideMenu";
 import { PriorityBars } from "./components/ItemRow";
@@ -359,7 +361,15 @@ function NoteInput({
   onUnhide: () => void;
   onFindClose: () => void;
 }) {
-  const [val, setVal] = useState(note.body);
+  // The body is edited as two fields joined back into the one stored body on
+  // every save: the prose (the textarea) and the footer's token line (the dim
+  // .note-meta-input under it). The footer never renders as body text —
+  // tokens "disappear" into the metadata line once caught (capture normalizes
+  // them there on creation; tokens typed at the end of the prose migrate
+  // there on blur — flushAndCatch below). Editing that line is how you change
+  // them; there is no popover.
+  const [bodyText, setBodyText] = useState(() => splitNoteFooter(note.body).body);
+  const [metaText, setMetaText] = useState(() => noteFooterText(splitNoteFooter(note.body)));
   const ref = useRef<HTMLTextAreaElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestBody = useRef(note.body);
@@ -371,19 +381,20 @@ function NoteInput({
 
   // ---- Find in this note (⌘F while editing it) ------------------------------
   // The query and match index live here, not in Notes, because the matches are
-  // computed against the live `val` — only this component holds the text as
-  // typed (the parent lags by the debounce). While the bar is open its input
-  // owns focus; matches paint through a transparent-text mirror under the
-  // textarea (a textarea can't tint ranges itself).
+  // computed against the live prose (`bodyText`) — only this component holds
+  // the text as typed (the parent lags by the debounce). Metadata tokens are
+  // not the note's content and don't take part in the find. While the bar is
+  // open its input owns focus; matches paint through a transparent-text mirror
+  // under the textarea (a textarea can't tint ranges itself).
 
   const [findQuery, setFindQuery] = useState("");
   const [findIdx, setFindIdx] = useState(0);
   const findInputRef = useRef<HTMLInputElement>(null);
 
-  // Case-insensitive substring matches as [start, end) offsets into val.
+  // Case-insensitive substring matches as [start, end) offsets into bodyText.
   const matches = useMemo(() => {
     if (!findOpen || !findQuery) return [] as Array<[number, number]>;
-    const hay = val.toLowerCase();
+    const hay = bodyText.toLowerCase();
     const needle = findQuery.toLowerCase();
     const out: Array<[number, number]> = [];
     let i = hay.indexOf(needle);
@@ -392,7 +403,7 @@ function NoteInput({
       i = hay.indexOf(needle, i + needle.length);
     }
     return out;
-  }, [findOpen, findQuery, val]);
+  }, [findOpen, findQuery, bodyText]);
 
   // The render-time index: a query or text edit can shrink the match set
   // below the stored one, so clamp before every use.
@@ -436,18 +447,41 @@ function NoteInput({
     else ta.setSelectionRange(ta.value.length, ta.value.length);
   };
 
-  // Export the body as a .txt through the native save panel. The name seeds
-  // from the first non-empty line — the same line the collapsed preview shows
-  // — so the file is recognizable in Finder without opening it.
-  const handleDownload = async () => {
-    // Flush any debounced edit first: the file should match what's on screen.
+  // Blur is the "caught" boundary, shared by both fields: tokens typed at the
+  // end of the prose migrate into the metadata line (the freshest typing wins,
+  // last-wins like the parsers), junk in the metadata line falls back into the
+  // body as prose (the strict grammar, applied honestly), and the pending
+  // debounced save flushes normalized. Returns the normalized full body.
+  const flushAndCatch = (): string => {
+    let bt = bodyText;
+    let mt = metaText;
+    const caught = splitNoteFooter(bt);
+    if (caught.priority !== null || caught.tag !== null) {
+      bt = caught.body;
+      mt = noteFooterText(caught);
+    }
+    const s = splitNoteFooter(joinNoteBody(bt, mt));
+    bt = s.body;
+    mt = noteFooterText(s);
+    setBodyText(bt);
+    setMetaText(mt);
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
-      onUpdate(note.id, val);
     }
+    onUpdate(note.id, joinNoteBody(bt, mt));
+    return joinNoteBody(bt, mt);
+  };
+
+  // Export the note as a .txt through the native save panel. The name seeds
+  // from the first non-empty prose line — the same line the collapsed preview
+  // shows — so the file is recognizable in Finder without opening it. The
+  // file carries the prose only: metadata tokens "disappear" here too.
+  const handleDownload = async () => {
+    // Flush any debounced edit first: the file should match what's on screen.
+    const full = flushAndCatch();
     try {
-      await notesApi.saveAs(exportName(val), val);
+      await notesApi.saveAs(exportName(full), splitNoteFooter(full).body);
     } catch (e) {
       log.warn("notes: export failed", e);
     }
@@ -472,19 +506,28 @@ function NoteInput({
     if (wasCollapsed.current && !collapsed) {
       autosize();
       ref.current?.focus();
-      ref.current?.setSelectionRange(val.length, val.length);
+      ref.current?.setSelectionRange(bodyText.length, bodyText.length);
     }
     wasCollapsed.current = collapsed;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collapsed]);
 
-  // Keep local state in sync if the note changes externally.
+  // Keep the fields in sync if the note changes externally (60s refresh, demo
+  // swap). The comparison is semantic — split both sides — because the save
+  // path normalizes (trailing blanks, token order) and adopting our own
+  // normalization mid-typing would revert live keystrokes; a body that only
+  // differs by that normalization keeps the local text as typed.
   useEffect(() => {
-    if (latestBody.current !== note.body) {
-      setVal(note.body);
-      latestBody.current = note.body;
-      autosize();
-    }
+    if (latestBody.current === note.body) return;
+    const local = splitNoteFooter(joinNoteBody(bodyText, metaText));
+    const incoming = splitNoteFooter(note.body);
+    const same =
+      local.body === incoming.body && noteFooterText(local) === noteFooterText(incoming);
+    latestBody.current = note.body;
+    if (same) return;
+    setBodyText(incoming.body);
+    setMetaText(noteFooterText(incoming));
+    autosize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.body]);
 
@@ -495,28 +538,28 @@ function NoteInput({
     saveTimer.current = setTimeout(() => onUpdate(note.id, body), 600);
   };
 
-  // The mirror's children: val split at match boundaries, each match a <mark>
-  // (the current one distinct). Rendered only while finding — zero cost to
-  // the normal editing path.
+  // The mirror's children: the prose split at match boundaries, each match a
+  // <mark> (the current one distinct). Rendered only while finding — zero cost
+  // to the normal editing path.
   const mirrorNodes = useMemo(() => {
     if (!findOpen || matches.length === 0) return null;
     // A trailing newline collapses at the mirror's block end (the textarea
     // still reserves the line); a zero-width tail makes the mirror take it.
-    const tail = val.endsWith("\n") ? "\u200b" : "";
+    const tail = bodyText.endsWith("\n") ? "\u200b" : "";
     const parts: ReactNode[] = [];
     let pos = 0;
     matches.forEach(([s, e], i) => {
-      if (s > pos) parts.push(val.slice(pos, s));
+      if (s > pos) parts.push(bodyText.slice(pos, s));
       parts.push(
         <mark key={i} className={i === cur ? "note-find-cur" : undefined}>
-          {val.slice(s, e)}
+          {bodyText.slice(s, e)}
         </mark>,
       );
       pos = e;
     });
-    parts.push(val.slice(pos) + tail);
+    parts.push(bodyText.slice(pos) + tail);
     return parts;
-  }, [findOpen, matches, cur, val]);
+  }, [findOpen, matches, cur, bodyText]);
 
   return (
     <div
@@ -560,10 +603,13 @@ function NoteInput({
               previews (it's the note's metadata, shown only as the label
               beside this line). The project label is the collapsed card's one
               piece of chrome, the row language: same hue-per-project as item
-              rows, right-aligned. The expanded card carries no metadata
-              chrome at all — pure content, the footer included as text. */}
+              rows, right-aligned; the preview yields the hover-action cluster
+              its corner while revealed (CSS on .note-preview). */}
           <span className="note-preview-text">
-            {splitNoteFooter(val).body.split("\n").find((l) => l.trim().length > 0)?.trim() ?? ""}
+            {splitNoteFooter(joinNoteBody(bodyText, metaText)).body
+              .split("\n")
+              .find((l) => l.trim().length > 0)
+              ?.trim() ?? ""}
           </span>
           {project && (
             <span className="project-label" style={{ color: projectColor(project.id) }}>
@@ -572,45 +618,70 @@ function NoteInput({
           )}
         </div>
       ) : (
-        <div className="note-body-wrap">
-          {/* The match highlight: a transparent-text copy of the body laid out
-              exactly under the textarea (same font/wrap — see .note-mirror in
-              index.css), marks tinted through it. pointer-events: none in CSS,
-              so it never intercepts the editor. */}
-          {mirrorNodes !== null && (
-            <div className="note-mirror" aria-hidden="true">{mirrorNodes}</div>
+        <>
+          <div className="note-body-wrap">
+            {/* The match highlight: a transparent-text copy of the prose laid
+                out exactly under the textarea (same font/wrap — see
+                .note-mirror in index.css), marks tinted through it.
+                pointer-events: none in CSS, so it never intercepts the
+                editor. */}
+            {mirrorNodes !== null && (
+              <div className="note-mirror" aria-hidden="true">{mirrorNodes}</div>
+            )}
+            <textarea
+              ref={ref}
+              className="note-textarea"
+              value={bodyText}
+              onChange={(e) => {
+                setBodyText(e.target.value);
+                autosize();
+                scheduleSave(joinNoteBody(e.target.value, metaText));
+              }}
+              onBlur={flushAndCatch}
+              // Esc ladder: find bar → editing → focused. Blur flushes the
+              // debounced save (and catches footer tokens typed at the end of
+              // the prose); the note keeps its focus highlight (App's
+              // focusNoteId) so the digits still act on it; a second Esc
+              // clears that.
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  if (findOpen) { e.preventDefault(); e.stopPropagation(); onFindClose(); }
+                  else e.currentTarget.blur();
+                }
+              }}
+              placeholder="Write or paste anything…"
+              spellCheck={false}
+            />
+          </div>
+          {/* The footer's editing surface: the note's `!N #tag` tokens on a dim
+              line under the prose — metadata, not content. Rendered only when
+              the note has tokens or is hovered/focused (an empty line on every
+              note would be chrome at rest); its placeholder is the only
+              affordance for adding metadata to a bare note besides typing
+              tokens at the end of the prose (they migrate here on blur).
+              Hidden notes don't render it — their cards are read-mostly. */}
+          {!note.hidden && (metaText.trim() !== "" || hovered || focused) && (
+            <input
+              className="note-meta-input"
+              value={metaText}
+              placeholder="!N #tag"
+              spellCheck={false}
+              onChange={(e) => {
+                setMetaText(e.target.value);
+                scheduleSave(joinNoteBody(bodyText, e.target.value));
+              }}
+              onBlur={flushAndCatch}
+              onKeyDown={(e) => {
+                // Enter commits (blur), Esc steps down the ladder the same way
+                // the textarea's Escape does.
+                if (e.key === "Enter" || e.key === "Escape") {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+            />
           )}
-          <textarea
-            ref={ref}
-            className="note-textarea"
-            value={val}
-            onChange={(e) => {
-              setVal(e.target.value);
-              autosize();
-              scheduleSave(e.target.value);
-            }}
-            onBlur={() => {
-              if (saveTimer.current) {
-                clearTimeout(saveTimer.current);
-                saveTimer.current = null;
-              }
-              // Save immediately on blur.
-              onUpdate(note.id, val);
-            }}
-            // Esc ladder: find bar → editing → focused. Blur flushes the
-            // debounced save; the note keeps its focus highlight (App's
-            // focusNoteId) so the digits still act on it; a second Esc clears
-            // that.
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                if (findOpen) { e.preventDefault(); e.stopPropagation(); onFindClose(); }
-                else e.currentTarget.blur();
-              }
-            }}
-            placeholder="Write or paste anything…"
-            spellCheck={false}
-          />
-        </div>
+        </>
       )}
       <div
         className="note-actions"
@@ -624,12 +695,12 @@ function NoteInput({
           onClick={onToggleCollapse}
           title={collapsed ? "Expand note" : "Collapse note"}
           aria-label={collapsed ? "Expand note" : "Collapse note"}
-        >{collapsed ? "⌄" : "⌃"}</button>
+        >{collapsed ? <FindChevron size={12} /> : <FindChevron up size={12} />}</button>
         {/* ⬇ exports the body as a .txt via the native save panel — slot 2 on
             a focused note. Only for notes with content, like the delete slot;
             hidden notes skip it entirely (their slots are restore/delete
             only). */}
-        {!note.hidden && val.trim() && (
+        {!note.hidden && (bodyText.trim() !== "" || metaText.trim() !== "") && (
           <button
             className="item-action"
             data-kb="2"
@@ -654,7 +725,7 @@ function NoteInput({
         ) : (
           <HideMenu kb="3" onHide={onHide} />
         )}
-        {val.trim() && (
+        {(bodyText.trim() !== "" || metaText.trim() !== "") && (
           <button
             className="note-delete"
             data-kb="4"
@@ -701,10 +772,13 @@ function DownloadIcon() {
 }
 
 // Prev/next-match chevrons for the find bar — the details chevron's geometry,
-// a size down for the smaller buttons.
-function FindChevron({ up }: { up?: boolean }) {
+// a size down for the smaller buttons. Also the collapse/expand button's glyph
+// (slot 1): one consistent stroked shape, flipped by the `up` prop — unicode
+// ⌃/⌄ are two different glyphs riding the font baseline, so they never
+// matched each other or centered in the button.
+function FindChevron({ up, size = 11 }: { up?: boolean; size?: number }) {
   return (
-    <svg className="action-chevron" viewBox="0 0 12 12" width="11" height="11" aria-hidden="true">
+    <svg className="action-chevron" viewBox="0 0 12 12" width={size} height={size} aria-hidden="true">
       <path
         d={up ? "M2.8 7.6 6 4.4 9.2 7.6" : "M2.8 4.4 6 7.6 9.2 4.4"}
         fill="none"

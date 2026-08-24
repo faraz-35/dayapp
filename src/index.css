@@ -565,7 +565,10 @@ button {
    The line carries one piece of metadata chrome: the note's project label
    (right-aligned, same hue-per-project as item rows) when a `#tag` footer links
    one. Priority never shows here — the tier groups/dividers are the notes'
-   tier signal. The text span owns the ellipsis so the label stays whole. */
+   tier signal. The text span owns the ellipsis so the label stays whole.
+   The hover/focus action cluster floats at the card's top-right corner, so
+   while it's revealed the line yields it room — the same reveal-and-make-room
+   language rows use; at rest the label sits flush right over nothing. */
 .note-preview {
   min-height: 28px;            /* matches .note-textarea — single-line notes keep their height */
   display: flex;
@@ -574,6 +577,11 @@ button {
   font-size: 13px;
   line-height: 1.5;
   color: var(--text);
+  padding-right: 2px;
+  transition: padding-right 0.08s ease;
+}
+:is(.note.hovered, .note.focused) .note-preview {
+  padding-right: 100px;        /* the ⌄ ⬇ ◐ × cluster (~94px incl. its corner offset) */
 }
 .note-preview-text {
   flex: 1;
@@ -584,6 +592,27 @@ button {
 }
 .note-preview .project-label { flex-shrink: 0; }
 .note.hidden .note-preview { color: var(--text-faint); }
+
+/* The footer's editing surface: the note's !N/#tag tokens on a dim line under
+   the prose — metadata, not content (the tokens "disappear" into it once
+   caught). Rendered only when the note has tokens or is hovered/focused, so
+   notes without metadata carry no extra chrome at rest. */
+.note-meta-input {
+  width: 100%;
+  background: none;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  padding: 0;
+  margin: 4px 0 0;
+  user-select: text;
+}
+.note-meta-input:focus { color: var(--text); }
+.note-meta-input::placeholder { color: var(--text-faint); }
+.note.hidden .note-meta-input { color: var(--text-faint); }
 
 .note {
   position: relative;

@@ -148,8 +148,11 @@ records a completed export, per the logging convention).
 Notes carry the items' priority/project axes through the **metadata footer**: a body may
 end with a blank line and then a final line holding only `!1..3` and/or `#tag` tokens
 (the note-body counterpart of items' end-of-line tokens — bodies are prose, so the tokens
-get their own trailing line). The footer is stored verbatim; **editing the line in the
-textarea is how you change the metadata — there is no popover**. `priority`/`project_id`
+get their own trailing line). The footer is stored verbatim but **never renders as body
+text**: the expanded card edits it on a dim token line under the prose
+(`.note-meta-input` in `Notes.tsx` — no popover), and tokens typed at the end of the
+prose migrate into that line on blur (`flushAndCatch` — the "caught" moment; junk typed
+in the line falls back into the body as prose). `priority`/`project_id`
 are derived from the footer inside every body write (`parse_note_footer` +
 `derive_note_meta` in `notes.rs`; the body is the source of truth, the columns a cache,
 so they can never drift). The grammar is strict — the footer must be the last non-empty
@@ -771,17 +774,22 @@ into Notes or edit fields isn't hijacked.
   preference, like zoom. No dedicated key — the focus grammar reaches it as digit `1`
   on a focused note (`n1-9` then `1`).
 - **Priority + projects via the metadata footer** (see "Notes" under Data model): the
-  body may end with a blank line + a `!N`/`#tag` token line; it's plain text (no
-  popover — editing the line is the setter), and the capture field normalizes trailing
+  body may end with a blank line + a `!N`/`#tag` token line; the footer never renders as
+  body text — the expanded card edits it on the dim `.note-meta-input` line under the
+  prose (rendered only when the note has tokens or is hovered/focused; no popover), and
+  tokens typed at the end of the prose migrate there on blur (`flushAndCatch`). The
+  capture field normalizes trailing
   tokens into it. The list **groups by tier like the Backlog** — P1 → P3 → unmarked
   under tier dividers labeled with the bars, single-tier undivided; the cards carry no
   bars (the sections are the tier signal). The collapsed card shows the project label
-  (right-aligned, the row language); the expanded card is pure content — no metadata
-  chrome, the footer included as text. A footer edit that moves the tier re-lands the
+  (right-aligned, the row language; the preview line yields the hover-action cluster
+  its corner while revealed). A footer edit that moves the tier re-lands the
   card in its group as soon as the debounced save returns (the save returns the
   re-derived row; `sortNotes` mirrors the SQL ordering — the optimistic list is what
   the next refresh returns). The list narrows under the ⌘P `Priority 1/2/3 Notes`
-  toggles, the ⌘F `#` project filter, and Focus Mode.
+  toggles, the ⌘F `#` project filter, and Focus Mode. Slot 1's collapse/expand glyph
+  is the shared SVG chevron (flipped, flex-centered) — never unicode ⌃/⌄, which are
+  two mismatched glyphs riding the font baseline.
 - **⬇ download (slot 2):** exports the note's body as a `.txt` through the native save
   panel (`save_text_file` in `lib.rs` — `rfd`'s async panel, which dispatches to the
   main thread itself; the command returns `false` on cancel, not an error). The

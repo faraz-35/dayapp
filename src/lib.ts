@@ -533,6 +533,18 @@ export function splitNoteFooter(body: string): { body: string; priority: 1 | 2 |
   return { body, priority: null, tag: null };
 }
 
+/** Serialize a split footer back to its canonical line form ("!2 #growth"). */
+export const noteFooterText = (s: { priority: 1 | 2 | 3 | null; tag: string | null }): string =>
+  [s.priority ? `!${s.priority}` : "", s.tag ? `#${s.tag}` : ""].filter(Boolean).join(" ");
+
+/** Re-join a prose body with its footer line ("body\n\n!2 #tag"); with no footer
+ *  tokens the body passes through verbatim. The inverse of splitNoteFooter for
+ *  the save path (the two-field editor in Notes.tsx joins on every save). */
+export const joinNoteBody = (body: string, footer: string): string => {
+  const f = footer.trim();
+  return f ? `${body.replace(/\s+$/, "")}\n\n${f}` : body;
+};
+
 /** Note-capture normalization: trailing `!N`/`#tag` tokens on the capture line
  *  (task muscle memory — they sit at the end there too) are rewritten as the
  *  note's metadata footer: blank line + token line appended to the body. `@`
