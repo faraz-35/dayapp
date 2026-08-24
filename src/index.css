@@ -559,17 +559,30 @@ button {
    textarea focused, caret at end); its hover actions (⌄ ◐ ×) stay available. */
 .note.collapsed { cursor: pointer; }
 .note.collapsed:hover { background: var(--bg-hover); }
+/* Collapsed note: the same card shrunk in place to its first prose line — no
+   layout swap, just less height. The card itself is the expand control (click →
+   textarea focused, caret at end); its hover actions (⌄ ◐ ×) stay available.
+   The line carries one piece of metadata chrome: the note's project label
+   (right-aligned, same hue-per-project as item rows) when a `#tag` footer links
+   one. Priority never shows here — the tier groups/dividers are the notes'
+   tier signal. The text span owns the ellipsis so the label stays whole. */
 .note-preview {
   min-height: 28px;            /* matches .note-textarea — single-line notes keep their height */
   display: flex;
   align-items: center;
+  gap: 8px;
   font-size: 13px;
   line-height: 1.5;
   color: var(--text);
+}
+.note-preview-text {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.note-preview .project-label { flex-shrink: 0; }
 .note.hidden .note-preview { color: var(--text-faint); }
 
 .note {
@@ -883,11 +896,12 @@ button {
 }
 .item-details textarea::placeholder { color: var(--text-faint); }
 
-/* Priority tier dividers (Backlog only). The section sorts P1 → P3 → unmarked,
-   and every tier group is introduced by a hairline whose label is the group's
-   signal bars — the unmarked group's label is the empty track. The label keeps
-   the divider from reading as a capture input's underline. Sub-header level —
-   quieter than the section heads; a single-tier Backlog renders undivided. */
+/* Priority tier dividers (Backlog + Notes — every tier-grouped list). The
+   section sorts P1 → P3 → unmarked, and every tier group is introduced by a
+   hairline whose label is the group's signal bars — the unmarked group's label
+   is the empty track. The label keeps the divider from reading as a capture
+   input's underline. Sub-header level — quieter than the section heads; a
+   single-tier list renders undivided. */
 .tier-divider {
   display: flex;
   align-items: center;

@@ -493,3 +493,67 @@ function resolveProjectByName(tag: string, projects: Project[]): Project | null 
   const prefixes = projects.filter((p) => p.name.toLowerCase().startsWith(lower));
   return prefixes.length === 1 ? prefixes[0] : null;
 }
+
+// ---- The note metadata footer ----------------------------------------------
+//
+// A note body may end with: a blank line, then a final line holding ONLY `!1..3`
+// and/or `#tag` tokens — the note-body counterpart of the items' end-of-line
+// tokens (bodies are prose, so the tokens get their own trailing line instead).
+// The footer is stored verbatim and the backend derives priority/project_id
+// from it on every save; these helpers are the TS mirror of that grammar
+// (parse_note_footer in notes.rs) for the surfaces that render or produce
+// bodies. Strict shape: any prose on the line makes it just text, so a
+// markdown-ish "# Heading" or a stray "wow!!" never parses.
+
+/** Split a body into its footer metadata and the prose above it. `body` has the
+ *  footer (and its separating blank line) removed — the source for the
+ *  collapsed preview line and .txt export name. With no valid footer, `body` is
+ *  the input unchanged and both metadata fields are null. */
+export function splitNoteFooter(body: string): { body: string; priority: 1 | 2 | 3 | null; tag: string | null } {
+  const lines = body.split("\n");
+  let last = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].trim()) { last = i; break; }
+  }
+  // The footer: the last non-empty line, not the body's first, with a blank
+  // line directly above it.
+  if (last > 0 && !lines[last - 1].trim()) {
+    let priority: 1 | 2 | 3 | null = null;
+    let tag: string | null = null;
+    let ok = true;
+    for (const tok of lines[last].trim().split(/\s+/)) {
+      if (/^![1-3]$/.test(tok)) priority = Number(tok[1]) as 1 | 2 | 3;      // last wins
+      else if (/^#[\w-]+$/.test(tok)) tag = tok.slice(1);                     // last wins
+      else { ok = false; break; }
+    }
+    if (ok && (priority !== null || tag !== null)) {
+      return { body: lines.slice(0, last - 1).join("\n").trimEnd(), priority, tag };
+    }
+  }
+  return { body, priority: null, tag: null };
+}
+
+/** Note-capture normalization: trailing `!N`/`#tag` tokens on the capture line
+ *  (task muscle memory — they sit at the end there too) are rewritten as the
+ *  note's metadata footer: blank line + token line appended to the body. `@`
+ *  tokens are deliberately not parsed — notes have no delegation axis, and
+ *  `@word` stays literal. A line that is nothing but tokens keeps verbatim (the
+ *  input is never lost); at most one of each kind travels to the footer (second
+ *  occurrence ends the trailing run). */
+export function normalizeNoteCapture(text: string): string {
+  const trimmed = text.trim();
+  const words = trimmed.split(/\s+/);
+  let i = words.length;
+  let prio: string | null = null;
+  let tag: string | null = null;
+  while (i > 0) {
+    const w = words[i - 1];
+    if (prio === null && /^![1-3]$/.test(w)) { prio = w; i--; continue; }
+    if (tag === null && /^#[\w-]+$/.test(w)) { tag = w; i--; continue; }
+    break;
+  }
+  if (i === words.length) return trimmed; // no trailing tokens — body as typed
+  const rest = words.slice(0, i).join(" ").trim();
+  if (!rest) return trimmed;              // tokens only — keep the line literal
+  return `${rest}\n\n${[prio, tag].filter(Boolean).join(" ")}`;
+}

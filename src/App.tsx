@@ -157,6 +157,26 @@ function DayApp() {
       return [];
     }
   });
+  // ⌘P "Show/Hide Priority N Notes" — the notes' own three per-tier toggles,
+  // independent of the task tiers (the same per-surface independence as Hidden
+  // Notes vs Hidden Tasks). Notes group by tier Backlog-style; hiding a tier
+  // drops that group (and its divider).
+  const [hiddenNotePriorities, setHiddenNotePriorities] = useState<(1 | 2 | 3)[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem("dayapp-hidden-note-priorities") ?? "[]");
+      return [1, 2, 3].filter((n) => raw.includes(n)) as (1 | 2 | 3)[];
+    } catch {
+      return [];
+    }
+  });
+  // ⌘P "Enter/Exit Focus Mode" — a lens over the working view, not a set of
+  // toggle mutations: P1 notes, Today, Daily, P1 Backlog only (Goals hidden —
+  // focus mode is stricter than the default working view). Exiting restores
+  // whatever the toggles were. Persisted like every layout surface; Show
+  // Default View exits it.
+  const [focusMode, setFocusMode] = useState(
+    () => localStorage.getItem("dayapp-focus-mode") === "1",
+  );
   // ⌘P "Show/Hide Agent Tasks" — hide the 🤖-marked rows to focus on the ones
   // that are Faraz's own. Persisted like the other layout toggles; default on
   // (agent rows are normal tasks until he says otherwise).
@@ -313,10 +333,12 @@ function DayApp() {
     localStorage.setItem("dayapp-hidden-items", showHiddenItems ? "1" : "0");
     localStorage.setItem("dayapp-hidden-notes", showHiddenNotes ? "1" : "0");
     localStorage.setItem("dayapp-hidden-priorities", JSON.stringify(hiddenPriorities));
+    localStorage.setItem("dayapp-hidden-note-priorities", JSON.stringify(hiddenNotePriorities));
+    localStorage.setItem("dayapp-focus-mode", focusMode ? "1" : "0");
     localStorage.setItem("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
     // Retired key from the single-tier "only" filter era — one-time cleanup.
     localStorage.removeItem("dayapp-priority");
-  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, agentTasksVisible]);
+  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the journal title simply ignores it.
@@ -336,24 +358,27 @@ function DayApp() {
   // What the user sees: items narrowed by the ⌘P hidden priority tiers, the ⌘P
   // agent-tasks toggle, and/or the ⌘F project/agent filters, if any. Hiding a
   // tier removes just that tier's rows — unmarked rows stay, and each tier is
-  // independent. Mutations read the full `items`, and DnD indexes map back to
-  // full-list space in handleMoveItem.
+  // independent. Focus Mode adds its lens here: the Backlog narrows to P1
+  // (Today/Daily stay whole — the day's list is the point of the mode).
+  // Mutations read the full `items`, and DnD indexes map back to full-list
+  // space in handleMoveItem.
   const displayItems = useMemo<Record<Section, Item[]>>(() => {
     if (
       hiddenPriorities.length === 0 && projectFilter === null &&
-      agentTasksVisible && agentFilter === null
+      agentTasksVisible && agentFilter === null && !focusMode
     ) return items;
     const matches = (i: Item) =>
       (i.priority === null || !hiddenPriorities.includes(i.priority)) &&
       (projectFilter === null || i.projectId === projectFilter) &&
       (agentTasksVisible || !i.assignedToAgent) &&
-      (agentFilter === null || (agentFilter === "agent") === i.assignedToAgent);
+      (agentFilter === null || (agentFilter === "agent") === i.assignedToAgent) &&
+      (!focusMode || i.section !== "backlog" || i.priority === 1);
     return {
       today: items.today.filter(matches),
       daily: items.daily.filter(matches),
       backlog: items.backlog.filter(matches),
     };
-  }, [items, hiddenPriorities, projectFilter, agentTasksVisible, agentFilter]);
+  }, [items, hiddenPriorities, projectFilter, agentTasksVisible, agentFilter, focusMode]);
 
   // displayItems narrowed to the visible sections — a toggled-off section's
   // rows aren't rendered, searchable, keyboard-navigable, or totaled (they
@@ -442,13 +467,15 @@ function DayApp() {
       label: "Show Default View",
       hint: "reset every toggle + filter",
       // The universal reset: hidden entries excluded, filters cleared, all
-      // sections + Notes + agent tasks shown — and Goals hidden (the default
-      // working view is the plain task list).
+      // sections + Notes + agent tasks shown, focus mode off — and Goals
+      // hidden (the default working view is the plain task list).
       run: () => {
         setView("list");
         setShowHiddenItems(false);
         setShowHiddenNotes(false);
         setHiddenPriorities([]);
+        setHiddenNotePriorities([]);
+        setFocusMode(false);
         setProjectFilter(null);
         setAgentTasksVisible(true);
         setAgentFilter(null);
@@ -504,6 +531,29 @@ function DayApp() {
         );
       },
     })),
+    ...([1, 2, 3] as const).map((n) => ({
+      id: `notes-prio-${n}`,
+      // The notes' own per-tier toggles — Notes groups by tier like the
+      // Backlog, and hiding a tier drops that whole group. Independent of the
+      // task tiers above (Hidden Notes ≠ Hidden Tasks, same rule).
+      label: hiddenNotePriorities.includes(n) ? `Show Priority ${n} Notes` : `Hide Priority ${n} Notes`,
+      hint: "▮".repeat(4 - n),
+      run: () => {
+        setView("list");
+        setHiddenNotePriorities((h) =>
+          h.includes(n) ? h.filter((p) => p !== n) : [...h, n],
+        );
+      },
+    })),
+    {
+      // Focus Mode — the deep-work lens over the working view: P1 notes,
+      // Today, Daily, and P1 Backlog only (Goals hidden too). A lens, not a
+      // batch of toggle mutations: exiting restores the toggles untouched.
+      id: "toggle-focus",
+      label: focusMode ? "Exit Focus Mode" : "Enter Focus Mode",
+      hint: "P1 notes + Today + Daily + P1 Backlog",
+      run: () => { setView("list"); setFocusMode((v) => !v); },
+    },
     {
       id: "toggle-agent-tasks",
       // The delegation axis: 🤖-marked rows are the agent's queue. Hiding them
@@ -582,7 +632,7 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, agentTasksVisible, demoMode]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, demoMode]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -632,6 +682,14 @@ function DayApp() {
     if (!name) return null;
     return (await handleCreateProject(name)).id;
   };
+
+  // A note's `#tag` footer can create a project backend-side (its save derives
+  // the link inside update_note/create_note) — Notes calls this so the label
+  // renders without waiting for the next 60s tick. App's list stays the single
+  // source; this is just a re-pull of it.
+  const refreshProjects = useCallback(() => {
+    projectsApi.list().then(setProjects).catch((e) => log.warn("projects refresh failed", e));
+  }, []);
 
   const handleCreate = async (section: Section, raw: string) => {
     // Resolve `#tag` → project, `!1..3` → priority, and `@` → agent assignment
@@ -1233,17 +1291,31 @@ function DayApp() {
                 Self-contained like Notes, outside the DnD area; ⌘P → Show/Hide
                 Goals toggles it completely (persisted). Goals don't take part
                 in the item visibility/priority/project filters — they're a
-                separate surface, shown as-is. */}
-            {goalsVisible && (
+                separate surface, shown as-is. Focus Mode hides them too: the
+                lens is stricter than the default working view, and exiting
+                restores whatever the toggle was. */}
+            {goalsVisible && !focusMode && (
               <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} reloadEpoch={dataEpoch} />
             )}
             {/* Notes — the lowest-friction capture surface, right under the
                 goals. Lives above the DnD area so typing/pasting isn't a drag
                 surface. Self-contained: owns its state, API, and persistence.
                 With Show Hidden Notes on, hidden notes render inline (dimmed)
-                instead of being excluded. */}
+                instead of being excluded. Notes group by priority tier like
+                the Backlog (footer tokens `!N`/`#tag` — see Notes.tsx) and
+                narrow under the ⌘F `#` project filter, the ⌘P note-tier
+                toggles, and Focus Mode. */}
             {notesVisible && (
-              <Notes hiddenFilter={showHiddenNotes ? "include" : "exclude"} focusedId={focusNoteId} reloadEpoch={dataEpoch} />
+              <Notes
+                hiddenFilter={showHiddenNotes ? "include" : "exclude"}
+                focusedId={focusNoteId}
+                reloadEpoch={dataEpoch}
+                projects={projects}
+                projectFilter={projectFilter}
+                hiddenPriorities={hiddenNotePriorities}
+                focusMode={focusMode}
+                onProjectsStale={refreshProjects}
+              />
             )}
             {(hiddenPriorities.length > 0 || projectFilter !== null || agentFilter !== null) && allVisible.length === 0 && (
               <div className="empty">

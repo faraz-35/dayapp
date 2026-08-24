@@ -8,12 +8,25 @@
 // HiddenFilter — "include" (⌘P → Show Hidden Notes) renders hidden notes
 // inline (dimmed, ↺ to restore) instead of excluding them.
 //
+// Notes carry the items' priority/project axes through the metadata footer: a
+// body may end with a blank line and a final `!N`/`#tag` token line (the
+// backend derives priority/project_id from it on every save — see notes.rs).
+// The list groups by tier the way the Backlog does — P1 → P3 → unmarked under
+// tier dividers labeled with the bars; the cards themselves carry no bars (the
+// sections are the tier signal). The collapsed card shows the note's project
+// label (right-aligned, the row language); the expanded card is pure content —
+// the footer line included as text, because editing it IS how you set it. The
+// parent narrows the list with the ⌘P note-tier toggles, the ⌘F `#` project
+// filter, and Focus Mode (P1 notes only), the same displayItems pipeline the
+// sections use.
+//
 // Each note card can be collapsed to a single line — its first non-empty
-// line. The card shrinks in place (same look, just shorter; no layout
-// swap), and the collapsed card is one big click target: expanding focuses
-// its textarea with the caret at the end, so collapsed → editing is one
-// click. Which notes are collapsed persists in localStorage; no dedicated
-// key — the focus grammar reaches it as digit 1 on a focused note.
+// prose line (the footer never previews). The card shrinks in place (same
+// look, just shorter; no layout swap), and the collapsed card is one big
+// click target: expanding focuses its textarea with the caret at the end, so
+// collapsed → editing is one click. Which notes are collapsed persists in
+// localStorage; no dedicated key — the focus grammar reaches it as digit 1 on
+// a focused note.
 //
 // Two note-local verbs ride the same card: ⬇ exports the body as a .txt
 // through the native save panel (slot 2 on a focused note), and ⌘F while a
@@ -21,18 +34,51 @@
 // global item search only owns ⌘F elsewhere. Both live here, not in App:
 // the note owns its text, and both verbs are entirely about it.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { notesApi, type Note } from "./notesApi";
-import { type HideDuration, type HiddenFilter } from "./lib";
+import { type HideDuration, type HiddenFilter, normalizeNoteCapture, projectColor, splitNoteFooter, type Project } from "./lib";
 import { log } from "./log";
 import HideMenu from "./HideMenu";
+import { PriorityBars } from "./components/ItemRow";
 
 // Collapsed-note ids, persisted like the UI zoom — a display preference.
 // localStorage only: collapse is UI state, not content, so the notes table
 // stays untouched.
 const COLLAPSED_KEY = "dayapp-notes-collapsed";
 
-export default function Notes({ hiddenFilter, focusedId, reloadEpoch = 0 }: { hiddenFilter: HiddenFilter; focusedId?: string | null; reloadEpoch?: number }) {
+// The notes' display order, mirroring list_notes' ORDER BY (notes.rs): priority
+// tier first (unmarked last), then manual order — the Backlog's ordering. Saves
+// return the re-derived row, so re-applying this keeps the optimistic list
+// identical to what the next refresh returns (a note whose footer edit moved it
+// across tiers lands in its group immediately, not at the next 60s tick).
+const sortNotes = (list: Note[]) =>
+  [...list].sort(
+    (a, b) =>
+      (a.priority ?? 99) - (b.priority ?? 99) ||
+      a.sortOrder - b.sortOrder ||
+      a.createdAt.localeCompare(b.createdAt),
+  );
+
+export default function Notes({
+  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, focusMode, onProjectsStale,
+}: {
+  hiddenFilter: HiddenFilter;
+  focusedId?: string | null;
+  reloadEpoch?: number;
+  /** App's projects list — the single source (like Goals). The collapsed card's
+   *  project label renders from it; ids not in it simply show no label. */
+  projects: Project[];
+  /** ⌘F `#` picker: narrow notes to this project too (null = off) — the same
+   *  filter that narrows the task sections, composed with the tiers below. */
+  projectFilter: string | null;
+  /** ⌘P → Show/Hide Priority N Notes: tiers in this list are hidden. */
+  hiddenPriorities: (1 | 2 | 3)[];
+  /** ⌘P → Focus Mode: only P1 notes show (the lens, not a toggle mutation). */
+  focusMode: boolean;
+  /** A note save can create a project from its `#tag` footer (backend-side);
+   *  called so App re-pulls the list and the just-linked note gets its label. */
+  onProjectsStale: () => void;
+}) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState("");
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => {
@@ -145,18 +191,28 @@ export default function Notes({ hiddenFilter, focusedId, reloadEpoch = 0 }: { hi
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, []);
 
-  // Type + Enter creates a real note at the bottom of the list. The capture
-  // field stays open for the next note, so capture stays zero-inertia.
-  const handleCreate = async (body: string) => {
-    const note = await notesApi.create(body);
-    setNotes((s) => [...s, note]);
+  // Type + Enter creates a real note. Trailing `!N`/`#tag` tokens on the
+  // capture line are normalized into the body's metadata footer (task muscle
+  // memory — the same tokens, end of line); the note lands in its tier group
+  // right away via sortNotes, not at the bottom until the next refresh.
+  const handleCreate = async (raw: string) => {
+    const note = await notesApi.create(normalizeNoteCapture(raw));
+    setNotes((s) => sortNotes([...s, note]));
+    // The footer's `#tag` may have created a project backend-side — App's
+    // list doesn't know it yet, and the label renders from that list.
+    if (note.projectId && !projects.some((p) => p.id === note.projectId)) onProjectsStale();
   };
 
   const handleUpdate = useCallback(async (id: string, body: string) => {
-    // Optimistic local update; debounce is in the textarea component.
+    // Optimistic local update; debounce is in the textarea component. The save
+    // returns the row with priority/project re-derived from the body's footer
+    // — reconcile from it (re-sorted, so a footer edit that moved the tier
+    // lands the card in its group immediately) instead of refetching.
     setNotes((s) => s.map((n) => (n.id === id ? { ...n, body } : n)));
-    await notesApi.update(id, body);
-  }, []);
+    const saved = await notesApi.update(id, body);
+    setNotes((s) => sortNotes(s.map((n) => (n.id === id ? saved : n))));
+    if (saved.projectId && !projects.some((p) => p.id === saved.projectId)) onProjectsStale();
+  }, [projects, onProjectsStale]);
 
   // Collapse/expand a note card in place. Persisted so a relaunch keeps the
   // list as compact as the user left it.
@@ -166,6 +222,25 @@ export default function Notes({ hiddenFilter, focusedId, reloadEpoch = 0 }: { hi
     setCollapsedIds(next);
     localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
   };
+
+  // What the user sees: notes narrowed by the ⌘P hidden priority tiers, the ⌘F
+  // project filter, and/or Focus Mode — the same lens pipeline the task
+  // sections use. The render below groups it by tier (P1 → P3 → unmarked).
+  const displayNotes = useMemo(
+    () =>
+      notes.filter(
+        (n) =>
+          (n.priority === null || !hiddenPriorities.includes(n.priority)) &&
+          (projectFilter === null || n.projectId === projectFilter) &&
+          (!focusMode || n.priority === 1),
+      ),
+    [notes, hiddenPriorities, projectFilter, focusMode],
+  );
+
+  // A notes list whose entries all share one tier (including all-unmarked) is
+  // a single group — no dividers, nothing to label.
+  const singleTier =
+    displayNotes.length > 0 && displayNotes.every((n) => n.priority === displayNotes[0].priority);
 
   const handleDelete = async (id: string) => {
     setNotes((s) => s.filter((n) => n.id !== id));
@@ -229,22 +304,38 @@ export default function Notes({ hiddenFilter, focusedId, reloadEpoch = 0 }: { hi
         </div>
       )}
 
-      {notes.map((note) => (
-        <NoteInput
-          key={note.id}
-          note={note}
-          hovered={hoveredId === note.id}
-          focused={focusedId === note.id}
-          collapsed={collapsedIds.has(note.id)}
-          findOpen={findId === note.id}
-          onToggleCollapse={() => toggleCollapse(note.id)}
-          onUpdate={handleUpdate}
-          onDelete={() => handleDelete(note.id)}
-          onHide={(duration) => handleHide(note.id, duration)}
-          onUnhide={() => handleUnhide(note.id)}
-          onFindClose={() => setFindId(null)}
-        />
-      ))}
+      {/* Grouped by tier (P1 → P3 → unmarked) with the Backlog's divider
+          treatment: every tier group introduced by a hairline labeled with its
+          bars (empty track for the unmarked tail), dividers derived purely
+          from the rendered order so a filtered-out tier drops its divider
+          too, and a single-tier list renders undivided. */}
+      {displayNotes.map((note, idx) => {
+        const dividerBefore =
+          !singleTier && (idx === 0 || displayNotes[idx - 1].priority !== note.priority);
+        return (
+          <Fragment key={note.id}>
+            {dividerBefore && (
+              <div className="tier-divider">
+                <PriorityBars priority={note.priority} />
+              </div>
+            )}
+            <NoteInput
+              note={note}
+              projects={projects}
+              hovered={hoveredId === note.id}
+              focused={focusedId === note.id}
+              collapsed={collapsedIds.has(note.id)}
+              findOpen={findId === note.id}
+              onToggleCollapse={() => toggleCollapse(note.id)}
+              onUpdate={handleUpdate}
+              onDelete={() => handleDelete(note.id)}
+              onHide={(duration) => handleHide(note.id, duration)}
+              onUnhide={() => handleUnhide(note.id)}
+              onFindClose={() => setFindId(null)}
+            />
+          </Fragment>
+        );
+      })}
     </section>
   );
 }
@@ -252,9 +343,10 @@ export default function Notes({ hiddenFilter, focusedId, reloadEpoch = 0 }: { hi
 // ---- Single note textarea ------------------------------------------------
 
 function NoteInput({
-  note, hovered, focused, collapsed, findOpen, onToggleCollapse, onUpdate, onDelete, onHide, onUnhide, onFindClose,
+  note, projects, hovered, focused, collapsed, findOpen, onToggleCollapse, onUpdate, onDelete, onHide, onUnhide, onFindClose,
 }: {
   note: Note;
+  projects: Project[];
   hovered: boolean;
   focused: boolean;
   collapsed: boolean;
@@ -271,6 +363,11 @@ function NoteInput({
   const ref = useRef<HTMLTextAreaElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestBody = useRef(note.body);
+  // The note's project, resolved against App's list (the single source, like
+  // Goals). The collapsed card's label renders from it; a link to a project
+  // not in the list (deleted moments ago, or created backend-side by this very
+  // note's footer before the staleness refresh lands) just shows no label.
+  const project = projects.find((p) => p.id === note.projectId) ?? null;
 
   // ---- Find in this note (⌘F while editing it) ------------------------------
   // The query and match index live here, not in Notes, because the matches are
@@ -459,7 +556,20 @@ function NoteInput({
       )}
       {collapsed ? (
         <div className="note-preview">
-          {val.split("\n").find((l) => l.trim().length > 0)?.trim() ?? ""}
+          {/* The first non-empty PROSE line — the metadata footer never
+              previews (it's the note's metadata, shown only as the label
+              beside this line). The project label is the collapsed card's one
+              piece of chrome, the row language: same hue-per-project as item
+              rows, right-aligned. The expanded card carries no metadata
+              chrome at all — pure content, the footer included as text. */}
+          <span className="note-preview-text">
+            {splitNoteFooter(val).body.split("\n").find((l) => l.trim().length > 0)?.trim() ?? ""}
+          </span>
+          {project && (
+            <span className="project-label" style={{ color: projectColor(project.id) }}>
+              {project.name}
+            </span>
+          )}
         </div>
       ) : (
         <div className="note-body-wrap">
@@ -558,11 +668,12 @@ function NoteInput({
   );
 }
 
-// A filesystem-safe .txt name from the note's first non-empty line — the same
-// line the collapsed preview shows, so an export names itself the way the note
-// reads in the list. Empty notes fall back to "note".
+// A filesystem-safe .txt name from the note's first non-empty prose line — the
+// same line the collapsed preview shows, so an export names itself the way the
+// note reads in the list. The metadata footer never names the file. Empty
+// notes fall back to "note".
 const exportName = (body: string) => {
-  const first = body.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  const first = splitNoteFooter(body).body.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
   const base = first
     .replace(/[/\\:?*"<>|]/g, " ")
     .replace(/\s+/g, " ")

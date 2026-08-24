@@ -77,6 +77,16 @@ CREATE TABLE IF NOT EXISTS meta (
 -- Notes: free-form multiline text (quotes, scratch, anything). Deliberately NOT
 -- logged in `actions` — notes are content, not activity. Independent of the
 -- items/actions lifecycle.
+--
+-- priority + project_id are the same axes items carry, generalized to multi-line
+-- content: the body may END with a metadata footer (a blank line, then a final
+-- line of only `!1..3` and/or `#tag` tokens — the note-body equivalent of items'
+-- trailing tokens). The footer is stored verbatim (editing the line IS how you
+-- change the metadata — no popover); these columns are derived from it inside
+-- every body write, so they can never drift. Housekeeping like the item
+-- counterparts — not logged. Notes group by priority the way the Backlog does
+-- (tier sections P1 → P3 → unmarked); the project link shares the projects
+-- table, and deleting a project nulls it here too.
 CREATE TABLE IF NOT EXISTS notes (
     id           TEXT PRIMARY KEY,                       -- ULID
     body         TEXT NOT NULL DEFAULT '',
@@ -84,7 +94,9 @@ CREATE TABLE IF NOT EXISTS notes (
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL,
     hidden       INTEGER NOT NULL DEFAULT 0,
-    hidden_until TEXT
+    hidden_until TEXT,
+    priority     INTEGER CHECK (priority IS NULL OR priority IN (1, 2, 3)),
+    project_id   TEXT                                    -- FK→projects.id; nullable, no CASCADE enforced inline
 );
 
 CREATE INDEX IF NOT EXISTS idx_notes_order ON notes(sort_order);

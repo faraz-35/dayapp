@@ -133,7 +133,7 @@ async fn create_note(db: State<'_, DbState>, body: String) -> Result<Note, Strin
 }
 
 #[tauri::command]
-async fn update_note(db: State<'_, DbState>, id: String, body: String) -> Result<(), String> {
+async fn update_note(db: State<'_, DbState>, id: String, body: String) -> Result<Note, String> {
     with_db(db, move |db| db.update_note(&id, &body)).await
 }
 

@@ -68,7 +68,9 @@ Your data in `~/Library/.../dayapp.db` is never touched.
 
 VS Code / Linear–style: press **⌘P** anywhere, type to filter, ↑/↓ to move, Enter to run.
 Currently: Show Default View (the universal reset), the Show/Hide toggles — Goals, Notes,
-Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3, Agent Tasks —
+Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3, Priority 1/2/3 Notes,
+Agent Tasks — **Enter/Exit Focus Mode** (the deep-work lens: P1 notes + Today + Daily +
+P1 Backlog only),
 Enter/Exit Demo Mode + Reset Demo Data, the mobile sync commands (Deploy Task List Now /
 Pull Captures Now / Configure Sync…), View Journal, Keyboard Shortcuts (the focus-grammar
 reference card), and Update DayApp. Trivially extensible — add a command to the registry
@@ -221,13 +223,14 @@ is stripped from the row once linked. (Tags compose with `!1..3` priority and
 To focus on one project's work, press **⌘F and type `#`**: the search list
 becomes your projects (keep typing after the `#` to narrow it), each shown with
 its color dot. Pick one — ↑/↓ + Enter or a click — and the main list shows only
-that project's tasks. The filtered project is marked **filtered** in the list;
+that project's tasks **and notes** (notes link to projects too — see
+[Notes](#notes)). The filtered project is marked **filtered** in the list;
 picking it again clears the filter, as does **⌘P → Show Default View**. The
 filter composes with the priority tiers and lasts for the session only.
 
 Assigning a project is housekeeping — it's **not** logged to the journal (only
-completion/movement is). Deleting a project unassigns its items; the items
-themselves are kept.
+completion/movement is). Deleting a project unassigns its items, goals, and
+notes; the rows themselves are kept.
 
 ## Priorities
 
@@ -252,6 +255,39 @@ Backlog whose items all share one tier renders undivided.
 alone (each command's hint shows its bars; the toggles persist across
 launches). **Show Default View** clears them all. Priorities are
 housekeeping, like projects: not logged to the journal.
+
+## Notes
+
+Notes are the free-form surface — auto-growing textareas with debounced
+autosave, a zero-inertia capture field, per-note ⌘F find, and ⬇ `.txt` export.
+They carry the same priority/project axes as tasks, generalized to multi-line
+content via the **metadata footer**:
+
+- A note's body may end with a **blank line and then a final line of only
+  `!N` / `#tag` tokens** — `ship essay !2` typed in the capture field becomes
+  a note whose body ends with a blank line + `!2` (task muscle memory, same
+  tokens). The footer is plain text in the body: **editing that line is how
+  you change the metadata** — there's no popover. Any prose on the last line
+  makes it just text, so a markdown-ish `# Heading` or a stray `wow!!` never
+  parses; removing the footer clears both.
+- Notes **group by priority exactly like the Backlog** — P1 → P3 → unmarked
+  under tier dividers labeled with the group's bars, single-tier lists
+  undivided. The cards themselves carry no bars; the sections are the tier
+  signal.
+- The collapsed card shows the note's **project label** (right-aligned, the
+  same hue-per-project as task rows). An unmatched footer `#tag` creates its
+  project, exactly like a trailing tag on a task; the tag matching is the same
+  (case-insensitive exact or unique prefix).
+- **⌘P → Show/Hide Priority 1/2/3 Notes** — the notes' own three tier toggles,
+  independent of the task tiers. **⌘F's `#` project filter narrows notes too**.
+- **⌘P → Enter/Exit Focus Mode** is the deep-work lens: **P1 notes, Today,
+  Daily, and P1 Backlog only** (Goals hidden too). It's a lens, not a batch of
+  toggle changes — exiting restores whatever your toggles were, and Show
+  Default View exits it.
+
+Like everything note-shaped, the footer and its derived priority/project are
+content + housekeeping: never logged to the journal, and not exported to the
+phone (mobile is a task mirror).
 
 ## Delegating to the agent
 

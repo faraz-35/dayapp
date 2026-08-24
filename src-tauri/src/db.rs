@@ -216,6 +216,8 @@ impl Db {
         ensure_column(conn, "items", "details", "TEXT NOT NULL DEFAULT ''")?;
         ensure_column(conn, "notes", "hidden", "INTEGER NOT NULL DEFAULT 0")?;
         ensure_column(conn, "notes", "hidden_until", "TEXT")?;
+        ensure_column(conn, "notes", "priority", "INTEGER")?;
+        ensure_column(conn, "notes", "project_id", "TEXT")?;
         Ok(())
     }
 

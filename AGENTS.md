@@ -136,7 +136,7 @@ meta    key, value           — currently holds last_sweep_date
 ### Notes (free-form content — NOT logged)
 
 ```
-notes   id, body, sort_order, created_at, updated_at
+notes   id, body, sort_order, created_at, updated_at, priority, project_id
 ```
 
 Notes are **content**, not **activity**. They have their own table and are never written
@@ -144,6 +144,29 @@ to `actions`. Do not add notes to the journal. The ⬇ export (a .txt through th
 save panel — `save_text_file` in `lib.rs`, no db involvement) and the note-local ⌘F find
 are pure reading/export verbs over that content: also never logged (one Rust info line
 records a completed export, per the logging convention).
+
+Notes carry the items' priority/project axes through the **metadata footer**: a body may
+end with a blank line and then a final line holding only `!1..3` and/or `#tag` tokens
+(the note-body counterpart of items' end-of-line tokens — bodies are prose, so the tokens
+get their own trailing line). The footer is stored verbatim; **editing the line in the
+textarea is how you change the metadata — there is no popover**. `priority`/`project_id`
+are derived from the footer inside every body write (`parse_note_footer` +
+`derive_note_meta` in `notes.rs`; the body is the source of truth, the columns a cache,
+so they can never drift). The grammar is strict — the footer must be the last non-empty
+line, preceded by a blank one, and any prose on it makes the whole line text (a
+markdown-ish `# Heading` or `wow!!` never parses; repeated tokens of a kind: last wins;
+there is deliberately no `!0`/`#0` clear — removing the token IS the clear). The tag
+resolves with exactly the items' trailing-`#tag` semantics (`resolve_or_create_project`
+in `projects.rs`: case-insensitive exact, unique prefix, else create — so a footer tag
+whose project was deleted recreates it on the next save; deleting the tag from the body
+is what drops the link for good). The capture field normalizes trailing tokens into a
+footer (`normalizeNoteCapture` in `lib.ts`), so capture keeps task muscle memory. Notes
+group by tier exactly like the Backlog (`ORDER BY COALESCE(priority, 99), sort_order` —
+P1 → P3 → unmarked, tier dividers labeled with the bars, single-tier undivided); the
+cards carry no bars, and the collapsed card shows the project label (right-aligned, the
+row language) while the expanded card is pure content with the footer as plain text.
+Priority/project on notes are housekeeping — **not** logged — and stay out of the phone
+export (mobile is a task mirror).
 
 ### Projects (a second organising axis — NOT logged)
 
@@ -154,7 +177,9 @@ projects id, name, sort_order, created_at
 Projects let each item carry a color-coded label on the far right of its row (deterministic
 hue per project, so the eye groups items across sections). Assignment is housekeeping (like
 hide) — **never** logged to `actions`. `items.project_id` is the nullable FK (no enforced
-cascade; deleting a project runs `UPDATE items SET project_id = NULL`). Logic lives in
+cascade; deleting a project runs `UPDATE items SET project_id = NULL` — and the same for
+`goals` and `notes`). Notes link through their `#tag` footer (see "Notes" above); goals
+through the # popover. Logic lives in
 `src-tauri/src/projects.rs`; the popover is `src/ProjectMenu.tsx`.
 
 ### Goals (the identity layer — logged like items)
@@ -307,7 +332,9 @@ axis — bare `#` lists projects, `#name` lists that project's rows — and `@ag
 flip to the delegation axis), `--journal [today|week|month|all|YYYY-MM-DD]` is the
 Journal view (actions grouped newest-first by day with the per-task ⏱ breakdown and day
 total, the same verbs, default `today` like the GUI), `--notes`/`--projects` are their
-sections, and the `--hidden` modifier on `--list`/`--notes` is the ⌘P "Show Hidden"
+sections (`--notes` prints tier-ordered — the same ORDER BY the GUI groups from — with
+the metadata footer lines verbatim in each body, so priority/project read straight off
+the text), and the `--hidden` modifier on `--list`/`--notes` is the ⌘P "Show Hidden"
 reveal (archived rows marked ◐). `--task` also carries the row's ⏱ cumulative time and
 pending reminder. The read flags stay read-only; writes are `--add`/`--complete`/`--start`
 plus the two delegation verbs: `--move <query> --to <section>` is the drag, headless — the
@@ -405,7 +432,7 @@ dayapp/
 │   ├── focusNav.ts                 ← the grammar's DOM side: data-kb button dispatch, capture focus, nth note/goal, popover check
 │   ├── main.tsx                    ← React entry
 │   ├── index.css                   ← the dark theme + all component styles
-│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export)
+│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + footer-driven tier groups)
 │   ├── Goals.tsx                   ← goals: horizon groups + capture + achieve (own state; between Notes and the sections)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
@@ -425,7 +452,7 @@ dayapp/
     ├── src/
     │   ├── lib.rs                  ← Tauri commands + setup (first-run demo, sweeps, reminders, logging plugin) + self_update
     │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, reminders, completions + Db struct (conn swap, launch_sweeps)
-    │   ├── notes.rs                ← notes DB logic (methods on Db, touches only notes table)
+    │   ├── notes.rs                ← notes DB logic + the metadata footer parser/derivation (methods on Db)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
     │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
@@ -672,11 +699,12 @@ prefixes `n`/`t`/`d`/`b`/`g`.
 **Show/Hide toggles (⌘P):** every layout surface is an independent, persisted toggle
 whose label reflects its state — `Goals`, `Notes`, `Today`/`Daily`/`Backlog` sections,
 `Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
-dimmed, ↺/× actions), the per-tier `Priority 1/2/3` toggles, and `Agent Tasks` (hides
-the 🤖-marked rows — the "what's actually mine" focus view). All persist in
-localStorage (display preferences, like zoom). The header ◐ button toggles both hidden
-surfaces at once. There is no hidden-only mode and no separate archive screen —
-inline-or-excluded is the whole visibility story.
+dimmed, ↺/× actions), the per-tier `Priority 1/2/3` toggles, the notes' own
+`Priority 1/2/3 Notes` toggles (independent of the task tiers, like Hidden Notes ≠
+Hidden Tasks), and `Agent Tasks` (hides the 🤖-marked rows — the "what's actually mine"
+focus view). All persist in localStorage (display preferences, like zoom). The header ◐
+button toggles both hidden surfaces at once. There is no hidden-only mode and no separate
+archive screen — inline-or-excluded is the whole visibility story.
 
 **Demo mode (⌘P):** `Enter/Exit Demo Mode` swaps the whole database to the disposable
 demo twin (see "Demo mode" under Data model); while active, `Reset Demo Data` re-seeds
@@ -689,11 +717,23 @@ ness is what makes it a faithful demo.
 each hides (or shows) just that tier's rows; unmarked rows are never touched and
 toggling one tier leaves the others alone (`hiddenPriorities` in `App.tsx`; DnD indexes
 map back to full-list space in `handleMoveItem`). The set persists across launches.
+`Show/Hide Priority 1/2/3 Notes` (`hiddenNotePriorities`) is the same pattern over the
+notes' tier groups — independent of the task tiers.
+
+**Focus Mode (⌘P):** `Enter/Exit Focus Mode` is a **lens**, not a batch of toggle
+mutations — P1 notes only, Today, Daily, and P1 Backlog only (Goals hidden too: the lens
+is stricter than the default working view). It composes with the filters/toggles in the
+same `displayItems`/Notes pipelines and never mutates them: exiting restores whatever
+they were. Persisted (`dayapp-focus-mode`); Show Default View exits it. A capture that
+doesn't match the lens (an unmarked note, a non-P1 backlog row) is created but not
+shown — the same rule the ⌘F filters follow; capture with a `!1` token to land inside
+the lens.
 
 **Project filter (⌘F `#`):** typing a leading `#` in the ⌘F search flips the hit list to the
 projects (color dot + name, narrowed by the text after the `#`); picking one narrows the main
-list to that project, picking the already-active one clears it (the same toggle rule as the
-priority tiers). Same `displayItems` pipeline — it composes with the priority tier.
+list to that project — **items and notes alike** — picking the already-active one clears it
+(the same toggle rule as the priority tiers). Same `displayItems` pipeline — it composes
+with the priority tier.
 
 **Agent filter (⌘F `@`):** the same picker pattern over the delegation axis — a leading `@`
 flips the hit list to two fixed entries, `🤖 Agent tasks` and `My tasks`; picking one narrows
@@ -701,8 +741,9 @@ the main list to the agent's queue or Faraz's own rows, picking the active one c
 Session-only like the project filter; composes with the tiers and the project filter in the
 same `displayItems` pipeline.
 
-**Show Default View is the universal reset:** hidden entries excluded, priority tiers,
-project and agent filters cleared, agent tasks shown, all three sections + Notes shown —
+**Show Default View is the universal reset:** hidden entries excluded, priority tiers
+(tasks + notes), project and agent filters cleared, agent tasks shown, focus mode off,
+all three sections + Notes shown —
 and Goals hidden (the default working view is the plain task list). One command always
 restores it.
 
@@ -721,13 +762,26 @@ into Notes or edit fields isn't hijacked.
 - An always-open capture field sits at the top of Notes: type + Enter creates a
   note. (Replaced the old `+` button + seed empty note.)
 - Each note card collapses **in place**: the ⌃ button in its hover actions folds it to
-  one line (its first non-empty line, ellipsized) — same card, just shorter, no layout
+  one line (its first non-empty **prose** line — the metadata footer never previews),
+  ellipsized — same card, just shorter, no layout
   swap. The collapsed card is one big click target: expanding focuses its textarea with
   the caret at end, so collapsed → editing is one click. Its hover actions remain (⌄ ⬇ ◐ ×;
   action clicks stopPropagation so they don't double as the expand click). Collapsed ids
   persist in localStorage (`dayapp-notes-collapsed`), pruned on delete — a display
   preference, like zoom. No dedicated key — the focus grammar reaches it as digit `1`
   on a focused note (`n1-9` then `1`).
+- **Priority + projects via the metadata footer** (see "Notes" under Data model): the
+  body may end with a blank line + a `!N`/`#tag` token line; it's plain text (no
+  popover — editing the line is the setter), and the capture field normalizes trailing
+  tokens into it. The list **groups by tier like the Backlog** — P1 → P3 → unmarked
+  under tier dividers labeled with the bars, single-tier undivided; the cards carry no
+  bars (the sections are the tier signal). The collapsed card shows the project label
+  (right-aligned, the row language); the expanded card is pure content — no metadata
+  chrome, the footer included as text. A footer edit that moves the tier re-lands the
+  card in its group as soon as the debounced save returns (the save returns the
+  re-derived row; `sortNotes` mirrors the SQL ordering — the optimistic list is what
+  the next refresh returns). The list narrows under the ⌘P `Priority 1/2/3 Notes`
+  toggles, the ⌘F `#` project filter, and Focus Mode.
 - **⬇ download (slot 2):** exports the note's body as a `.txt` through the native save
   panel (`save_text_file` in `lib.rs` — `rfd`'s async panel, which dispatches to the
   main thread itself; the command returns `false` on cancel, not an error). The
@@ -770,7 +824,8 @@ into Notes or edit fields isn't hijacked.
 - No second accent colour. No status colours per section.
 - No tags or arbitrary due-date fields. (Projects are a first-class filter axis; reminders
   are a date-granular promotion; timers are a measurement layer; priorities are a `!1..3`
-  text token + Backlog sort; goals are the horizon layer above the sections; agent
+  text token + Backlog sort — extended to notes 2026-08-24 via the metadata footer (same
+  token grammar, own trailing line) with Backlog-style tier grouping; goals are the horizon layer above the sections; agent
   delegation is a `@` token + robot badge — the "who executes" axis that the Phase 3
   agent-writes bridge will dispatch off. These are
   the deliberate scope expansions. Don't pile on more organising metadata on top.)
