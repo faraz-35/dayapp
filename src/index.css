@@ -216,6 +216,31 @@ button {
   text-transform: uppercase;
   color: var(--accent);
 }
+/* `#`-mode management: the hovered/active project row reveals ✎ rename + ×
+   delete — the .item-action language (danger hover included). The active row
+   mirrors hover (the focus grammar: the digits' targets are visible), so
+   keyboard 1/2 and the mouse see the same buttons. */
+.search-row .item-action {
+  align-self: center;
+  flex-shrink: 0;
+}
+:is(.search-row:hover, .search-row.active) .item-action { opacity: 1; }
+/* Inline rename field — the row's text slot becomes the editor (.menu-input's
+   look, the row's 13px size). */
+.search-rename {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 7px;
+  color: var(--text);
+  outline: none;
+  color-scheme: dark;
+}
+.search-rename:focus { border-color: var(--accent); }
 
 /* ---- Sections ---------------------------------------------------------- */
 /* The three sections stack vertically inside .scroll. They are NOT a scroll

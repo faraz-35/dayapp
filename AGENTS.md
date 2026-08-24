@@ -180,7 +180,8 @@ hide) — **never** logged to `actions`. `items.project_id` is the nullable FK (
 cascade; deleting a project runs `UPDATE items SET project_id = NULL` — and the same for
 `goals` and `notes`). Notes link through their `#tag` token (see "Notes" above); goals
 through the # popover. Logic lives in
-`src-tauri/src/projects.rs`; the popover is `src/ProjectMenu.tsx`.
+`src-tauri/src/projects.rs`; the popover is `src/ProjectMenu.tsx`, and rename/delete are
+managed in the ⌘F `#` picker (see "Project filter" under UI/UX guidance).
 
 ### Goals (the identity layer — logged like items)
 
@@ -733,7 +734,15 @@ the lens.
 projects (color dot + name, narrowed by the text after the `#`); picking one narrows the main
 list to that project — **items and notes alike** — picking the already-active one clears it
 (the same toggle rule as the priority tiers). Same `displayItems` pipeline — it composes
-with the priority tier.
+with the priority tier. The picker is also the **project management surface**: each row
+reveals ✎ rename and × delete on hover/active, and digits `1`/`2` fire them on the active
+row — intercepted in `#` mode only, so a digit there is a verb and never reaches the query
+(the project row is a div, not a button, because it hosts the action buttons). Rename is
+optimistic in App's projects state (every label renders through the lookup, and rows link by
+id, not name, so the new name lands everywhere at once). Delete **unlinks, never deletes
+rows** — the backend's `delete_project` nulls `project_id` on items/goals/notes in one
+transaction, mirrored optimistically in App — and clears the project filter if it pointed
+at the deleted one. Both are housekeeping: not logged.
 
 **Agent filter (⌘F `@`):** the same picker pattern over the delegation axis — a leading `@`
 flips the hit list to two fixed entries, `🤖 Agent tasks` and `My tasks`; picking one narrows

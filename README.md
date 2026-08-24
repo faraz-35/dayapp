@@ -165,7 +165,9 @@ into a picker:
 - **`#`** — the project filter: the hits become your projects (color dot + name; keep
   typing after the `#` to narrow). Picking one narrows the main list to that project's
   tasks; picking the already-active one clears it. Session-only, composes with the
-  priority tiers (see [Projects](#projects)).
+  priority tiers (see [Projects](#projects)). The picker doubles as project
+  **management**: hover a row (or ↑/↓ to it) to reveal **✎ rename** and **× delete** —
+  digits `1`/`2` fire them on the active row.
 - **`@`** — the executor filter: two fixed entries, **🤖 Agent tasks** and **My
   tasks**, with the same toggle rule (see
   [Delegating to the agent](#delegating-to-the-agent)).
@@ -219,6 +221,12 @@ typed (`fix bug #acme` creates "acme"; `fix bug #acme notes` does not). The tag
 is stripped from the row once linked. (Tags compose with `!1..3` priority and
 `@` agent tokens — see [Priorities](#priorities) and
 [Delegating to the agent](#delegating-to-the-agent).)
+
+Renaming and deleting happen in the ⌘F `#` picker — **✎** renames in place
+(every label updates instantly, since rows link by id, not name), and **×**
+deletes the project. Deleting **never deletes tasks, notes or goals**: it only
+removes the label (unlinks them), and clears the project filter if it was
+pointing at the deleted one.
 
 To focus on one project's work, press **⌘F and type `#`**: the search list
 becomes your projects (keep typing after the `#` to narrow it), each shown with

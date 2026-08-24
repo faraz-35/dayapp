@@ -684,6 +684,29 @@ function DayApp() {
     return (await handleCreateProject(name)).id;
   };
 
+  // Rename from the ⌘F `#` picker. Optimistic: every label (item rows, note
+  // cards, goal rows) renders through this state, so the new name lands
+  // everywhere at once; the 60s tick reconciles a failed write.
+  const handleRenameProject = useCallback((id: string, name: string) => {
+    setProjects((ps) => ps.map((p) => (p.id === id ? { ...p, name } : p)));
+    projectsApi.rename(id, name).catch((err) => log.warn("rename project failed", err));
+  }, []);
+
+  // Delete from the ⌘F `#` picker: unlinks, never deletes rows. The backend
+  // nulls project_id on items/goals/notes in one transaction — mirrored here
+  // (labels also die with the projects-list lookup). Clearing the filter when
+  // it pointed here keeps the list from narrowing to a ghost project.
+  const handleDeleteProject = useCallback((id: string) => {
+    setProjects((ps) => ps.filter((p) => p.id !== id));
+    setItems((s) => ({
+      today: s.today.map((i) => (i.projectId === id ? { ...i, projectId: null } : i)),
+      daily: s.daily.map((i) => (i.projectId === id ? { ...i, projectId: null } : i)),
+      backlog: s.backlog.map((i) => (i.projectId === id ? { ...i, projectId: null } : i)),
+    }));
+    setProjectFilter((f) => (f === id ? null : f));
+    projectsApi.delete(id).catch((err) => log.warn("delete project failed", err));
+  }, []);
+
   const handleCreate = async (section: Section, raw: string) => {
     // Resolve `#tag` → project, `!1..3` → priority, and `@` → agent assignment
     // on capture (e.g. "fix bug #day !2 @" → dayapp project, priority 2,
@@ -1366,6 +1389,8 @@ function DayApp() {
         onJump={jumpTo}
         onSelectProject={handleSelectProject}
         onSelectAgent={handleSelectAgent}
+        onRenameProject={handleRenameProject}
+        onDeleteProject={handleDeleteProject}
       />
       <CommandPalette
         open={paletteOpen}
