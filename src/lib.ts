@@ -245,7 +245,14 @@ export interface DashboardStats {
   heatmap: HeatDay[];
   projects: ProjectCount[];
   priorities: TierCount[];
-  totals: { done: number; dailyMissed: number; todayMissed: number };
+  totals: {
+    done: number;
+    dailyMissed: number;
+    todayMissed: number;
+    /** Consecutive days with ≥1 completion, counting back from today; a live
+     *  today with nothing yet doesn't break it. */
+    streak: number;
+  };
 }
 
 export const journalApi = {

@@ -13,18 +13,18 @@ text field with a done button. Three behaviours fall out of the data model, no c
 | Daily items reset overnight | `WHERE last_completed_date == today` on render — at midnight the comparison just stops being true |
 | Today items fall to backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date`); idempotent. Completed Today rows stay crossed in place until that sweep deletes them |
 | Reminders promote backlog → today | A backlog item's `remind_at` date comes due → `promote_due_reminders()` moves it to Today on launch; fires once, no cron |
-| "What I did this week" | `SELECT FROM actions WHERE action='completed'` — the log writes itself on every mutation; the Journal view narrows to Today/Week/Month or any day |
-| "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X` — ▶/⏸ write open/close timestamps; the Journal groups them by day |
+| "What I did this week" | `SELECT FROM actions WHERE action='completed'` — the log writes itself on every mutation; the Analytics page summarizes it, `--journal` prints it |
+| "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X` — ▶/⏸ write open/close timestamps; the Analytics day ledger totals them, `--journal` breaks them down per task |
 | Hide tasks/notes for a while | `hidden=1` + optional `hidden_until` date; `list_*` filters `hidden=0`. The midnight sweep clears expired hides, so "hide for a day/week/month" auto-restores with no cron |
 
 Every action (create/complete/move/edit/delete/sweep) is appended to `actions`. That table
-powers the journal view (top-right `≡` icon); the journal also layers in tracked time (from
-the separate `sessions` table) as a per-day total and per-task breakdown. Above the log
-sits a **dashboard** synthesized from the same history: done / daily-missed / today-missed
-totals for the range, a GitHub-style completion heatmap (click a day to jump there), and
-project + priority splits of what got completed — which projects actually got the work,
-and which tier you usually clear. Project/priority are snapshotted onto each action at
-write time, so the splits are real history, not today's labels pasted over the past.
+feeds the **Analytics** page (top-right `≡`): done / avg-per-day / streak / daily-missed /
+today-missed totals for the range, a GitHub-style completion heatmap (click a day to scope
+the page to it), project + priority splits of what got completed, and a one-line-per-day
+ledger — which projects actually got the work, which tier you usually clear, which habits
+slipped. The page is aggregates only; the raw log's textual home is `dayapp --journal`
+(same summary block, then every action). Project/priority are snapshotted onto each action
+at write time, so the splits are real history, not today's labels pasted over the past.
 
 ## Stack
 
@@ -77,7 +77,7 @@ Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3 Tasks, Prior
 Agent Tasks — **Enter/Exit Focus Mode** (the deep-work lens: P1 notes + Today + Daily +
 P1 Backlog only),
 Enter/Exit Demo Mode + Reset Demo Data, the mobile sync commands (Deploy Task List Now /
-Pull Captures Now / Configure Sync…), View Journal, Keyboard Shortcuts (the focus-grammar
+Pull Captures Now / Configure Sync…), View Analytics, Keyboard Shortcuts (the focus-grammar
 reference card), and Update DayApp. Trivially extensible — add a command to the registry
 in `App.tsx`.
 
@@ -102,7 +102,7 @@ dayapp/
 │   ├── MobileView.tsx       ← Android client: read-only list + capture bar
 │   ├── MobileSyncSettings.tsx ← ⌘P sync-config modal (repo/branch/token)
 │   ├── components/          ← feature components (SectionList, SectionView, ItemRow,
-│   │                          JournalView, SearchMenu)
+│   │                          AnalyticsView, SearchMenu)
 │   ├── main.tsx             ← React entry
 │   └── index.css            ← dark Linear-flavoured theme
 └── src-tauri/

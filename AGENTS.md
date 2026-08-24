@@ -20,8 +20,8 @@ just queries over timestamped state.** No cron, no background jobs.
 | Today items fall to Backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date`). Idempotent. |
 | Completed Today items disappear overnight | The same sweep deletes today rows with `status='done'` dated before today — the completion already lives in `actions`, so no extra log row. `purge_completed_today()` repeats it un-gated on launch for rows a gated-out sweep left behind. |
 | Backlog reminders promote to Today | `promote_due_reminders()` runs on launch (un-gated, idempotent): backlog rows with `remind_at <= today` move to `today`. |
-| "What I did this week" | `SELECT FROM actions WHERE action='completed'`. Every mutation logs itself. The Journal view filters this by day/week/month. |
-| "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X`. ▶/⏸ write open/close timestamps; the Journal groups these by day. The open session row *is* the active timer — no separate state. |
+| "What I did this week" | `SELECT FROM actions WHERE action='completed'`. Every mutation logs itself. The Analytics view summarizes it; `--journal` prints the raw log. |
+| "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X`. ▶/⏸ write open/close timestamps; the Analytics day ledger totals them per day, `--journal` breaks them down per task. The open session row *is* the active timer — no separate state. |
 
 This is the spine of the product. New features should fit this model (state + a log that
 writes itself), not fight it.
@@ -135,7 +135,7 @@ meta    key, value           — currently holds last_sweep_date
 - **`actions.project` / `actions.priority` snapshot the subject's organising axes at write
   time** (same deletion-proofing as `item_text` — `project` holds the project *name*, not
   an FK, because the projects row may not survive; goal rows snapshot the goal's project
-  name and carry no priority). The Journal dashboard's project/priority splits read these,
+  name and carry no priority). The Analytics view's project/priority splits read these,
   so reassigning a task never rewrites the past. The snapshot lives inside `log_action` /
   `log_goal_action`'s INSERT as a subquery on the live row — which is why `delete_item` /
   `delete_goal` log *before* their DELETE. Rows older than the columns were backfilled once
@@ -202,7 +202,7 @@ Statements of direction at three horizons — the top of the app's timescale sta
 list its "why" and are prime agent context. Like items they are **state + logged
 activity**: every create/achieve/unachieve/edit/delete appends to `actions`
 (`goal_*` values; the horizon rides `from/to_section`, active/achieved rides
-`from/to_status`). The Journal renders them with goal verbs ("set goal",
+`from/to_status`). `--journal` renders them with goal verbs ("set goal",
 "achieved goal", …) and a **Goals** filter pill. Not exported to the phone
 (mobile is a task mirror).
 
@@ -339,9 +339,10 @@ the CLI renders as text — so a remote session can access any information in an
 `--search` is ⌘F (a plain substring over item text; a leading `#` flips to the project
 axis — bare `#` lists projects, `#name` lists that project's rows — and `@agent`/`@my`
 flip to the delegation axis), `--journal [today|week|month|all|YYYY-MM-DD]` is the
-Journal view (the dashboard summary block — done/missed totals, project/priority splits —
-then actions grouped newest-first by day with the per-day done/missed verdict, the
-per-task ⏱ breakdown and day total, the same verbs, default `today` like the GUI), `--notes`/`--projects` are their
+Analytics view's data plus the raw action log (the dashboard summary block — done/missed
+totals, streak, project/priority splits — then actions grouped newest-first by day with
+the per-day done/missed verdict, the per-task ⏱ breakdown and day total; the log's
+textual home is here, the GUI renders aggregates only; default `today`), `--notes`/`--projects` are their
 sections (`--notes` prints tier-ordered — the same ORDER BY the GUI groups from — and
 reconstructs each note's `!N #name` token line after the body from the columns, so
 priority/project read straight off the text), and the `--hidden` modifier on `--list`/`--notes` is the ⌘P "Show Hidden"
@@ -368,11 +369,11 @@ the running timer — there is no separate "active timer" state anywhere. ▶ op
 ⏸ fills `ended_at` + `duration_secs`. Starting a new timer finalizes the previous open
 session first (single-timer invariant, enforced in `start_timer`). Like Notes/Projects,
 sessions are **measurement (content)**, not item-state transitions, so they are **never**
-logged to `actions` — the Journal surfaces time as a separate dimension via
+logged to `actions` — the Analytics view surfaces time as a separate dimension via
 `session_time_by_day`, which splits sessions across midnight so daily totals are accurate.
 
-- `item_text` is snapshotted at write time (like `actions.item_text`), so the Journal's
-  per-task breakdown survives edits and deletions.
+- `item_text` is snapshotted at write time (like `actions.item_text`), so the per-task
+  breakdown survives edits and deletions.
 - The active timer **persists across app restarts** (the open row is the source of truth).
   If the app closes mid-session the elapsed keeps counting honestly on reopen; the header
   chip's × discards the session for the "left it running overnight" case.
@@ -456,8 +457,7 @@ dayapp/
 │       ├── SectionList.tsx         ← DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + capture input + sortable items + dropzone; Backlog tier dividers)
 │       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput + shared PriorityBars/ItemDetailsBody
-│       ├── JournalView.tsx         ← the journal: dashboard + actions log + per-task time, grouped by day
-│       ├── JournalDashboard.tsx    ← the journal's summary layer: stats, heatmap, project/priority splits (presentational)
+│       ├── AnalyticsView.tsx       ← the analytics page: stats + heatmap + splits + day ledger over dashboard.rs (no raw log)
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
 └── src-tauri/
     ├── src/
@@ -494,8 +494,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + capture input + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
-| `JournalView.tsx` | fetching + filtering + grouping the actions log + per-task time totals + mounting the dashboard | — |
-| `JournalDashboard.tsx` | the dashboard's presentation (stats row, heatmap grid, splits) over `DashboardStats` | derivation (all in `dashboard.rs`), range/filter state (JournalView's) |
+| `AnalyticsView.tsx` | the analytics page: range/dayPick state, dashboard + time fetch, stats/heatmap/splits/day-ledger render | derivation (all in `dashboard.rs`), item state |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---
@@ -517,7 +516,7 @@ separately" bug.
 .app       display:flex column; height:100%; overflow:hidden   ← the shell, never scrolls
   .header  flex-shrink:0                                       ← pinned
   .scroll   flex:1; overflow-y:auto; min-height:0              ← THE ONE scroll container
-    Goals / Notes / SectionList / JournalView                   ← in-flow, no own scroll
+    Goals / Notes / SectionList / AnalyticsView                  ← in-flow, no own scroll
 ```
 
 `.notes`, `.goals`, `.sections`, `.journal`, `.hidden-view` must **not** set `overflow`,
@@ -597,7 +596,7 @@ keyboard-first.** Every choice below is intentional.
 Typography: `-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif`.
 Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spacing.
 The one serif surface is the centered header masthead (the "Live @ Faraz" brand, or
-"Journal" in the journal view): `ui-serif` (New York) italic at 14px, Didot/Georgia
+"Analytics" in the analytics view): `ui-serif` (New York) italic at 14px, Didot/Georgia
 fallbacks. The brand rotates like a station ident — "Faraz" is home, and every 2
 minutes it steps out to a random word from `MASTHEAD_THEMES` in `App.tsx`
 (growth/money/journey/learn, never the same one twice in a row) and back, each swap
@@ -842,31 +841,37 @@ into Notes or edit fields isn't hijacked.
   `ProjectMenu` items use. ⌘P → Show/Hide Goals toggles the whole section (persisted).
   Every mutation is logged to `actions` (goal_* values) — see the data model.
 
-**Journal & dashboard:**
-- The Journal (top-right `≡`) stays the append-only log grouped by day — the dashboard is
-  a summary layer *above* it, not a replacement. Both scope to the same range pills
-  (Today/Week/Month/All + the date jump).
-- The dashboard answers, per range: **Done** (effective completions — a
-  complete→uncheck→never-again arc doesn't count, a re-completed misclick counts once),
-  **Daily missed** (habits the day ended without — replayed from the log itself, so
-  deleted habits count for the days they existed; currently-hidden items are excluded so
-  an archived habit can't accrue misses forever; the current day never shows daily
-  misses — a live day has no verdict), and **Today missed** (`fell_to_backlog` — the
-  sweep's own record of a today task the day ended without).
+**Analytics view (⌘P → View Analytics, or the header `≡`):**
+- The analytics page is **synthesis, never the log**: it answers questions over the
+  append-only `actions` history, it does not enumerate events. The raw action log's
+  textual home is the CLI (`--journal`); the GUI shows aggregates only. The masthead
+  reads `Analytics`; the default range is **Week** (Today/Week/Month/All pills + the
+  date jump).
+- **Stats**: Done (effective completions — a complete→uncheck→never-again arc doesn't
+  count, a re-completed misclick counts once), Avg/day (when the range spans >1 day),
+  Streak (consecutive days with ≥1 completion; a live today with nothing yet doesn't
+  break it), **Daily missed** (habits the day ended without — replayed from the log
+  itself, so deleted habits count for the days they existed; currently-hidden items are
+  excluded so an archived habit can't accrue misses forever; the current day never shows
+  daily misses — a live day has no verdict), and **Today missed** (`fell_to_backlog` —
+  the sweep's own record of a today task the day ended without).
+- **Heatmap**: ~30 Monday-aligned weeks of per-day completions, intensity steps of the
+  one accent, month labels, today ringed. Clicking a cell scopes the whole page to that
+  day (same as the date jump); clicking the picked cell again clears the pick.
 - **Splits**: every project's share of the range's completions (zero-filled from the
   roster so neglected projects read as 0; a trailing "none" bucket when unprojected work
   exists) and the priority tiers P1→P3→unmarked with the signal-bars glyph as the label.
   Both read the `actions.project`/`actions.priority` write-time snapshots.
-- **Heatmap**: ~27 Monday-aligned weeks of per-day completions, intensity steps of the one
-  accent. Clicking a cell is the date jump (click the picked cell again to clear). The
-  today cell carries a faint ring.
-- Day headers carry the per-day verdict — `· N done · M missed` — before the time total.
-- **No time stats in the dashboard** (sessions stay the Journal's layered dimension), and
-  the whole thing is mouse-first: no focus-grammar wiring.
+- **Days ledger**: one line per day that had any signal — `MON, AUG 24 · 7 done · 1
+  missed · 2h 7m` (time only when tracked). Clicking a row scopes the page to that day.
+  Counts only — never the raw action rows.
+- **No time stats in the stats row** (time appears only as the ledger's per-day total
+  when it exists), and the page is mouse-first: no focus-grammar wiring (free-mode `j`/`k`
+  scrolling still works, like every view).
 - Derivation lives in `src-tauri/src/dashboard.rs` (`journal_dashboard`, behind the
-  `journal_dashboard` command); the UI is `JournalDashboard.tsx`, mounted by
-  `JournalView`. The CLI's `--journal` prints the same summary block (done/missed totals,
-  project/priority splits) ahead of the day listing — the read surface mirrors the GUI.
+  `journal_dashboard` command); the UI is `AnalyticsView.tsx` (self-contained, the
+  Notes/Goals pattern). The CLI's `--journal` prints the same summary block ahead of the
+  full raw log — the read surface mirrors the GUI, plus the log the GUI no longer shows.
 
 ### What NOT to add (explicit non-goals)
 
@@ -878,10 +883,11 @@ into Notes or edit fields isn't hijacked.
   delegation is a `@` token + robot badge — the "who executes" axis that the Phase 3
   agent-writes bridge will dispatch off. These are
   the deliberate scope expansions. Don't pile on more organising metadata on top.)
-- No billable hours, no report exports, no charts product. The Journal dashboard (2026-08-25)
+- No billable hours, no report exports, no charts product. The Analytics view (2026-08-25)
   is the sanctioned summary layer — pure synthesis of the log, single accent, intensity
-  steps only, no time stats (the timer's payoff stays the per-row cumulative + the
-  Journal's per-day, per-task totals). Don't grow it toward an analytics surface.
+  steps only, no time stats in the stats row (the timer's payoff stays the per-row
+  cumulative + the per-day ledger total; `--journal` keeps the per-task breakdown).
+  Don't grow it toward an analytics-surface product.
 - No journal surface / blank-page daily note. The log IS the journal.
 - No agent writes (read-only bridge, planned Phase 3).
 - Do not log Notes, Projects, goal-project assignment, reminder-setting, or timer sessions

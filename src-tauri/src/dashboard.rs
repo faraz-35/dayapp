@@ -26,10 +26,10 @@ use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-/// How far back the heatmap window reaches. The frontend renders 27
-/// Monday-aligned week columns, so the earliest cell can sit up to 27*7−1+6
-/// days behind today; 200 covers that with margin.
-const HEATMAP_LOOKBACK_DAYS: i64 = 200;
+/// How far back the heatmap window reaches. The frontend renders 30
+/// Monday-aligned week columns, so the earliest cell can sit up to 30*7−1+6
+/// days behind today; 220 covers that with margin.
+const HEATMAP_LOOKBACK_DAYS: i64 = 220;
 
 /// One day's row across the requested range — the day headers' done/missed.
 #[derive(Debug, Serialize)]
@@ -76,6 +76,10 @@ pub struct Totals {
     pub done: i64,
     pub daily_missed: i64,
     pub today_missed: i64,
+    /// Consecutive days with ≥1 effective completion, counting back from
+    /// today. A live today with nothing yet doesn't break it (the day isn't
+    /// over); 0 when yesterday had nothing.
+    pub streak: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -245,8 +249,7 @@ impl Db {
 
         let mut days: Vec<DayStat> = Vec::new();
         let mut totals = Totals::default();
-        let mut idx = 0usize;
-        // item → (alive, section) as of the day being processed.
+        let mut idx = 0usize;        // item → (alive, section) as of the day being processed.
         let mut live: HashMap<String, (bool, Option<String>)> = HashMap::new();
         let mut d = start_d;
         while d <= end_d {
@@ -294,6 +297,25 @@ impl Db {
             totals.today_missed += today_missed;
             days.push(DayStat { date: day, done, daily_missed, today_missed });
             d += chrono::Duration::days(1);
+        }
+
+        // Current streak: consecutive days with ≥1 effective completion,
+        // walking back from today. A zero today is skipped (the day is still
+        // live), but every earlier day must have one. The scan window is at
+        // least the heatmap's ~7 months, which bounds any realistic streak.
+        let has_done = |d: NaiveDate| -> bool {
+            let day = d.format("%Y-%m-%d").to_string();
+            done_by_day.get(&day).map_or(false, |m| m.values().any(|e| e.done))
+        };
+        {
+            let mut d = today_d;
+            if !has_done(d) {
+                d -= chrono::Duration::days(1); // today still live — don't break it
+            }
+            while has_done(d) {
+                totals.streak += 1;
+                d -= chrono::Duration::days(1);
+            }
         }
 
         // ---- Heatmap window ----------------------------------------------------
@@ -492,6 +514,31 @@ mod tests {
                 .unwrap();
             assert_eq!(proj.as_deref(), Some("meridian"));
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn streak_tolerates_a_live_today() {
+        let (db, dir) = tmp_db();
+        let today = chrono::Local::now().date_naive();
+        let day = |back: i64| (today - chrono::Duration::days(back)).format("%Y-%m-%d").to_string();
+        {
+            let conn = db.conn.lock().unwrap();
+            // Done yesterday and the two days before; today still empty.
+            for back in [1, 2, 3] {
+                act(&conn, "S", "completed", Some("today"), Some("today"), None, None,
+                    &format!("{}T09:00:00", day(back)));
+            }
+        }
+        let s = db.journal_dashboard(None, None).unwrap();
+        assert_eq!(s.totals.streak, 3, "an empty live today must not break the streak");
+        {
+            let conn = db.conn.lock().unwrap();
+            act(&conn, "S", "completed", Some("today"), Some("today"), None, None,
+                &format!("{}T10:00:00", day(0)));
+        }
+        let s = db.journal_dashboard(None, None).unwrap();
+        assert_eq!(s.totals.streak, 4);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

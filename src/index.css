@@ -68,7 +68,7 @@ button {
 }
 .header button { -webkit-app-region: no-drag; }
 
-/* The masthead — brand on the list view, "Journal" in the journal. Truly
+/* The masthead — brand on the list view, "Analytics" in the analytics view. Truly
    centered over the header (not flex-centered, which the varying right-side
    controls would offset). The one serif surface in the app: New York (ui-serif)
    italic, falling back to Didot/Georgia on systems without it. */
@@ -437,160 +437,24 @@ button {
   max-width: 320px;
 }
 
-/* ---- Journal view ------------------------------------------------------ */
+/* ---- Analytics view ----------------------------------------------------- */
+/* The analytics page (top-right ≡): synthesis over the actions log, never
+   the log itself. Range totals, a completion heatmap, project/priority
+   splits, and a one-line-per-day ledger. Inline chrome inside the one
+   .scroll flow — one page, no nested scroll. One accent throughout;
+   intensity steps of it are the heatmap's only colour. */
 
-.journal {
-  padding: 8px 16px 32px;
-}
-.journal-empty {
-  color: var(--text-faint);
-  font-style: italic;
-  padding: 24px 8px;
-  text-align: center;
-}
-.journal-day {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  padding: 14px 0 6px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-}
-/* Day total (e.g. " · 4h 12m") — inline after the date, in accent. Overrides
-   the header's uppercase/letterspacing so the duration reads naturally. */
-.journal-day-time {
-  color: var(--accent);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  text-transform: none;
-  letter-spacing: 0;
-}
-/* The dashboard's per-day verdict (" · 5 done · 2 missed") — same inline
-   treatment, dim: the accent stays reserved for time. */
-.journal-day-stats {
-  color: var(--text-dim);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  text-transform: none;
-  letter-spacing: 0;
-}
-/* Per-task time breakdown row. The icon column is the same 44px as the action
-   rows' time column, so the two row kinds line up on the left edge. */
-.journal-time-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 3px 4px;
-  font-size: 12px;
-}
-.journal-time-icon {
-  color: var(--accent);
-  width: 44px;
-  flex-shrink: 0;
-  text-align: center;
-}
-.journal-time-text {
-  flex: 1;
-  color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.journal-time-secs {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-.journal-row {
-  display: flex;
-  gap: 10px;
-  padding: 4px 4px;
-  font-size: 12px;
-  color: var(--text-dim);
-  align-items: baseline;
-}
-.journal-time {
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-  width: 44px;
-}
-.journal-verb { color: var(--text-faint); font-style: italic; }
-.journal-row .journal-text { color: var(--text); }
-
-/* Journal toolbar. Borderless uppercase segments — the same language as
-   .section-name — so the filter reads as chrome, not a foreign
-   widget. Active = accent text + a thin underline; nothing is filled. */
-.filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 16px;
-  flex-wrap: wrap;
-}
-.filter-bar + .filter-bar { padding-top: 0; }
-.pill {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: none;
-  background: none;
-  color: var(--text-faint);
-  cursor: pointer;
-  transition: color 0.08s ease, background 0.08s ease;
-}
-.pill:hover { color: var(--text); background: var(--bg-hover); }
-.pill.active { color: var(--accent); }
-/* A divider between the range group and the action-type group. */
-.filter-sep {
-  width: 1px;
-  height: 12px;
-  background: var(--border);
-  margin: 0 6px;
-}
-/* The date jump is a native date input. Stripped to a faint, borderless label
-   that picks up the accent when it's the active source. */
-.date-jump {
-  font: inherit;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: none;
-  background: none;
-  color: var(--text-faint);
-  width: auto;
-  color-scheme: dark;
-  cursor: pointer;
-  transition: color 0.08s ease, background 0.08s ease;
-}
-.date-jump:hover { color: var(--text); background: var(--bg-hover); }
-.date-jump.active { color: var(--accent); }
-
-/* ---- Journal dashboard --------------------------------------------------- */
-/* The synthesized summary above the day groups: range totals, a completion
-   heatmap, and project/priority splits. Inline chrome inside the one .scroll
-   flow — it pushes the log, never floats. One accent throughout; intensity
-   steps of it are the heatmap's only colour. */
-
-.dash {
+.analytics {
+  padding: 10px 16px 32px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 10px 0 18px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 6px;
+  gap: 20px;
 }
 .dash-stats {
   display: flex;
-  gap: 32px;
+  gap: 30px;
   padding: 0 2px;
+  flex-wrap: wrap;
 }
 .dash-stat {
   display: flex;
@@ -598,7 +462,7 @@ button {
   gap: 2px;
 }
 .dash-value {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   line-height: 1.1;
   color: var(--text);
@@ -612,7 +476,7 @@ button {
   color: var(--text-faint);
 }
 
-/* Heatmap: 27 Monday-aligned week columns. The months row and weekday gutter
+/* Heatmap: 30 Monday-aligned week columns. The months row and weekday gutter
    mirror the grid's 11px/3px rhythm so everything lines up. */
 .hm {
   display: flex;
@@ -621,7 +485,7 @@ button {
 }
 .hm-months {
   display: grid;
-  grid-template-columns: repeat(27, 11px);
+  grid-template-columns: repeat(30, 11px);
   gap: 3px;
   margin-left: 18px; /* the weekday gutter (14px label + 4px gap) */
   height: 10px;
@@ -730,6 +594,94 @@ button {
 .dash-row.zero .dash-row-label,
 .dash-row.zero .dash-row-count { color: var(--text-faint); }
 .dash-row.zero .dash-row-fill { background: var(--text-faint); }
+
+/* Day ledger: one line per day that had any signal — counts only, never the
+   raw action rows (the log's textual home is the CLI's --journal). Clicking
+   a row scopes the page to that day. */
+.dash-day {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.08s ease;
+}
+.dash-day:hover { background: var(--bg-hover); }
+.dash-day.picked { background: var(--bg-hover); }
+.dash-day-date {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.dash-day.picked .dash-day-date { color: var(--accent); }
+.dash-day-stats {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.dash-day-stats span:first-child { color: var(--text); }
+.dash-day-stats .time { color: var(--accent); }
+.dash-empty {
+  color: var(--text-faint);
+  font-style: italic;
+  padding: 10px 6px;
+}
+
+/* Analytics toolbar. Borderless uppercase segments — the same language as
+   .section-name — so the range picker reads as chrome, not a foreign
+   widget. Active = accent text; nothing is filled. */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 16px;
+  flex-wrap: wrap;
+}
+.pill {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.08s ease, background 0.08s ease;
+}
+.pill:hover { color: var(--text); background: var(--bg-hover); }
+.pill.active { color: var(--accent); }
+/* The date jump is a native date input. Stripped to a faint, borderless label
+   that picks up the accent when it's the active source. */
+.date-jump {
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  width: auto;
+  color-scheme: dark;
+  cursor: pointer;
+  transition: color 0.08s ease, background 0.08s ease;
+}
+.date-jump:hover { color: var(--text); background: var(--bg-hover); }
+.date-jump.active { color: var(--accent); }
 
 /* Scrollbars — hidden. The single .scroll container (and modal lists) still
    scroll, just without visible chrome, matching the minimal aesthetic.

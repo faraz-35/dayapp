@@ -13,7 +13,7 @@ import { log } from "./log";
 import Notes from "./Notes";
 import Goals from "./Goals";
 import SectionList from "./components/SectionList";
-import JournalView from "./components/JournalView";
+import AnalyticsView from "./AnalyticsView";
 import CommandPalette, { type Command } from "./CommandPalette";
 import SearchMenu, { type SearchHit } from "./components/SearchMenu";
 import UpdateOverlay from "./UpdateOverlay";
@@ -22,7 +22,7 @@ import MobileSyncSettings from "./MobileSyncSettings";
 import KeyboardHelp from "./KeyboardHelp";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, popoverOpen, scrollIntoViewEl } from "./focusNav";
 
-type View = "list" | "journal";
+type View = "list" | "analytics";
 
 // Labels for the per-section ⌘P toggles (Show/Hide Today, …).
 const SECTION_LABELS: Record<Section, string> = {
@@ -341,7 +341,7 @@ function DayApp() {
   }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
-  // runs in every view; the journal title simply ignores it.
+  // runs in every view; the analytics title simply ignores it.
   useEffect(() => {
     const id = setInterval(() => {
       setLiveAt((word) => {
@@ -620,7 +620,7 @@ function DayApp() {
         run: () => setSyncSettingsOpen(true),
       },
     ]),
-    { id: "view-journal", label: "View Journal", run: () => setView("journal") },
+    { id: "view-analytics", label: "View Analytics", run: () => setView("analytics") },
     {
       id: "keyboard-help",
       label: "Keyboard Shortcuts",
@@ -1158,7 +1158,7 @@ function DayApp() {
       // With nothing focused — the Esc ladder's bottom rung — they scroll
       // the page instead: a view-only verb, so free mode gains a use
       // without anything being able to happen unseen. Works in every view
-      // (the journal has no focusable rows); an open popover owns its keys,
+      // (the analytics page has no focusable rows); an open popover owns its keys,
       // so the page never slides under a menu.
       const down = e.key === "j" || e.key === "ArrowDown";
       const up = e.key === "k" || e.key === "ArrowUp";
@@ -1239,16 +1239,16 @@ function DayApp() {
         {/* The list view carries the brand — "Live @ Faraz" is home, and every
             2 minutes it steps out to a random MASTHEAD_THEMES word and back
             (keyed so each swap fades in; see title-in in index.css). The
-            journal view carries its own title. Always rendered — the timer
+            analytics view carries its own title. Always rendered — the timer
             chip carries no task-name text (tooltip only), so the two coexist
             on the 480px window. Below ~455px the media query in index.css
             hides the masthead.
-            
+
             Demo mode outranks both: the masthead reads "Live @ Demo" in every
             view while the disposable demo db is active — the one unmissable
             (but calm) signal of which data is on screen. */}
-        <span className="title" key={demoMode ? "demo" : view === "journal" ? "journal" : liveAt}>
-          {demoMode ? "Live @ Demo" : view === "journal" ? "Journal" : `Live @ ${liveAt}`}
+        <span className="title" key={demoMode ? "demo" : view === "analytics" ? "analytics" : liveAt}>
+          {demoMode ? "Live @ Demo" : view === "analytics" ? "Analytics" : `Live @ ${liveAt}`}
         </span>
         <div className="header-right">
           {/* The running timer is always visible here — survives scrolling away
@@ -1287,18 +1287,18 @@ function DayApp() {
             aria-label="Toggle hidden entries"
           >◐</button>
           <button
-            className={`icon-btn ${view === "journal" ? "active" : ""}`}
-            onClick={() => setView(view === "journal" ? "list" : "journal")}
-            title={view === "journal" ? "Back to list" : "View journal"}
-            aria-label="Toggle journal"
+            className={`icon-btn ${view === "analytics" ? "active" : ""}`}
+            onClick={() => setView(view === "analytics" ? "list" : "analytics")}
+            title={view === "analytics" ? "Back to list" : "View analytics"}
+            aria-label="Toggle analytics"
           >
-            {view === "journal" ? "✕" : "≡"}
+            {view === "analytics" ? "✕" : "≡"}
           </button>
         </div>
       </header>
 
       {/* Single scroll container — the whole body (notes + sections, or the
-          journal) scrolls as one page. See AGENTS.md. */}
+          analytics page) scrolls as one page. See AGENTS.md. */}
       <div className="scroll">
         {view === "list" ? (
           <>
@@ -1373,7 +1373,7 @@ function DayApp() {
             />
           </>
         ) : (
-          <JournalView />
+          <AnalyticsView />
         )}
       </div>
 
