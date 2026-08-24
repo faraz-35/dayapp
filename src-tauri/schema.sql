@@ -54,13 +54,21 @@ CREATE TABLE IF NOT EXISTS actions (
     goal_id      TEXT,                                    -- FK→goals.id; NULL on item rows
     item_text    TEXT NOT NULL,                           -- subject text snapshot (item or goal)
     action       TEXT NOT NULL CHECK (action IN
-                  ('created','completed','uncompleted','moved',
-                   'edited','deleted','fell_to_backlog',
-                   'goal_created','goal_achieved','goal_unachieved',
-                   'goal_edited','goal_deleted')),
+                 ('created','completed','uncompleted','moved',
+                  'edited','deleted','fell_to_backlog',
+                  'goal_created','goal_achieved','goal_unachieved',
+                  'goal_edited','goal_deleted')),
     from_section TEXT, to_section TEXT,
     from_status  TEXT, to_status  TEXT,
     timestamp    TEXT NOT NULL,
+    -- The subject's organising axes at write time, so the journal dashboard's
+    -- project/priority splits read history that survives reassignment and
+    -- deletion. `project` is the project NAME (a snapshot like item_text, not
+    -- an FK — the projects row may not survive); goal rows snapshot the goal's
+    -- project name and carry no priority. Pre-existing rows were backfilled
+    -- once from then-current state (see db.rs migrate).
+    project      TEXT,
+    priority     INTEGER,
     CHECK (item_id IS NOT NULL OR goal_id IS NOT NULL)
 );
 

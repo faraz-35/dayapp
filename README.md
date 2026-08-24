@@ -19,7 +19,12 @@ text field with a done button. Three behaviours fall out of the data model, no c
 
 Every action (create/complete/move/edit/delete/sweep) is appended to `actions`. That table
 powers the journal view (top-right `≡` icon); the journal also layers in tracked time (from
-the separate `sessions` table) as a per-day total and per-task breakdown.
+the separate `sessions` table) as a per-day total and per-task breakdown. Above the log
+sits a **dashboard** synthesized from the same history: done / daily-missed / today-missed
+totals for the range, a GitHub-style completion heatmap (click a day to jump there), and
+project + priority splits of what got completed — which projects actually got the work,
+and which tier you usually clear. Project/priority are snapshotted onto each action at
+write time, so the splits are real history, not today's labels pasted over the past.
 
 ## Stack
 
@@ -490,7 +495,7 @@ dayapp --task "PSX stock algo"        # one task in full, incl. its details (the
 dayapp --search "outreach"            # ⌘F: text substring
 dayapp --search "#job"                #   or a project's rows (bare # lists projects)
 dayapp --search "@agent"              #   or the delegation axis (@agent / @my)
-dayapp --journal [week]               # the journal: actions + per-task time by day
+dayapp --journal [week]               # the journal: dashboard summary + actions + time by day
                                       #   (today | week | month | all | YYYY-MM-DD)
 dayapp --notes [query] [--hidden]     # notes, optionally filtered by body substring
 dayapp --projects                     # projects as #tags

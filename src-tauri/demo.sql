@@ -206,14 +206,22 @@ INSERT INTO sessions (id, item_id, item_text, started_at, ended_at, duration_sec
 -- display order, newest-first, within each day). fell_to_backlog rows land at
 -- 00:01 — the day-boundary sweep — and their items' updated_at matches.
 
--- A month back: the identity layer.
+-- A month back: the identity layer, and the daily habits coming online (their
+-- created rows are what the dashboard's daily-miss replay keys off — without
+-- them no habit is ever "alive" in the log's reconstruction).
 INSERT INTO actions (item_id, goal_id, item_text, action, from_section, to_section, from_status, to_status, timestamp) VALUES
   (NULL, 'demo-g-timeless', 'Build software people genuinely love using', 'goal_created', NULL, 'timeless', NULL, 'active',
    date('now','localtime','-30 days') || 'T21:30:00'),
   (NULL, 'demo-g-long', 'Grow meridian into a profitable one-person business', 'goal_created', NULL, 'long', NULL, 'active',
    date('now','localtime','-30 days') || 'T21:35:00'),
+  ('demo-d-deepwork', NULL, 'Morning deep work block', 'created', NULL, 'daily', NULL, 'active',
+   date('now','localtime','-20 days') || 'T07:00:00'),
+  ('demo-d-read', NULL, 'Read 20 pages', 'created', NULL, 'daily', NULL, 'active',
+   date('now','localtime','-18 days') || 'T21:00:00'),
   (NULL, 'demo-g-waitlist', 'Launch the public waitlist page', 'goal_created', NULL, 'short', NULL, 'active',
    date('now','localtime','-15 days') || 'T10:00:00'),
+  ('demo-d-walk', NULL, 'Walk 8k steps', 'created', NULL, 'daily', NULL, 'active',
+   date('now','localtime','-12 days') || 'T08:00:00'),
   ('demo-b-trip', NULL, 'Plan anniversary trip', 'created', NULL, 'backlog', NULL, 'active',
    date('now','localtime','-9 days') || 'T20:10:00'),
   (NULL, 'demo-g-waitlist', 'Launch the public waitlist page', 'goal_achieved', 'short', 'short', 'active', 'achieved',

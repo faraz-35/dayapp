@@ -1,6 +1,7 @@
 // Tauri app entry. Thin async command wrappers around the db layer.
 // DB work (rusqlite is sync) is dispatched to a blocking thread so the UI stays fluid.
 
+mod dashboard;
 mod db;
 mod demo;
 mod goals;
@@ -10,6 +11,7 @@ mod sync;
 mod timers;
 pub mod cli;
 
+use dashboard::DashboardStats;
 use db::{Db, HiddenFilter, Item, Action};
 use goals::Goal;
 use notes::Note;
@@ -117,6 +119,16 @@ async fn list_actions(
     since: Option<String>, until: Option<String>,
 ) -> Result<Vec<Action>, String> {
     with_db(db, move |db| db.list_actions(limit, since.as_deref(), until.as_deref())).await
+}
+
+// The Journal view's dashboard: done/missed per day, a completion heatmap
+// window, and project/priority splits — pure synthesis over `actions` (see
+// dashboard.rs). Read-only, like the journal itself.
+#[tauri::command]
+async fn journal_dashboard(
+    db: State<'_, DbState>, since: Option<String>, until: Option<String>,
+) -> Result<DashboardStats, String> {
+    with_db(db, move |db| db.journal_dashboard(since.as_deref(), until.as_deref())).await
 }
 
 // ---- Notes commands ------------------------------------------------------
@@ -612,7 +624,7 @@ pub fn run() {
             list_items, create_item, edit_item, complete_item, uncomplete_item,
             move_item, delete_item, run_sweep,
             hide_item, unhide_item,
-            list_actions,
+            list_actions, journal_dashboard,
             list_notes, create_note, update_note, set_note_priority, set_note_project, delete_note,
             hide_note, unhide_note, save_text_file,
             list_projects, create_project, rename_project, delete_project, set_item_project,

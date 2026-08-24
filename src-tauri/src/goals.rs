@@ -50,7 +50,9 @@ fn goal_from_row(r: &rusqlite::Row) -> rusqlite::Result<Goal> {
 
 /// Append a goal's journal entry. Mirrors `log_action` in db.rs: the goal's
 /// text is snapshotted at write time, the horizon rides the section columns,
-/// and active/achieved rides the status columns.
+/// and active/achieved rides the status columns. The project NAME is
+/// snapshotted too (goals carry no priority) — the subquery reads the live
+/// row, so delete_goal logs before its DELETE.
 #[allow(clippy::too_many_arguments)]
 fn log_goal_action(
     tx: &rusqlite::Transaction,
@@ -60,8 +62,9 @@ fn log_goal_action(
     timestamp: &str,
 ) -> anyhow::Result<()> {
     tx.execute(
-        "INSERT INTO actions (goal_id,item_text,action,from_section,to_section,from_status,to_status,timestamp)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        "INSERT INTO actions (goal_id,item_text,action,from_section,to_section,from_status,to_status,timestamp,project)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,
+                 (SELECT p.name FROM goals g LEFT JOIN projects p ON p.id = g.project_id WHERE g.id = ?1))",
         params![goal_id, goal_text, action, from_horizon, to_horizon, from_status, to_status, timestamp])?;
     Ok(())
 }
@@ -211,8 +214,10 @@ impl Db {
             "SELECT text, horizon FROM goals WHERE id = ?1", params![id],
             |r| Ok((r.get(0)?, r.get(1)?)),
         ).map_err(|e| anyhow::anyhow!("no goal {id}: {e}"))?;
-        tx.execute("DELETE FROM goals WHERE id = ?1", params![id])?;
+        // Log while the row still exists — the project snapshot subquery in
+        // log_goal_action reads the live goal.
         log_goal_action(&tx, id, &text, "goal_deleted", Some(&horizon), None, None, None, &now)?;
+        tx.execute("DELETE FROM goals WHERE id = ?1", params![id])?;
         Ok(tx.commit()?)
     }
 }

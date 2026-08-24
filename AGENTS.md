@@ -132,6 +132,14 @@ meta    key, value           — currently holds last_sweep_date
 - **`actions.item_text` is snapshotted at write time.** History must survive edits and
   deletions — if it referenced the live row, renaming a task would silently rewrite the
   past.
+- **`actions.project` / `actions.priority` snapshot the subject's organising axes at write
+  time** (same deletion-proofing as `item_text` — `project` holds the project *name*, not
+  an FK, because the projects row may not survive; goal rows snapshot the goal's project
+  name and carry no priority). The Journal dashboard's project/priority splits read these,
+  so reassigning a task never rewrites the past. The snapshot lives inside `log_action` /
+  `log_goal_action`'s INSERT as a subquery on the live row — which is why `delete_item` /
+  `delete_goal` log *before* their DELETE. Rows older than the columns were backfilled once
+  from then-current state (best effort; deleted subjects stay unattributed).
 
 ### Notes (free-form content — NOT logged)
 
@@ -331,8 +339,9 @@ the CLI renders as text — so a remote session can access any information in an
 `--search` is ⌘F (a plain substring over item text; a leading `#` flips to the project
 axis — bare `#` lists projects, `#name` lists that project's rows — and `@agent`/`@my`
 flip to the delegation axis), `--journal [today|week|month|all|YYYY-MM-DD]` is the
-Journal view (actions grouped newest-first by day with the per-task ⏱ breakdown and day
-total, the same verbs, default `today` like the GUI), `--notes`/`--projects` are their
+Journal view (the dashboard summary block — done/missed totals, project/priority splits —
+then actions grouped newest-first by day with the per-day done/missed verdict, the
+per-task ⏱ breakdown and day total, the same verbs, default `today` like the GUI), `--notes`/`--projects` are their
 sections (`--notes` prints tier-ordered — the same ORDER BY the GUI groups from — and
 reconstructs each note's `!N #name` token line after the body from the columns, so
 priority/project read straight off the text), and the `--hidden` modifier on `--list`/`--notes` is the ⌘P "Show Hidden"
@@ -447,7 +456,8 @@ dayapp/
 │       ├── SectionList.tsx         ← DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + capture input + sortable items + dropzone; Backlog tier dividers)
 │       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput + shared PriorityBars/ItemDetailsBody
-│       ├── JournalView.tsx         ← the journal: actions log + per-task time, grouped by day
+│       ├── JournalView.tsx         ← the journal: dashboard + actions log + per-task time, grouped by day
+│       ├── JournalDashboard.tsx    ← the journal's summary layer: stats, heatmap, project/priority splits (presentational)
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
 └── src-tauri/
     ├── src/
@@ -456,6 +466,7 @@ dayapp/
     │   ├── notes.rs                ← notes DB logic + setters + the stored-footer migration (methods on Db)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
     │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
+    │   ├── dashboard.rs            ← journal dashboard: done/missed per day, daily-miss replay, project/priority splits, heatmap window (method on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
     │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API; demo-gated)
     │   ├── demo.rs                 ← demo mode: dayapp-demo.db open/seed + enter/exit/reset swap under the conn lock
@@ -483,7 +494,8 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + capture input + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
-| `JournalView.tsx` | fetching + filtering + grouping the actions log + per-task time totals | — |
+| `JournalView.tsx` | fetching + filtering + grouping the actions log + per-task time totals + mounting the dashboard | — |
+| `JournalDashboard.tsx` | the dashboard's presentation (stats row, heatmap grid, splits) over `DashboardStats` | derivation (all in `dashboard.rs`), range/filter state (JournalView's) |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---
@@ -830,6 +842,32 @@ into Notes or edit fields isn't hijacked.
   `ProjectMenu` items use. ⌘P → Show/Hide Goals toggles the whole section (persisted).
   Every mutation is logged to `actions` (goal_* values) — see the data model.
 
+**Journal & dashboard:**
+- The Journal (top-right `≡`) stays the append-only log grouped by day — the dashboard is
+  a summary layer *above* it, not a replacement. Both scope to the same range pills
+  (Today/Week/Month/All + the date jump).
+- The dashboard answers, per range: **Done** (effective completions — a
+  complete→uncheck→never-again arc doesn't count, a re-completed misclick counts once),
+  **Daily missed** (habits the day ended without — replayed from the log itself, so
+  deleted habits count for the days they existed; currently-hidden items are excluded so
+  an archived habit can't accrue misses forever; the current day never shows daily
+  misses — a live day has no verdict), and **Today missed** (`fell_to_backlog` — the
+  sweep's own record of a today task the day ended without).
+- **Splits**: every project's share of the range's completions (zero-filled from the
+  roster so neglected projects read as 0; a trailing "none" bucket when unprojected work
+  exists) and the priority tiers P1→P3→unmarked with the signal-bars glyph as the label.
+  Both read the `actions.project`/`actions.priority` write-time snapshots.
+- **Heatmap**: ~27 Monday-aligned weeks of per-day completions, intensity steps of the one
+  accent. Clicking a cell is the date jump (click the picked cell again to clear). The
+  today cell carries a faint ring.
+- Day headers carry the per-day verdict — `· N done · M missed` — before the time total.
+- **No time stats in the dashboard** (sessions stay the Journal's layered dimension), and
+  the whole thing is mouse-first: no focus-grammar wiring.
+- Derivation lives in `src-tauri/src/dashboard.rs` (`journal_dashboard`, behind the
+  `journal_dashboard` command); the UI is `JournalDashboard.tsx`, mounted by
+  `JournalView`. The CLI's `--journal` prints the same summary block (done/missed totals,
+  project/priority splits) ahead of the day listing — the read surface mirrors the GUI.
+
 ### What NOT to add (explicit non-goals)
 
 - No light theme. No `prefers-color-scheme`.
@@ -840,8 +878,10 @@ into Notes or edit fields isn't hijacked.
   delegation is a `@` token + robot badge — the "who executes" axis that the Phase 3
   agent-writes bridge will dispatch off. These are
   the deliberate scope expansions. Don't pile on more organising metadata on top.)
-- No time-tracking reports / billable hours / charts. The timer's payoff is the per-row
-  cumulative + the Journal's per-day, per-task totals — not an analytics surface.
+- No billable hours, no report exports, no charts product. The Journal dashboard (2026-08-25)
+  is the sanctioned summary layer — pure synthesis of the log, single accent, intensity
+  steps only, no time stats (the timer's payoff stays the per-row cumulative + the
+  Journal's per-day, per-task totals). Don't grow it toward an analytics surface.
 - No journal surface / blank-page daily note. The log IS the journal.
 - No agent writes (read-only bridge, planned Phase 3).
 - Do not log Notes, Projects, goal-project assignment, reminder-setting, or timer sessions

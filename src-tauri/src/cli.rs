@@ -3,7 +3,8 @@
 //   dayapp --list [today|daily|backlog] [--hidden]   print tasks (▶/✓/◐ marks, !prio, 🤖 agent, #project)
 //   dayapp --task <query>                   print one task in full, incl. its details
 //   dayapp --search <query>                 ⌘F, headless: text substring, #project, @agent/@my
-//   dayapp --journal [range]                the journal: actions + per-task time by day
+//   dayapp --journal [range]                the journal: dashboard summary +
+//                                           actions + per-task time by day
 //                                           (today | week | month | all | YYYY-MM-DD; default today)
 //   dayapp --notes [query] [--hidden]       print notes (optional body-substring filter)
 //   dayapp --projects                       list projects as #tags
@@ -91,7 +92,7 @@ usage: dayapp [--demo] <command> [args]
   --list [section] [--hidden]    tasks (▶/✓ marks, !prio, 🤖 agent, #project)
   --task <query>                 one task in full, incl. its details
   --search <query>               ⌘F: text substring, #project, or @agent/@my
-  --journal [range]              the journal: actions + time by day
+  --journal [range]              the journal: dashboard summary + time by day
                                  (today | week | month | all | YYYY-MM-DD)
   --notes [query] [--hidden]     notes, optionally filtered by body substring
   --projects                     projects as #tags
@@ -227,11 +228,13 @@ fn search_agent(db: &Db, mode: &str) -> anyhow::Result<()> {
     print_rows(db, &rows)
 }
 
-/// The Journal view as text: actions grouped by day (newest day first, newest
-/// action first — the GUI's render order) with the per-task time breakdown
-/// and day total layered in. The range mirrors the GUI's pills (default
-/// Today); a YYYY-MM-DD is the date jump. Time is a separate dimension from
-/// the action filter pills, so both always print.
+/// The Journal view as text: the dashboard summary (done/missed totals,
+/// project + priority splits — the same numbers the GUI renders above the
+/// log), then actions grouped by day (newest day first, newest action first —
+/// the GUI's render order) with the per-task time breakdown and day total
+/// layered in. Each day header carries its done/missed. The range mirrors the
+/// GUI's pills (default Today); a YYYY-MM-DD is the date jump. Time is a
+/// separate dimension from the action filter pills, so both always print.
 fn journal(db: &Db, range: Option<&str>) -> anyhow::Result<()> {
     use chrono::{Duration, Local, NaiveDate};
     use std::collections::BTreeSet;
@@ -249,6 +252,33 @@ fn journal(db: &Db, range: Option<&str>) -> anyhow::Result<()> {
         }
     };
     let iso = |d: Option<NaiveDate>| d.map(|x| x.format("%Y-%m-%d").to_string());
+    let dash = db.journal_dashboard(iso(since).as_deref(), iso(until).as_deref())?;
+    println!(
+        "done {} · daily missed {} · today missed {}",
+        dash.totals.done, dash.totals.daily_missed, dash.totals.today_missed
+    );
+    if !dash.projects.is_empty() {
+        let parts: Vec<String> = dash
+            .projects
+            .iter()
+            .map(|p| match &p.name {
+                Some(n) => format!("#{n} {}", p.count),
+                None => format!("none {}", p.count),
+            })
+            .collect();
+        println!("projects: {}", parts.join(" · "));
+    }
+    let tiers: Vec<String> = dash
+        .priorities
+        .iter()
+        .map(|t| match t.tier {
+            Some(n) => format!("!{n} {}", t.count),
+            None => format!("— {}", t.count),
+        })
+        .collect();
+    println!("priority: {}", tiers.join(" · "));
+    println!();
+
     let actions = db.list_actions(None, iso(since).as_deref(), iso(until).as_deref())?;
     let times = db.session_time_by_day(iso(since).as_deref(), iso(until).as_deref())?;
 
@@ -269,11 +299,20 @@ fn journal(db: &Db, range: Option<&str>) -> anyhow::Result<()> {
         let mut day_times: Vec<_> = times.iter().filter(|t| t.day == *day).collect();
         day_times.sort_by_key(|t| std::cmp::Reverse(t.seconds)); // longest first
         let total: i64 = day_times.iter().map(|t| t.seconds).sum();
-        if total > 0 {
-            println!("{day} · {}", fmt_duration(total));
-        } else {
-            println!("{day}");
+        let mut header = day.clone();
+        if let Some(d) = dash.days.iter().find(|d| d.date == *day) {
+            if d.done > 0 {
+                header += &format!(" · {} done", d.done);
+            }
+            let missed = d.daily_missed + d.today_missed;
+            if missed > 0 {
+                header += &format!(" · {missed} missed");
+            }
         }
+        if total > 0 {
+            header += &format!(" · {}", fmt_duration(total));
+        }
+        println!("{header}");
         for t in day_times {
             println!("  ⏱ {} · {}", t.item_text, fmt_duration(t.seconds));
         }

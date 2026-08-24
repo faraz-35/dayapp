@@ -3,9 +3,22 @@
 // so the view composes itself. Time tracked on each task is layered in as a
 // per-day total (in the day header) and a per-task breakdown block — sessions
 // are a separate dimension (see src-tauri/src/timers.rs), not action rows.
+// The dashboard block above the day groups (JournalDashboard) summarizes the
+// same log: done/missed per range, heatmap, project/priority splits.
 
 import { useEffect, useMemo, useState } from "react";
-import { api, formatDuration, localDateStr, localDateStrOffset, timersApi, type Action, type DayTaskTime } from "../lib";
+import JournalDashboard from "./JournalDashboard";
+import {
+  api,
+  formatDuration,
+  journalApi,
+  localDateStr,
+  localDateStrOffset,
+  timersApi,
+  type Action,
+  type DashboardStats,
+  type DayTaskTime,
+} from "../lib";
 import { log } from "../log";
 
 const VERB: Record<string, string> = {
@@ -28,6 +41,7 @@ type JournalRange = "today" | "week" | "month" | "all";
 export default function JournalView() {
   const [actions, setActions] = useState<Action[]>([]);
   const [times, setTimes] = useState<DayTaskTime[]>([]);
+  const [dash, setDash] = useState<DashboardStats | null>(null);
   const [filter, setFilter] = useState<string>("all");
   const [range, setRange] = useState<JournalRange>("today");
   // When set, overrides the range pills with a single specific day.
@@ -55,7 +69,16 @@ export default function JournalView() {
     timersApi.sessionTimeByDay({ since: bounds.since, until: bounds.until })
       .then(setTimes)
       .catch((e) => log.warn("session time load failed", e));
+    journalApi.dashboard({ since: bounds.since, until: bounds.until })
+      .then(setDash)
+      .catch((e) => log.warn("dashboard load failed", e));
   }, [bounds]);
+
+  // The dashboard's per-day rows, keyed by date — the day headers' done/missed.
+  const dashDays = useMemo(
+    () => new Map((dash?.days ?? []).map((d) => [d.date, d])),
+    [dash],
+  );
 
   const filtered = useMemo(() => {
     if (filter === "all") return actions;
@@ -146,13 +169,29 @@ export default function JournalView() {
         ))}
       </div>
       <div className="journal">
+        {dash && (
+          <JournalDashboard
+            stats={dash}
+            activeDay={dayPick}
+            // Clicking the picked cell again clears the pick, like a toggle.
+            onPickDay={(d) => setDayPick((cur) => (cur === d ? null : d))}
+          />
+        )}
         {days.length === 0 && <div className="journal-empty">No activity yet.</div>}
         {days.map((day) => {
           const total = dayTotal(day);
+          const ds = dashDays.get(day);
+          const missed = ds ? ds.dailyMissed + ds.todayMissed : 0;
           return (
             <div key={day}>
               <div className="journal-day">
                 {day}
+                {ds != null && ds.done > 0 && (
+                  <span className="journal-day-stats"> · {ds.done} done</span>
+                )}
+                {missed > 0 && (
+                  <span className="journal-day-stats"> · {missed} missed</span>
+                )}
                 {total > 0 && <span className="journal-day-time"> · {formatDuration(total)}</span>}
               </div>
               {/* Time-by-task breakdown — only tasks with tracked time that day. */}

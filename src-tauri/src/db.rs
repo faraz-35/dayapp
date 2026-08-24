@@ -218,6 +218,16 @@ impl Db {
         ensure_column(conn, "notes", "hidden_until", "TEXT")?;
         ensure_column(conn, "notes", "priority", "INTEGER")?;
         ensure_column(conn, "notes", "project_id", "TEXT")?;
+        // The dashboard's snapshot axes (see schema.sql). When the columns
+        // land on an existing db, backfill once from then-current state — the
+        // best guess available for history written before snapshots existed
+        // (deleted subjects stay unattributed; honest best effort).
+        if ensure_column(conn, "actions", "project", "TEXT")?
+            | ensure_column(conn, "actions", "priority", "INTEGER")?
+        {
+            let n = backfill_action_axes(conn)?;
+            log::info!("migrate: snapshotted project/priority onto {n} action row(s)");
+        }
         // Consume token lines an earlier footer-storing build left in note
         // bodies (see notes.rs) — idempotent, so this is silent from the
         // second open on.
@@ -447,8 +457,10 @@ impl Db {
             "SELECT text, section FROM items WHERE id = ?1", params![id],
             |r| Ok((r.get(0)?, r.get(1)?)))?;
         finalize_open_session_for_item(&tx, &now, id)?;
-        tx.execute("DELETE FROM items WHERE id = ?1", params![id])?;
+        // Log while the row still exists — the action's project/priority
+        // snapshot subqueries read the live item (see log_action).
         log_action(&tx, id, &text, "deleted", Some(&section), None, None, None, &now)?;
+        tx.execute("DELETE FROM items WHERE id = ?1", params![id])?;
         Ok(tx.commit()?)
     }
 
@@ -753,9 +765,16 @@ fn log_action(
     from_status: Option<&str>, to_status: Option<&str>,
     timestamp: &str,
 ) -> anyhow::Result<()> {
+    // The trailing subqueries snapshot the item's project NAME and priority
+    // tier at write time — the same deletion-proofing as item_text, so the
+    // dashboard's splits read history that survives reassignment. They read
+    // the live row, so callers must log while it still exists (delete_item
+    // logs before its DELETE for exactly this reason).
     tx.execute(
-        "INSERT INTO actions (item_id,item_text,action,from_section,to_section,from_status,to_status,timestamp)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        "INSERT INTO actions (item_id,item_text,action,from_section,to_section,from_status,to_status,timestamp,project,priority)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,
+                 (SELECT p.name FROM items i LEFT JOIN projects p ON p.id = i.project_id WHERE i.id = ?1),
+                 (SELECT i.priority FROM items i WHERE i.id = ?1))",
         params![item_id, item_text, action, from_section, to_section, from_status, to_status, timestamp])?;
     Ok(())
 }
@@ -814,11 +833,36 @@ fn item_from_row(r: &rusqlite::Row) -> rusqlite::Result<Item> {
     })
 }
 
+// Fill NULL project/priority on action rows from the subjects' current state.
+// Two callers: the one-time migration when the snapshot columns land on an
+// existing db, and the demo seed — seeded actions are inserted with the
+// columns NULL, so this stands in for the write-time snapshots a live write
+// would have taken. Only touches NULL cells, so it's idempotent.
+pub(crate) fn backfill_action_axes(conn: &Connection) -> anyhow::Result<usize> {
+    let n = conn.execute(
+        "UPDATE actions SET
+           project = (SELECT p.name FROM items i
+                      LEFT JOIN projects p ON p.id = i.project_id
+                      WHERE i.id = actions.item_id),
+           priority = (SELECT i.priority FROM items i WHERE i.id = actions.item_id)
+         WHERE item_id IS NOT NULL AND project IS NULL AND priority IS NULL",
+        [])?;
+    let g = conn.execute(
+        "UPDATE actions SET
+           project = (SELECT p.name FROM goals g
+                      LEFT JOIN projects p ON p.id = g.project_id
+                      WHERE g.id = actions.goal_id)
+         WHERE goal_id IS NOT NULL AND project IS NULL",
+        [])?;
+    Ok(n + g)
+}
+
 // Add a column only if it isn't already on the table. Lets schema.sql stay
-// declarative for fresh DBs while still upgrading pre-existing ones.
-fn ensure_column(
-    conn: &Connection, table: &str, column: &str, decl: &str,
-) -> anyhow::Result<()> {
+// declarative for fresh DBs while still upgrading pre-existing ones. Returns
+// whether the column was added, so callers can run one-time follow-ups (like
+// the actions project/priority backfill).
+fn ensure_column(    conn: &Connection, table: &str, column: &str, decl: &str,
+) -> anyhow::Result<bool> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
     let present: Vec<String> = stmt
         .query_map([], |r| r.get::<_, String>(1))?
@@ -827,6 +871,8 @@ fn ensure_column(
     if !present.iter().any(|c| c == column) {
         log::info!("migrate: adding column {table}.{column} ({decl})");
         conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"), [])?;
+        Ok(true)
+    } else {
+        Ok(false)
     }
-    Ok(())
 }

@@ -206,6 +206,56 @@ export const timersApi = {
     }),
 };
 
+// ---- Journal dashboard ------------------------------------------------------
+// The Journal view's synthesized summary layer over `actions` (see
+// src-tauri/src/dashboard.rs): per-day done/missed across the range, a
+// completion heatmap window, and project/priority splits of completions.
+// Pure queries over the log — the same spine as everything else. No time
+// stats: sessions stay a dimension the Journal layers in, not dashboard
+// material.
+
+export interface DayStat {
+  date: string; // YYYY-MM-DD
+  done: number;
+  dailyMissed: number;
+  todayMissed: number;
+}
+
+export interface HeatDay {
+  date: string; // YYYY-MM-DD
+  done: number; // nonzero — absent days are 0
+}
+
+/** One project's slice of the range's completions; `name: null` is the "no
+ *  project" bucket. Current projects zero-fill so the whole roster shows. */
+export interface ProjectCount {
+  name: string | null;
+  count: number;
+}
+
+/** One priority tier's slice; `tier: null` is the unmarked bucket. Always
+ *  four rows, P1 → P3 → unmarked. */
+export interface TierCount {
+  tier: 1 | 2 | 3 | null;
+  count: number;
+}
+
+export interface DashboardStats {
+  days: DayStat[];
+  heatmap: HeatDay[];
+  projects: ProjectCount[];
+  priorities: TierCount[];
+  totals: { done: number; dailyMissed: number; todayMissed: number };
+}
+
+export const journalApi = {
+  dashboard: (opts: { since?: string; until?: string } = {}) =>
+    invoke<DashboardStats>("journal_dashboard", {
+      since: opts.since ?? null,
+      until: opts.until ?? null,
+    }),
+};
+
 // ---- Mobile sync ----------------------------------------------------------
 // GitHub-file transport for the Android client (see src-tauri/src/sync.rs).
 // The Mac is the single writer: deploy pushes tasks.json; pull drains the

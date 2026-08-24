@@ -33,9 +33,13 @@ pub fn demo_db_path(real_path: &Path) -> PathBuf {
 /// Run the demo seed against a connection: wipe every table and insert the
 /// sample dataset. `Reset Demo Data` is exactly this; first-use creation runs
 /// it once on a fresh file. schema.sql has already run (Db::open_conn), so
-/// this script is pure content.
+/// this script is pure content. The seed inserts actions without the
+/// project/priority snapshot columns, so the backfill fills them from the
+/// seeded rows — the stand-in for the write-time snapshots live writes take
+/// (see db.rs backfill_action_axes).
 pub fn seed(conn: &Connection) -> anyhow::Result<()> {
     conn.execute_batch(include_str!("../demo.sql"))?;
+    crate::db::backfill_action_axes(conn)?;
     Ok(())
 }
 
