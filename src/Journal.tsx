@@ -2,9 +2,9 @@
 // over `actions`; this page owns the prose captured through the notes bus's
 // `##j` token (plus its own capture line, which defaults to a journal entry).
 // Days render newest-first with their entries in capture order underneath.
-// Quotes are NOT shown here — the rotating line under the header is their one
-// surface, and for now they have no management surface at all (the notes bar's
-// ##q is the natural way in; this view's capture still routes a ##q line too).
+// Quotes are NOT shown here — the ⌘P quote modal is their one surface, and
+// for now they have no management surface at all (the notes bar's ##q is the
+// natural way in; this view's capture still routes a ##q line too).
 //
 // Self-contained like Notes/Goals: own state, own API, re-fetches on mount
 // (every view switch remounts it) and on reloadEpoch (demo-mode swaps).
@@ -45,7 +45,7 @@ export default function Journal({
 }: {
   reloadEpoch?: number;
   /** Bumped up to App when a ##q capture routes from this view's capture
-   *  line, so the rotating line re-fetches its pool. */
+   *  line, so the quote modal's pool re-fetches. */
   onQuotesChanged?: () => void;
 }) {
   const [entries, setEntries] = useState<Entry[]>([]);

@@ -193,7 +193,7 @@ cannot collide with the `#tag` project token (a lone `#` never starts a tag word
 - `##j` → a **journal entry**: one line of reflection stamped with its day, rendered by the
   **Journal view** (its own page — see UI/UX). The action log stays the journal of *what was
   done*; this table is the journal of *what was thought*.
-- `##q` → a **quote**: rendered by the rotating quote line under the header — its one
+- `##q` → a **quote**: rendered only by the quote modal (⌘P → Show a Quote) — its one
   surface. For now quotes have **no management surface** (capture-only; no edit/delete
   anywhere in the GUI).
 - `day` is the local date at capture; edits never move it (`created_at` keeps the within-day
@@ -201,7 +201,8 @@ cannot collide with the `#tag` project token (a lone `#` never starts a tag word
   all** — no priority, project, hide, or sort: just text and its day.
 - Entries are **content** (the notes/sessions call): never logged to `actions`, excluded
   from the phone export, no CLI surface (the Journal view is their home). Logic lives in
-  `src-tauri/src/journal.rs`; the UI is `src/Journal.tsx` (view) + `src/Quotes.tsx` (line).
+  `src-tauri/src/journal.rs`; the UI is `src/Journal.tsx` (view) + `src/Quotes.tsx`
+  (modal).
 
 ### Projects (a second organising axis — NOT logged)
 
@@ -475,7 +476,7 @@ dayapp/
 │   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + token-caught tier groups + the ##j/##q capture router)
 │   ├── Goals.tsx                   ← goals: horizon groups + capture + achieve (own state; between Notes and the sections)
 │   ├── Journal.tsx                 ← the ##j page: day-grouped entries + capture + inline edit/delete (quotes never render here; self-contained, the Notes/Analytics pattern)
-│   ├── Quotes.tsx                  ← the ##q line: one rotating quote under the header, masthead-rotation pattern (self-contained fetch; `version` prop is the refresh trigger)
+│   ├── Quotes.tsx                  ← the ##q moment: one quote on a dim backdrop, ⌘P-summoned (self-contained fetch + pick + linger; `version` prop is the refresh trigger)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
@@ -523,8 +524,8 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 |---|---|---|
 | `App.tsx` | state (incl. the active timer + the one focused thing), effects, the focus grammar key handler, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
 | `Goals.tsx` | goals state + capture + horizon groups + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
-| `Quotes.tsx` | the ##q line: quote pool fetch, 2-min rotation (no consecutive repeats), fade-in render | capture (Notes' router adds quotes), quote management (none exists — capture-only) |
-| `Journal.tsx` | the Journal view: entries state, day groups, capture (plain = journal entry), inline edit/delete (self-contained; remounts per view switch; quotes filtered out) | the quote line (Quotes.tsx), analytics (AnalyticsView) |
+| `Quotes.tsx` | the ##q moment: quote pool fetch, the ⌘P-summoned modal's pick (no consecutive repeats) + 45s linger | capture (Notes' router adds quotes), quote management (none exists — capture-only) |
+| `Journal.tsx` | the Journal view: entries state, day groups, capture (plain = journal entry), inline edit/delete (self-contained; remounts per view switch; quotes filtered out) | the quote modal (Quotes.tsx), analytics (AnalyticsView) |
 | `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + capture input + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
@@ -550,7 +551,7 @@ separately" bug.
 .app       display:flex column; height:100%; overflow:hidden   ← the shell, never scrolls
   .header  flex-shrink:0                                       ← pinned
   .scroll   flex:1; overflow-y:auto; min-height:0              ← THE ONE scroll container
-    Quotes / Goals / Notes / SectionList / AnalyticsView / Journal ← in-flow, no own scroll
+    Goals / Notes / SectionList / AnalyticsView / Journal ← in-flow, no own scroll
 ```
 
 `.notes`, `.goals`, `.sections`, `.analytics`, `.journal`, `.hidden-view` must **not** set `overflow`,
@@ -565,17 +566,20 @@ There are two kinds of UI elements, and they must not be mixed:
 - **Inline chrome** — capture inputs, section heads, item rows, notes. These
   live in the `.scroll` flow and push content. `position: static`/`relative`.
 - **Floating surfaces** — `CommandPalette` (⌘P), `SearchMenu` (⌘F),
-  `UpdateOverlay`. These are transient overlays: `position: fixed; inset: 0` +
-  a dim `rgba(0,0,0,0.4)` backdrop + a centered card, mounted at the end of
-  `.app` (not inside `.scroll`). They float *over* content; they never push it.
+  `UpdateOverlay`, the quote modal (`Quotes.tsx`). These are transient overlays:
+  `position: fixed; inset: 0` + a dim `rgba(0,0,0,0.4)` backdrop + a centered card,
+  mounted at the end of `.app` (not inside `.scroll`). They float *over* content;
+  they never push it. (The quote modal deliberately drops the card — the quote
+  floats on the bare backdrop; see "Quote modal" under UI/UX.)
 
 **Never mount a floating surface as an inline flex sibling** — it consumes
 layout space and "feels inline." The backdrop + centered card is what makes a
 modal read as transient. Match `.palette-backdrop`/`.palette` exactly when
 adding a new one.
 
-`z-index` ordering: command palette `100` > search `90` > update overlay `110`.
-(Update is highest because it represents an in-flight, non-cancellable swap.)
+`z-index` ordering: update overlay `110` > quote modal `105` > sync settings `105` >
+command palette `100` > search `90` (update highest — an in-flight, non-cancellable
+swap outranks everything).
 
 ### 3. Positioning discipline
 
@@ -608,10 +612,10 @@ keyboard-first.** Every choice below is intentional.
 5. **One accent colour.** `#7b8cff` means "active/selected/completed/done-today." Do not
    introduce a second accent.
 6. **Dark, always dark.** No light theme, no `prefers-color-scheme` switching. `color-scheme: dark`.
-7. **Identity first, then capture.** The rotating quote line (the `##q` carousel)
-   sits directly under the header; Goals — the identity layer — at the very top of
-   the content under it; Notes, the lowest-friction capture surface, right below.
-   There is always a ready textarea.
+7. **Identity first, then capture.** Goals — the identity layer — at the very top of
+   the content; Notes, the lowest-friction capture surface, right below.
+   There is always a ready textarea. (The quote moment is a summoned modal, not
+   ambient chrome — see "Quote modal" under UI/UX.)
 
 ### Colour tokens (from `index.css` — use these, do not hardcode hex)
 
@@ -631,8 +635,8 @@ keyboard-first.** Every choice below is intentional.
 Typography: `-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif`.
 Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spacing.
 The serif surfaces are the centered header masthead (the "Live @ Faraz" brand, or
-"Analytics"/"Journal" in those views) and the rotating quote line: `ui-serif` (New York)
-italic, Didot/Georgia fallbacks (14px for the masthead, 13px for the quote). The brand
+"Analytics"/"Journal" in those views) and the quote modal's line: `ui-serif` (New York)
+italic, Didot/Georgia fallbacks (14px for the masthead, 15px for the quote). The brand
 rotates like a station ident — "Faraz" is home, and every 2
 minutes it steps out to a random word from `MASTHEAD_THEMES` in `App.tsx`
 (growth/money/journey/learn, never the same one twice in a row) and back, each swap
@@ -745,7 +749,7 @@ Do not reintroduce bare single-letter verbs that collide with the address
 prefixes `n`/`t`/`d`/`b`/`g`.
 
 **Show/Hide toggles (⌘P):** every layout surface is an independent, persisted toggle
-whose label reflects its state — `Goals`, `Notes`, `Quotes` (the ##q line), `Today`/`Daily`/`Backlog` sections,
+whose label reflects its state — `Goals`, `Notes`, `Today`/`Daily`/`Backlog` sections,
 `Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
 dimmed, ↺/× actions), the per-tier `Priority 1/2/3 Tasks` toggles, the notes' own
 `Priority 1/2/3 Notes` toggles (independent of the task tiers, like Hidden Notes ≠
@@ -769,8 +773,8 @@ map back to full-list space in `handleMoveItem`). The set persists across launch
 notes' tier groups — independent of the task tiers.
 
 **Focus Mode (⌘P):** `Enter/Exit Focus Mode` is a **lens**, not a batch of toggle
-mutations — P1 notes only, Today, Daily, and P1 Backlog only (Goals and the quote line
-hidden too: the lens is stricter than the default working view). It composes with the filters/toggles in the
+mutations — P1 notes only, Today, Daily, and P1 Backlog only (Goals hidden too: the
+lens is stricter than the default working view). It composes with the filters/toggles in the
 same `displayItems`/Notes pipelines and never mutates them: exiting restores whatever
 they were. Persisted (`dayapp-focus-mode`); Show Default View exits it. A capture that
 doesn't match the lens (an unmarked note, a non-P1 backlog row) is created but not
@@ -800,7 +804,7 @@ same `displayItems` pipeline.
 **Show Default View is the universal reset:** hidden entries excluded, priority tiers
 (tasks + notes), project and agent filters cleared, agent tasks shown, focus mode off,
 all three sections + Notes shown —
-and Goals + Quotes hidden (the default working view is the plain task list). One command
+and Goals hidden (the default working view is the plain task list). One command
 always restores it.
 
 The keyboard handler **ignores events when an `<input>`/`<textarea>` is focused** so typing
@@ -877,19 +881,30 @@ into Notes or edit fields isn't hijacked.
   `ProjectMenu` items use. ⌘P → Show/Hide Goals toggles the whole section (persisted).
   Every mutation is logged to `actions` (goal_* values) — see the data model.
 
-**Quotes line (the ##q carousel):**
-- One quote at a time in a single centered serif-italic line directly under the header —
-  above Notes and everything, the first block in `.scroll`. Rotates every 2 minutes
-  (never the same quote twice in a row; each swap fades in through the masthead's
-  `title-in` keyframes — the brand rotation's rules, reused). Ellipsized when long; the
-  full quote rides in the tooltip. Renders **nothing at all** while the pool is empty —
-  no empty-state chrome.
-- Source: `##q` captures (the notes bus) — never projects, never logged. ⌘P →
-  Show/Hide Quotes toggles it (persisted, default on); Focus Mode hides it too, and
-  Show Default View turns it off (the default working view is the plain task list).
-  It is quotes' **only** surface — no management, no list anywhere (Faraz's call,
-  2026-08-25). Component is `Quotes.tsx` (self-contained fetch + rotation; App bumps
-  its `version` prop on demo swaps and `##q` captures).
+**Quote modal (⌘P → Show a Quote):**
+- One quote at a time on a dim backdrop (`rgba(0,0,0,0.55)`, deeper than the palette's
+  0.4 — the dim *is* the pause) — a single centered serif-italic line, ~75% width,
+  multi-line wrap (never ellipsized), no card, no close button, no countdown chrome.
+  The backdrop is what creates the "think about this" moment; an inline line can't.
+- **Summoned, never ambient.** The rotating quote line under the header (shipped
+  2026-08-25, retired 2026-08-26) failed because a quote always in view becomes
+  wallpaper — rarity plus deliberate invocation is what gives a quote weight. There is
+  **no timed/auto version**: an uninvited modal is a push notification and trains
+  reflex-dismissal. If a cadence is ever wanted, anchor to interaction (app regaining
+  visibility after ≥N hours — the daily-reset's render-time-comparison idiom), never
+  wall-clock, and never as a modal.
+- Dismissal: any key (beyond a bare modifier chord — ⌘P/⌘F still work, their listener
+  closes the modal) or any click ends it instantly; after ~45s (`LINGER_MS`) it
+  dismisses itself — the duration is a default, not a rule. The pick never repeats the
+  last-shown quote (the masthead rotation's rule, reused; session-only memory).
+- Source: `##q` captures (the notes bus) — never projects, never logged. The palette
+  entry hides while the pool is empty (`quoteCount` rides up from `Quotes.tsx` — no
+  pool, nothing to summon). Not a layout toggle: Focus Mode and Show Default View don't
+  special-case it (a summoned moment isn't ambient chrome). It is quotes' **only**
+  surface — no management, no list anywhere (Faraz's call, 2026-08-25; capture-only
+  unchanged). Component is `Quotes.tsx` (self-contained fetch + pick + linger; App owns
+  the open boolean for the key-handler gate and bumps `version` on demo swaps and
+  `##q` captures).
 
 **Journal view (⌘P → View Journal, or the header `¶`):**
 - The written journal's own page — Analytics replaced the old journal view, so `##j`
@@ -903,7 +918,7 @@ into Notes or edit fields isn't hijacked.
 - **Capture at the top is the bus with a default**: plain lines land as today's journal
   entries; a leading `##q` still routes to quotes from here. No placeholder — the
   section-input language.
-- **Quotes never render here** (Faraz's call, 2026-08-25): the rotating line is their one
+- **Quotes never render here** (Faraz's call, 2026-08-25): the quote modal is their one
   surface and they carry no management surface at all for now — the view filters them out
   and shows journal entries only.
 - Mouse-first like Analytics: no focus-grammar wiring (free-mode `j`/`k` scrolling works

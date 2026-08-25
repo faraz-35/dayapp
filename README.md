@@ -67,11 +67,12 @@ on its own surface:
   order — the written journal, next to Analytics' computed one. Its capture line adds
   entries directly (plain text = today's entry; `##q` still routes to quotes from there),
   single-click edits inline, hover reveals delete.
-- `##q` — a **quote**. It joins the pool behind the rotating quote line directly under the
-  header: one quote at a time, changing every 2 minutes, never the same one twice in a
-  row. ⌘P → Show/Hide Quotes toggles the line (Focus Mode hides it too, and Show Default
-  View turns it off). The line is a quote's only surface — there's no management list
-  anywhere (yet); `##q` captures just join the pool.
+- `##q` — a **quote**. It joins the pool behind the quote moment: ⌘P → **Show a Quote**
+  puts one quote on a dim backdrop — serif italic, centered, nothing else — for a quiet
+  pause. Any key or click dismisses it, or it goes on its own after ~45 seconds; it never
+  shows the same quote twice in a row. The entry hides while the pool is empty. That modal
+  is a quote's only surface — there's no management list anywhere (yet); `##q` captures
+  just join the pool.
 
 The `##` prefix is reserved so it can't collide with the `#tag` project token. Entries
 have no priority/project/hide axes — just text and its day — and like notes they're
@@ -124,11 +125,12 @@ Your data in `~/Library/.../dayapp.db` is never touched.
 
 VS Code / Linear–style: press **⌘P** anywhere, type to filter, ↑/↓ to move, Enter to run.
 Currently: Show Default View (the universal reset), the Show/Hide toggles — Goals, Notes,
-Quotes, Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3 Tasks, Priority 1/2/3 Notes,
+Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3 Tasks, Priority 1/2/3 Notes,
 Agent Tasks — **Enter/Exit Focus Mode** (the deep-work lens: P1 notes + Today + Daily +
 P1 Backlog only),
 Enter/Exit Demo Mode + Reset Demo Data, the mobile sync commands (Deploy Task List Now /
-Pull Captures Now / Configure Sync…), View Analytics, View Journal, Keyboard Shortcuts
+Pull Captures Now / Configure Sync…), View Analytics, View Journal, Show a Quote,
+Keyboard Shortcuts
 (the focus-grammar reference card), and Update DayApp. Trivially extensible — add a
 command to the registry in `App.tsx`.
 
@@ -143,7 +145,7 @@ dayapp/
 │   ├── Notes.tsx            ← free-form notes (own state + API; ⌘F-in-note find, ⬇ .txt export)
 │   ├── Goals.tsx            ← goals: horizon groups + capture + achieve (own state)
 │   ├── Journal.tsx          ← the ##j view: day-grouped entries (quotes never render here)
-│   ├── Quotes.tsx           ← the ##q line: one rotating quote under the header
+│   ├── Quotes.tsx           ← the ##q moment: one quote on a dim backdrop, ⌘P-summoned
 │   ├── notesApi.ts          ← notes invoke wrappers
 │   ├── log.ts               ← prefixed console logger (webview side)
 │   ├── HideMenu.tsx         ← shared ◐ hide-duration popover

@@ -185,13 +185,17 @@ function DayApp() {
   const [agentTasksVisible, setAgentTasksVisible] = useState(
     () => localStorage.getItem("dayapp-agent-tasks-visible") !== "0",
   );
-  // ⌘P "Show/Hide Quotes" — the rotating ##q line under the header. Persisted
-  // like every layout surface; default on (it's the feature's face). Focus
-  // Mode hides it too — the lens is stricter than the default working view.
-  const [quotesVisible, setQuotesVisible] = useState(
-    () => localStorage.getItem("dayapp-quotes-visible") !== "0",
-  );
-  // The quote line's refresh trigger: bumped on demo-mode swaps and whenever
+  // The quote moment (⌘P → Show a Quote): App owns the open boolean (the
+  // floating-surface gate in the key handler needs it) and the pool size
+  // (reported up from Quotes so the palette entry hides while empty).
+  // Quotes.tsx owns the rest — pick, linger, dismissal.
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [quoteCount, setQuoteCount] = useState(0);
+  // Stable identity: Quotes' linger timer depends on onClose, and App
+  // re-renders every second while a timer runs — an inline arrow would reset
+  // the 45s clock on each tick.
+  const closeQuote = useCallback(() => setQuoteOpen(false), []);
+  // The quote pool's refresh trigger: bumped on demo-mode swaps and whenever
   // a ##q capture lands (Notes' onEntryRouted) or a quote changes in the
   // Journal view. Quotes.tsx re-fetches on it — no polling.
   const [quotesVersion, setQuotesVersion] = useState(0);
@@ -349,10 +353,11 @@ function DayApp() {
     localStorage.setItem("dayapp-hidden-note-priorities", JSON.stringify(hiddenNotePriorities));
     localStorage.setItem("dayapp-focus-mode", focusMode ? "1" : "0");
     localStorage.setItem("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
-    localStorage.setItem("dayapp-quotes-visible", quotesVisible ? "1" : "0");
-    // Retired key from the single-tier "only" filter era — one-time cleanup.
+    // Retired keys: the single-tier "only" filter era, and the rotating
+    // quote line the modal replaced — one-time cleanups.
     localStorage.removeItem("dayapp-priority");
-  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quotesVisible]);
+    localStorage.removeItem("dayapp-quotes-visible");
+  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it.
@@ -496,18 +501,21 @@ function DayApp() {
         setSectionsVisible({ today: true, daily: true, backlog: true });
         setNotesVisible(true);
         setGoalsVisible(false);
-        setQuotesVisible(false);
       },
     },
-    {
-      id: "toggle-quotes",
-      // The ##q carousel line under the header — one quote at a time, rotating
-      // quietly. A layout surface like Goals: independent, persisted, and off
-      // in the default working view.
-      label: quotesVisible ? "Hide Quotes" : "Show Quotes",
-      hint: "the rotating quote line",
-      run: () => { setView("list"); setQuotesVisible((v) => !v); },
-    },
+    // The ##q moment — one quote on a dim backdrop, deliberately summoned
+    // (rarity is what gives it weight; the old always-on line became
+    // wallpaper). Sits second in the palette, where the line's Show/Hide
+    // toggle lived, so the ⌘P muscle memory finds it — and it's on the first
+    // screen, not buried below the fold. Hidden while the pool is empty:
+    // quotes have no management surface, so an empty pool means nothing to
+    // summon.
+    ...(quoteCount > 0 ? [{
+      id: "show-quote",
+      label: "Show a Quote",
+      hint: "a moment with one of your ##q captures",
+      run: () => setQuoteOpen(true),
+    }] : []),
     {
       id: "toggle-goals",
       label: goalsVisible ? "Hide Goals" : "Show Goals",
@@ -658,20 +666,24 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quotesVisible, demoMode]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quoteCount, demoMode]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
-  // don't interfere with typing in a field).
+  // don't interfere with typing in a field). Opening the palette or search
+  // also closes the quote modal — it sits above both in z-order, so leaving
+  // it open would cover the surface being summoned.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
       if (e.key === "p") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+        setQuoteOpen(false);
       } else if (e.key === "f") {
         e.preventDefault();
         setSearchOpen(true);
+        setQuoteOpen(false);
       } else if (e.key === "=" || e.key === "+") {
         e.preventDefault();
         setZoom((z) => clampZoom(z + ZOOM_STEP));
@@ -710,8 +722,8 @@ function DayApp() {
   };
 
   // Notes reports a ##j/##q capture it routed to the entries table. Only
-  // quotes matter here — they're the entry kind App surfaces (the rotating
-  // line), so its pool re-fetches; journal entries belong to the Journal
+  // quotes matter here — they're the entry kind App surfaces (the quote
+  // modal), so its pool re-fetches; journal entries belong to the Journal
   // view, which fetches fresh on every mount.
   const handleEntryRouted = useCallback((kind: EntryKind) => {
     if (kind === "quote") setQuotesVersion((n) => n + 1);
@@ -1166,6 +1178,17 @@ function DayApp() {
         pendingAddr.current = "";
         return;
       }
+      // The quote modal owns the keys while it's open — it has no inputs, so
+      // any key beyond a bare modifier chord (⌘/⌘F still work via their own
+      // listener, which closes this) means "done thinking" and dismisses.
+      if (quoteOpen) {
+        pendingAddr.current = "";
+        if (!(e.metaKey || e.ctrlKey || e.altKey) && e.key !== "Shift") {
+          e.preventDefault();
+          setQuoteOpen(false);
+        }
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) {
         pendingAddr.current = "";
         return;
@@ -1256,7 +1279,7 @@ function DayApp() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allVisible, selectedId, focusNoteId, focusGoalId, view, helpOpen, syncSettingsOpen, paletteOpen, searchOpen, updateStatus, renderItems, activeTimer]);
+  }, [allVisible, selectedId, focusNoteId, focusGoalId, view, helpOpen, syncSettingsOpen, paletteOpen, searchOpen, quoteOpen, updateStatus, renderItems, activeTimer]);
 
   const moveSelection = (delta: number) => {
     const idx = allVisible.findIndex((i) => i.id === selectedId);
@@ -1346,13 +1369,6 @@ function DayApp() {
       <div className="scroll">
         {view === "list" ? (
           <>
-            {/* The ##q carousel — one quote at a time under the header, above
-                Notes and everything: the identity zone's ambient line, rotating
-                every 2 minutes like the masthead brand. Self-contained
-                (Quotes.tsx); quotesVersion is its refresh trigger (demo swaps,
-                captures, edits). Hidden by Focus Mode — the lens is stricter
-                than the default working view. */}
-            {quotesVisible && !focusMode && <Quotes version={quotesVersion} />}
             {/* Goals — the identity layer at the very top: horizon statements
                 (timeless / long / short) that give the list its "why".
                 Self-contained like Notes, outside the DnD area; ⌘P → Show/Hide
@@ -1453,6 +1469,15 @@ function DayApp() {
         open={paletteOpen}
         commands={commands}
         onClose={() => setPaletteOpen(false)}
+      />
+      {/* The quote moment (⌘P → Show a Quote) — a floating surface like the
+          palette: dim backdrop, centered serif italic, never inline. App owns
+          the open flag (the key-handler gate); Quotes owns pick + linger. */}
+      <Quotes
+        version={quotesVersion}
+        open={quoteOpen}
+        onClose={closeQuote}
+        onCount={setQuoteCount}
       />
       <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <UpdateOverlay

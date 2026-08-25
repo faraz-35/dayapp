@@ -1465,32 +1465,41 @@ button {
   flex-shrink: 0;
 }
 
-/* ---- Quotes (the ##q line under the header) ------------------------------ */
-/* One quote at a time, rotating every 2 minutes — never the same one twice in
-   a row, each swap fading in through the masthead's title-in keyframes. The
-   line renders nothing at all while the pool is empty. Display text, so
-   --text (bright) — the serif voice is the masthead's. The quote wraps: it
-   occupies ~75% of the width, centered, multi-line as long as it needs to be
-   (never ellipsized — clipping a quote mid-sentence defeats it), with 12px
-   of vertical breathing room on either side. */
+/* ---- Quote modal (⌘P → Show a Quote) ------------------------------------ */
+/* The ##q moment: one quote on a dim backdrop, nothing else — no card, no
+   close button, no countdown chrome. The backdrop is what creates the pause
+   (it dims the task list the way an inline line never could); the quote
+   itself keeps the line's old voice — serif italic, --text (bright),
+   ~75% width, centered, multi-line as long as it needs to be (never
+   ellipsized — clipping a quote mid-sentence defeats it). Fades in like
+   every surface; dismissal is instant (any key or click, or the 45s linger
+   ending) — snappy like the palette, not a slow dissolve. */
 
-.quote-line {
+.quote-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);  /* deeper than the palette's 0.4 — the dim is the point */
+  z-index: 105;                     /* above search (90), below update (110) */
   display: flex;
+  align-items: center;
   justify-content: center;
-  padding: 4px 16px 0;   /* first block on the page — carries the top padding */
-  min-width: 0;
+  cursor: default;
+  -webkit-app-region: no-drag;
+  animation: title-in 0.25s ease;
 }
 
 .quote-text {
   width: 75%;
-  margin: 12px 0;
   font-family: ui-serif, "New York", Didot, Georgia, serif;
   font-style: italic;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.6;
   color: var(--text);
   text-align: center;
   overflow-wrap: break-word;
+  /* A fleeting moment, not a copy source — selection would fight the
+     click-anywhere-to-dismiss contract. */
+  user-select: none;
   animation: title-in 0.35s ease;
 }
 

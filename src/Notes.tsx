@@ -83,7 +83,7 @@ export default function Notes({
    *  this, so the label renders immediately. */
   onCreateProject: (name: string) => Promise<Project>;
   /** Notified when a ##j/##q capture was routed to the entries table, so App
-   *  can refresh surfaces it owns (the quote line). The capture itself is done
+   *  can refresh surfaces it owns (the quote modal). The capture itself is done
    *  here — the notes bar IS the bus. */
   onEntryRouted?: (kind: EntryKind) => void;
 }) {
@@ -203,7 +203,7 @@ export default function Notes({
   // line becomes an entry instead of a note — the notes bus's whole idea. A
   // bare token with no text is swallowed (no empty entries, no junk note).
   // Entry captures never touch the notes state; App hears about quotes via
-  // onEntryRouted so the rotating line refreshes.
+  // onEntryRouted so the quote modal's pool refreshes.
   const handleCapture = (raw: string) => {
     const route = parseEntryCapture(raw);
     if (!route) {
