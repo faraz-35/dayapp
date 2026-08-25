@@ -128,7 +128,7 @@ meta    key, value           — currently holds last_sweep_date
   goal_created | goal_achieved | goal_unachieved | goal_edited | goal_deleted`
 - `actions` rows set exactly one subject: `item_id` on item rows, `goal_id` on goal rows
   (CHECK-enforced). On goal rows the section columns carry the horizon and the status
-  columns carry active/achieved, so the journal renders both subjects uniformly.
+  columns carry active/achieved, so `--journal` renders both subjects uniformly.
 - **`actions.item_text` is snapshotted at write time.** History must survive edits and
   deletions — if it referenced the live row, renaming a task would silently rewrite the
   past.
@@ -466,7 +466,7 @@ dayapp/
     │   ├── notes.rs                ← notes DB logic + setters + the stored-footer migration (methods on Db)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
     │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
-    │   ├── dashboard.rs            ← journal dashboard: done/missed per day, daily-miss replay, project/priority splits, heatmap window (method on Db)
+    │   ├── dashboard.rs            ← the analytics derivation: done/missed per day, daily-miss replay, streak, project/priority splits, heatmap window (method on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
     │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API; demo-gated)
     │   ├── demo.rs                 ← demo mode: dayapp-demo.db open/seed + enter/exit/reset swap under the conn lock
@@ -519,7 +519,7 @@ separately" bug.
     Goals / Notes / SectionList / AnalyticsView                  ← in-flow, no own scroll
 ```
 
-`.notes`, `.goals`, `.sections`, `.journal`, `.hidden-view` must **not** set `overflow`,
+`.notes`, `.goals`, `.sections`, `.analytics`, `.hidden-view` must **not** set `overflow`,
 `max-height`, `flex: 1`, or `min-height: 0` — they are plain in-flow blocks
 inside `.scroll`. If you ever need a region to scroll independently, you are
 changing the architecture: update this section and justify why.
@@ -674,7 +674,7 @@ no popover open) clears focus entirely, and at that bottom rung digits are
 inert — a stray `1-6` can't do anything unseen. That bottom rung ("free mode")
 is a reading mode: `j`/`k`/`↑`/`↓` scroll the one `.scroll` container (120px,
 smooth — a view-only verb, so it can't act on anything unseen; it works in
-every view, Journal included, where nothing is ever focused). While a row is
+every view, Analytics included, where nothing is ever focused). While a row is
 focused, `j`/`k` walk the rows and clamp at the ends — they never drop focus;
 Esc or a new address is the only way out. The focused thing **shows its hover
 buttons** (focus mirrors hover exactly: same tint, same revealed actions, same
@@ -722,7 +722,7 @@ archive screen — inline-or-excluded is the whole visibility story.
 demo twin (see "Demo mode" under Data model); while active, `Reset Demo Data` re-seeds
 it and the three Mobile entries hide (the phone belongs to the real db). The masthead
 reads `Live @ Demo` in every view — the one indicator, calm by design. Everything else
-(sections, grammar, DnD, journal) runs unchanged on the demo data; that identical-
+(sections, grammar, DnD, analytics) runs unchanged on the demo data; that identical-
 ness is what makes it a faithful demo.
 
 **Priority visibility (⌘P):** `Show/Hide Priority 1/2/3 Tasks` are three independent toggles —

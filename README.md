@@ -17,14 +17,31 @@ text field with a done button. Three behaviours fall out of the data model, no c
 | "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X` — ▶/⏸ write open/close timestamps; the Analytics day ledger totals them, `--journal` breaks them down per task |
 | Hide tasks/notes for a while | `hidden=1` + optional `hidden_until` date; `list_*` filters `hidden=0`. The midnight sweep clears expired hides, so "hide for a day/week/month" auto-restores with no cron |
 
-Every action (create/complete/move/edit/delete/sweep) is appended to `actions`. That table
-feeds the **Analytics** page (top-right `≡`): done / avg-per-day / streak / daily-missed /
-today-missed totals for the range, a GitHub-style completion heatmap (click a day to scope
-the page to it), project + priority splits of what got completed, and a one-line-per-day
-ledger — which projects actually got the work, which tier you usually clear, which habits
-slipped. The page is aggregates only; the raw log's textual home is `dayapp --journal`
-(same summary block, then every action). Project/priority are snapshotted onto each action
-at write time, so the splits are real history, not today's labels pasted over the past.
+Every action (create/complete/move/edit/delete/sweep) is appended to `actions`. That log
+is the spine of the **Analytics** page (top-right `≡`) — see below.
+
+## Analytics
+
+The `≡` view is a dashboard synthesized from the log — it answers questions, it never
+enumerates events. Scoped to Today/Week/Month/All (default **Week**) or any picked day:
+
+- **Stats** — done (effective completions: an unchecked-never-redone task doesn't count,
+  a re-completed misclick counts once), avg/day, streak (consecutive days with ≥1
+  completion; a live today with nothing yet doesn't break it), **daily missed** (habits
+  the day ended without) and **today missed** (tasks that fell to Backlog unfinished —
+  the sweep logs those for free).
+- **Heatmap** — ~7 months of per-day completions, GitHub-style, in the app's single
+  accent. Click any day to scope the whole page to it.
+- **Projects / Priority splits** — every project's share of the range's completions
+  (zeros visible, so neglected projects read too) and the P1→P3 tiers you actually clear.
+  Both read project/priority snapshotted onto each `actions` row at write time, so the
+  splits are real history — reassigning a task never rewrites the past.
+- **Days ledger** — one line per day that had any signal (`MON, AUG 24 · 7 done · 1
+  missed`), clickable like the heatmap. Counts only.
+
+The raw action log's textual home is `dayapp --journal`: the same summary block, then
+every action grouped by day. Time appears only as the ledger's per-day total when any
+was tracked — sessions stay a separate dimension, not dashboard stats.
 
 ## Stack
 
@@ -361,10 +378,10 @@ the checkbox undoes it. Achievements are kept, never swept.
 **⌘P → Show/Hide Goals** toggles the whole section off and on (persisted
 across launches; **Show Default View** hides it — the default working view is
 the plain task list). Goals are logged to the journal like items — every
-set / achieve / reopen / edit / drop shows up in the Journal view, which also
-has a **Goals** filter pill for the identity-layer narrative. The project link
-stays housekeeping, unlogged. `dayapp --goals` prints the current list grouped
-by horizon (below) — the agent-context view.
+set / achieve / reopen / edit / drop is an `actions` row that prints in
+`dayapp --journal` (the Analytics page is task analytics; goals stay off it).
+The project link stays housekeeping, unlogged. `dayapp --goals` prints the
+current list grouped by horizon (below) — the agent-context view.
 
 ## Reminders
 
@@ -393,9 +410,9 @@ Backlog rows have no ▶ — their slot-1 verb is **↑ send to Today**; timing
 belongs to Today/Daily, where work happens.
 
 Tracked time shows up two ways: a faint `⏱ 2h 14m` cumulative label on each row
-that has any, and — in the Journal — a per-day total in each day header plus a
-per-task breakdown. Time tracking is **not** logged to `actions`; sessions live
-in their own `sessions` table and are layered into the journal as a separate
+that has any, and the Analytics day ledger's per-day total (with a per-task
+breakdown in `--journal`). Time tracking is **not** logged to `actions`; sessions live
+in their own `sessions` table and are layered in as a separate
 dimension. Completing or deleting a running item stops its timer first.
 
 ## Mobile (Android)
@@ -461,8 +478,9 @@ A fully interactive sample dataset for trying the app and showing it to others �
 ⌘P → **Enter Demo Mode** swaps the backend to a second, disposable database
 (`dayapp-demo.db` next to your real one; your data is never touched). The
 masthead reads **Live @ Demo** the whole time. Everything works on the sample
-data — complete tasks, run timers, browse the journal (it comes pre-seeded with
-a week of history) — and mutations persist in the demo db across sessions.
+data — complete tasks, run timers, browse the analytics page (the seed carries a
+week of history, so the heatmap, misses and splits all have data) — and mutations
+persist in the demo db across sessions.
 
 - ⌘P → **Exit Demo Mode** swaps back instantly. Demo mode is session-only:
   launching the app always opens your real db.
@@ -484,7 +502,8 @@ time, so it travels with the app.
 The same binary is a tiny CLI for checking and triggering tasks from a remote
 session — it opens the same db (WAL + busy-timeout make the two processes
 safe together) and force-deploys after writes so the phone sees them fast.
-The read flags mirror the GUI's surfaces (⌘F, the journal, the sections), so
+The read flags mirror the GUI's surfaces (⌘F, the Analytics page, the sections) and
+`--journal` additionally carries the raw action log the GUI no longer shows, so
 a remote session can access any information the app can show, and the write
 flags close the delegation loop: claim a 🤖 task (`--move` it to Today), work
 it, write the outcome back (`--details`), complete it.
@@ -495,7 +514,7 @@ dayapp --task "PSX stock algo"        # one task in full, incl. its details (the
 dayapp --search "outreach"            # ⌘F: text substring
 dayapp --search "#job"                #   or a project's rows (bare # lists projects)
 dayapp --search "@agent"              #   or the delegation axis (@agent / @my)
-dayapp --journal [week]               # the journal: dashboard summary + actions + time by day
+dayapp --journal [week]               # analytics summary + the raw action log, by day
                                       #   (today | week | month | all | YYYY-MM-DD)
 dayapp --notes [query] [--hidden]     # notes, optionally filtered by body substring
 dayapp --projects                     # projects as #tags
@@ -523,7 +542,7 @@ remotely, one task per run:
 2. **Read** — `--task <query>`
 3. **Record** — `--details <query> "<approach>"` if the body was empty (never
    overwrite a non-empty body — those are Faraz's words)
-4. **Done** — `--complete <query>`; the journal and the phone mirror pick it up
+4. **Done** — `--complete <query>`; the analytics page and the phone mirror pick it up
    on their own
 
 This protocol lives in the **dayapp skill** (`~/.agents/skills/dayapp` on the Mac),
