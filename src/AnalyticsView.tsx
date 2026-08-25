@@ -6,12 +6,18 @@
 // day's tasks (done with times, what fell, missed habits — the raw action
 // log's textual home remains the CLI's --journal). Clicking a calendar cell,
 // a ledger row, or the date field picks a day; click it again to clear.
+// The filter bar also carries the axis scope filters — a `#` project picker
+// (multi-select popover) and priority tier chips — which every derivation
+// follows via the backend's write-time snapshots (see dashboard.rs); a split
+// card whose axis is filtered hides (a filtered view already answers it),
+// and time deliberately doesn't follow (the ledger hides its day total while
+// filtered; per-task time rides the filtered task rows).
 // Responsive: cards stack on the 480px window; a wide window spans the hero
 // across the top, sets Activity/Projects/Priority in one row, and gives the
 // ledger its own full-width row. All derivation lives in
 // src-tauri/src/dashboard.rs; per-task time is layered in from sessions.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PriorityBars } from "./components/ItemRow";
 import {
   formatDuration,
@@ -19,10 +25,14 @@ import {
   journalApi,
   localDateStr,
   localDateStrOffset,
+  projectColor,
+  projectsApi,
   timersApi,
+  type DashboardFilter,
   type DashboardStats,
   type DayDetail,
   type DayTaskTime,
+  type Project,
   type TierCount,
 } from "./lib";
 import { log } from "./log";
@@ -180,6 +190,64 @@ export default function AnalyticsView() {
   // Picking never re-scopes the stats — the range pills own that.
   const [pickedDay, setPickedDay] = useState<string | null>(null);
 
+  // ---- Axis scope filters (session-only, like the range) -------------------
+  // "" in selProjects = the "no project" bucket; 0 in selTiers = unmarked.
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selProjects, setSelProjects] = useState<Set<string>>(new Set());
+  const [selTiers, setSelTiers] = useState<Set<number>>(new Set());
+  const [projMenu, setProjMenu] = useState(false);
+  const projMenuRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    projectsApi.list().then(setProjects).catch((e) => log.warn("projects load failed", e));
+  }, []);
+
+  // Outside-click closes the project popover (the ProjectMenu pattern).
+  useEffect(() => {
+    if (!projMenu) return;
+    const onDown = (e: MouseEvent) => {
+      if (projMenuRef.current && !projMenuRef.current.contains(e.target as Node)) {
+        setProjMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [projMenu]);
+
+  const filter = useMemo<DashboardFilter>(
+    () => ({
+      projects: selProjects.size
+        ? [...selProjects].map((n) => (n === "" ? null : n))
+        : null,
+      priorities: selTiers.size
+        ? [...selTiers].map((t) => (t === 0 ? null : t))
+        : null,
+    }),
+    [selProjects, selTiers],
+  );
+  const hasFilter = selProjects.size > 0 || selTiers.size > 0;
+  const clearFilter = () => {
+    setSelProjects(new Set());
+    setSelTiers(new Set());
+  };
+
+  const toggleProject = (name: string) => {
+    setSelProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+  const toggleTier = (t: number) => {
+    setSelTiers((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
+      return next;
+    });
+  };
+
   // Resolve the half-open [since, until) window from the active range.
   // `until` is the day *after* the target so a day boundary is inclusive.
   const bounds = useMemo(() => {
@@ -192,21 +260,21 @@ export default function AnalyticsView() {
   }, [range]);
 
   useEffect(() => {
-    journalApi.dashboard({ since: bounds.since, until: bounds.until })
+    journalApi.dashboard({ since: bounds.since, until: bounds.until, filter })
       .then(setDash)
       .catch((e) => log.warn("dashboard load failed", e));
     timersApi.sessionTimeByDay({ since: bounds.since, until: bounds.until })
       .then(setTimes)
       .catch((e) => log.warn("session time load failed", e));
-  }, [bounds]);
+  }, [bounds, filter]);
 
   useEffect(() => {
     setDetail(null);
     if (!pickedDay) return;
-    journalApi.dayDetail(pickedDay)
+    journalApi.dayDetail(pickedDay, filter)
       .then(setDetail)
       .catch((e) => log.warn("day detail load failed", e));
-  }, [pickedDay]);
+  }, [pickedDay, filter]);
 
   // Bring the expanded row into view once its data has landed.
   useEffect(() => {
@@ -253,24 +321,37 @@ export default function AnalyticsView() {
   const maxTier = Math.max(1, ...(dash?.priorities ?? []).map((t) => t.count));
 
   // The ledger: one line per day that had any signal (the picked day stays
-  // listed even when empty, so its expansion has a row), newest first.
+  // listed even when empty, so its expansion has a row), newest first. Time
+  // doesn't follow the scope filter, so while filtered it neither surfaces a
+  // day nor shows as the day's total — only the per-task time inside an
+  // expanded day (which rides the filtered task rows) renders.
   const ledger = useMemo(() => {
     if (!dash) return [];
     return dash.days
       .filter((d) => d.date === pickedDay || d.done > 0 || d.dailyMissed + d.todayMissed > 0 ||
-        (timeByDay.get(d.date) ?? 0) > 0)
+        (!hasFilter && (timeByDay.get(d.date) ?? 0) > 0))
       .reverse();
-  }, [dash, timeByDay, pickedDay]);
+  }, [dash, timeByDay, pickedDay, hasFilter]);
 
   const today = localDateStr();
   const dayCount = dash?.days.length ?? 0;
   const avg =
     dash && dayCount > 1 ? (dash.totals.done / dayCount).toFixed(1) : null;
 
+  // The `#` pill's label: the state of the project selection in pill language.
+  const projLabel = (() => {
+    if (selProjects.size === 0) return "# Projects";
+    const names = [...selProjects];
+    const first = names[0] === "" ? "none" : names[0];
+    return `# ${first}${names.length > 1 ? ` +${names.length - 1}` : ""}`;
+  })();
+
   return (
     <div className="analytics-view">
       {/* Range segments · date jump. The date field (like a calendar cell)
-          picks a day to expand in the ledger. */}
+          picks a day to expand in the ledger. Right of them, the axis scope
+          filters: the `#` project picker (multi-select popover) and the tier
+          chips — every derivation follows them (see the module comment). */}
       <div className="filter-bar">
         {ranges.map((r) => (
           <button
@@ -286,6 +367,54 @@ export default function AnalyticsView() {
           onChange={(e) => e.target.value && pickDay(e.target.value)}
           title="Pick a day to see its tasks"
         />
+        <span className="anf">
+          <span className="anf-wrap" ref={projMenuRef}>
+            <button
+              className={`pill anf-proj${selProjects.size ? " active" : ""}`}
+              onClick={() => setProjMenu((v) => !v)}
+              title="Scope the page to projects"
+            >{projLabel} ▾</button>
+            {projMenu && (
+              <div className="anf-menu" role="menu">
+                {projects.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`anf-menu-item${selProjects.has(p.name) ? " on" : ""}`}
+                    onClick={() => toggleProject(p.name)}
+                  >
+                    <i className="anf-dot" style={{ background: projectColor(p.id) }} />
+                    <span className="anf-name">{p.name}</span>
+                    {selProjects.has(p.name) && <span className="anf-check">✓</span>}
+                  </button>
+                ))}
+                <button
+                  className={`anf-menu-item${selProjects.has("") ? " on" : ""}`}
+                  onClick={() => toggleProject("")}
+                >
+                  <i className="anf-dot hollow" />
+                  <span className="anf-name">No project</span>
+                  {selProjects.has("") && <span className="anf-check">✓</span>}
+                </button>
+              </div>
+            )}
+          </span>
+          {([1, 2, 3, 0] as const).map((t) => (
+            <button
+              key={t}
+              className={`pill anf-tier${selTiers.has(t) ? " active" : ""}`}
+              onClick={() => toggleTier(t)}
+              title={t === 0 ? "Scope to unmarked tasks" : `Scope to priority ${t}`}
+              aria-label={t === 0 ? "Unmarked" : `Priority ${t}`}
+            >
+              <PriorityBars priority={t === 0 ? null : t} />
+            </button>
+          ))}
+          {hasFilter && (
+            <button className="pill anf-clear" onClick={clearFilter} title="Clear the scope filters">
+              Clear
+            </button>
+          )}
+        </span>
       </div>
       <div className="analytics">
         {dash && (
@@ -299,7 +428,18 @@ export default function AnalyticsView() {
             </section>
 
             <div className="an-row3">
-              <section className="an-card an-activity">
+              {/* Keyed on the rendered-sibling state: the split cards unmount
+                  under their filtered axis, which re-widens this card's grid
+                  track — and WKWebView doesn't re-resolve aspect-ratio cells
+                  when their track changes size (the heatmap stayed big after
+                  clearing a filter). Remounting the card re-resolves the
+                  squares against the current width, in both directions. */}
+              <section
+                className="an-card an-activity"
+                key={`act-${filter.projects ? 1 : 0}${filter.priorities ? 1 : 0}${
+                  dash.projects.length > 0 ? 1 : 0
+                }`}
+              >
                 <div className="an-card-title">
                   Activity
                   <span className="hint">{monthLabel}</span>
@@ -346,7 +486,11 @@ export default function AnalyticsView() {
                 </div>
               </section>
 
-              {dash.projects.length > 0 && (
+              {/* A split card whose axis is filtered hides — the filtered view
+                  already answers it, and a card scoped to the selection would
+                  just restate the filter (100% X) while disagreeing with the
+                  Done stat. */}
+              {!filter.projects && dash.projects.length > 0 && (
                 <section className="an-card an-projects">
                   <div className="an-card-title">Projects</div>
                   {dash.projects.map((p) => (
@@ -361,7 +505,7 @@ export default function AnalyticsView() {
                 </section>
               )}
 
-              <PriorityCard tiers={dash.priorities} max={maxTier} />
+              {!filter.priorities && <PriorityCard tiers={dash.priorities} max={maxTier} />}
             </div>
 
             <section className="an-card an-days">
@@ -392,7 +536,9 @@ export default function AnalyticsView() {
                       <span className="s">
                         {d.done > 0 && <span className="done">{d.done} done</span>}
                         {missed > 0 && <span>{missed} missed</span>}
-                        {secs > 0 && <span className="time">{formatDuration(secs)}</span>}
+                        {!hasFilter && secs > 0 && (
+                          <span className="time">{formatDuration(secs)}</span>
+                        )}
                         <Chevron open={open} />
                       </span>
                     </button>

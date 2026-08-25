@@ -839,6 +839,63 @@ button {
 .date-jump:hover { color: var(--text); background: var(--bg-hover); }
 .date-jump.active { color: var(--accent); }
 
+/* Axis scope filters — the range pills' language extended to the two
+   organising axes: a `#` project picker (multi-select popover, the hide-menu
+   look) and tier chips (the PriorityBars glyphs, the tier dividers' label
+   language; the empty track is the unmarked tier). Right-aligned on the bar
+   so the range scope and the axis scope read as two groups. Active tier
+   chips light their bars with the accent on a hover bg — the pill language's
+   "active = accent" carried by the glyphs themselves. */
+.anf {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.anf-wrap { position: relative; display: inline-flex; }
+.anf-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 60;
+  min-width: 200px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.anf-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.08s ease;
+}
+.anf-menu-item:hover { background: var(--bg-hover); }
+.anf-menu-item .anf-name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anf-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.anf-dot.hollow { border: 1px solid var(--text-faint); background: none; }
+.anf-check { color: var(--accent); font-size: 11px; }
+.anf-tier { display: inline-flex; align-items: center; padding: 4px 7px; }
+.anf-tier.active { background: var(--bg-hover); }
+.anf-tier.active .priority-bars .bar { background: rgba(123, 140, 255, 0.35); }
+.anf-tier.active .priority-bars .bar.filled { background: var(--accent); }
+.anf-clear { color: var(--text-dim); }
+.anf-clear:hover { color: var(--text); }
+
 /* Wide window (a fullscreened laptop): the hero spans the top, Activity ·
    Projects · Priority share one row, and the ledger takes its own full-width
    row — the .an-row3 auto-fit grid does the column work; this just widens

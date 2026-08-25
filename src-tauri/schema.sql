@@ -177,13 +177,16 @@ CREATE INDEX IF NOT EXISTS idx_goals_order ON goals(sort_order, created_at);
 -- notes/projects — they are NOT logged to `actions`. The journal surfaces time
 -- as a separate dimension via `session_time_by_day`. `item_text` is snapshotted
 -- at write time so history survives edits/deletes, mirroring actions.item_text.
+-- Sessions deliberately carry NO project/priority snapshots: the analytics
+-- scope filter covers actions only, not tracked time (Faraz's call, 2026-08-25
+-- — the timer is barely used, not worth the schema growth).
 CREATE TABLE IF NOT EXISTS sessions (
     id            TEXT PRIMARY KEY,                     -- ULID
     item_id       TEXT NOT NULL,
     item_text     TEXT NOT NULL,                        -- snapshot at write time
     started_at    TEXT NOT NULL,                        -- local ISO timestamp (from now_iso)
     ended_at      TEXT,                                 -- NULL while the session is open
-    duration_secs INTEGER                                -- NULL while open; set when ended_at is written
+    duration_secs INTEGER                               -- NULL while open; set when ended_at is written
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_item  ON sessions(item_id);

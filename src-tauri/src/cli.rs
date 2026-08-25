@@ -252,7 +252,8 @@ fn journal(db: &Db, range: Option<&str>) -> anyhow::Result<()> {
         }
     };
     let iso = |d: Option<NaiveDate>| d.map(|x| x.format("%Y-%m-%d").to_string());
-    let dash = db.journal_dashboard(iso(since).as_deref(), iso(until).as_deref())?;
+    let dash =
+        db.journal_dashboard(iso(since).as_deref(), iso(until).as_deref(), &Default::default())?;
     println!(
         "done {} · daily missed {} · today missed {}",
         dash.totals.done, dash.totals.daily_missed, dash.totals.today_missed

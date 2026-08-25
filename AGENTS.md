@@ -400,7 +400,9 @@ logged to `actions` — the Analytics view surfaces time as a separate dimension
 `session_time_by_day`, which splits sessions across midnight so daily totals are accurate.
 
 - `item_text` is snapshotted at write time (like `actions.item_text`), so the per-task
-  breakdown survives edits and deletions.
+  breakdown survives edits and deletions. Sessions deliberately carry **no
+  project/priority snapshots**: the analytics scope filter covers actions only, not
+  tracked time (Faraz's call, 2026-08-25 — see the Analytics view section).
 - The active timer **persists across app restarts** (the open row is the source of truth).
   If the app closes mid-session the elapsed keeps counting honestly on reopen; the header
   chip's × discards the session for the "left it running overnight" case.
@@ -914,6 +916,25 @@ into Notes or edit fields isn't hijacked.
   textual home is the CLI (`--journal`); the GUI shows aggregates only. The masthead
   reads `Analytics`; the default range is **Week** (Today/Week/Month/All pills + the
   date jump).
+- **Axis scope filters (the toolbar's right end, session-only like the range)**: a `#`
+  project picker (multi-select popover, color dots, "No project" as a value) and four
+  tier chips (the PriorityBars glyphs, empty track = unmarked) + Clear. OR within an
+  axis, AND across the two. Every derivation follows (`journal_dashboard` /
+  `journal_day_detail` take a `ScopeFilter` over the `actions` write-time snapshots, so
+  filtered history stays deletion-proof): done/streak/avg, heatmap intensities, splits,
+  ledger counts, day-detail rows, and the miss replay — a habit outside the filter is
+  neither expected nor missed (population = the habit's current axes, since assignments
+  are unlogged — the same "currently" call the hidden exclusion makes; the done-check
+  reads the unfiltered completion set, so a reassigned habit never reads as a phantom
+  miss). A split card whose axis is filtered hides (the filtered view already answers
+  it — a card scoped to the selection would restate the filter while disagreeing with
+  the Done stat). **Tracked time deliberately does not follow the filter** (Faraz's
+  call, 2026-08-25 — the timer is barely used, not worth snapshot columns on `sessions`):
+  while filtered the ledger hides its per-day time total and time alone can't surface a
+  day row; per-task time still renders in an expanded day (it rides the filtered task
+  rows). The Activity card is React-keyed on the rendered-sibling state because WKWebView
+  doesn't re-resolve its aspect-ratio cells when the grid track re-widens on unfilter
+  (the "heatmap didn't shrink back" bug, 2026-08-25).
 - **Stats**: Done (effective completions — a complete→uncheck→never-again arc doesn't
   count, a re-completed misclick counts once), Avg/day (when the range spans >1 day),
   Streak (consecutive days with ≥1 completion; a live today with nothing yet doesn't

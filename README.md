@@ -23,7 +23,13 @@ is the spine of the **Analytics** page (top-right `≡`) — see below.
 ## Analytics
 
 The `≡` view is a dashboard synthesized from the log — it answers questions, it never
-enumerates events. Scoped to Today/Week/Month/All (default **Week**) or any picked day:
+enumerates events. Scoped to Today/Week/Month/All (default **Week**) or any picked day,
+and optionally narrowed by the **axis filters** on the toolbar's right end: a `#` project
+picker (multi-select, "No project" included) and priority tier chips — the whole page
+(stats, heatmap, splits, ledger) derives over the selected axes, reading the same
+write-time snapshots the splits do. A split card whose axis is filtered hides (the
+filtered view already answers it); tracked time doesn't follow the filter (the ledger
+hides its day total while filtered — per-task time rides the filtered task rows):
 
 - **Stats** — done (effective completions: an unchecked-never-redone task doesn't count,
   a re-completed misclick counts once), avg/day, streak (consecutive days with ≥1

@@ -8,7 +8,8 @@
 // like notes and projects — they are NOT logged to `actions`. The journal
 // surfaces time as a separate dimension via `session_time_by_day`. item_text is
 // snapshotted at write time so history survives edits/deletes, mirroring
-// actions.item_text.
+// actions.item_text. Sessions deliberately carry no project/priority snapshots:
+// the analytics scope filter covers actions only, not tracked time.
 //
 // All methods hang off the shared `Db` struct and touch only the `sessions`
 // table (plus a LEFT JOIN to items for the live text of the active timer).
@@ -150,6 +151,8 @@ impl Db {
     /// half-open [since, until) window (date-prefix bounds, like list_actions).
     /// Sessions crossing midnight are split across their calendar days so daily
     /// totals stay accurate. Includes the open session's elapsed-to-now.
+    /// Deliberately NOT scope-filtered (see the module comment): time is a
+    /// separate dimension the axis filters don't cover.
     pub fn session_time_by_day(
         &self,
         since: Option<&str>,

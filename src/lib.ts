@@ -239,6 +239,21 @@ export const timersApi = {
 // stats: sessions stay a dimension the Journal layers in, not dashboard
 // material.
 
+/** The analytics page's scope filter: which projects / priority tiers the
+ * whole dashboard derives over (stats, heatmap, splits, ledger, day detail).
+ * Each axis is null = unfiltered; a null entry *inside* a selection is the
+ * "no project" / "unmarked" bucket. OR within an axis, AND across the two.
+ * Reads the same write-time snapshots the splits do, so filtered history
+ * survives reassignment and deletion. Tracked time deliberately doesn't
+ * follow (sessions carry no axes — see dashboard.rs). */
+export interface DashboardFilter {
+  projects: (string | null)[] | null;
+  priorities: (number | null)[] | null;
+}
+
+/** The unfiltered scope — what the CLI and pre-filter callers see. */
+export const NO_SCOPE: DashboardFilter = { projects: null, priorities: null };
+
 export interface DayStat {
   date: string; // YYYY-MM-DD
   done: number;
@@ -281,13 +296,18 @@ export interface DashboardStats {
 }
 
 export const journalApi = {
-  dashboard: (opts: { since?: string; until?: string } = {}) =>
+  dashboard: (
+    opts: { since?: string; until?: string; filter?: DashboardFilter } = {},
+  ) =>
     invoke<DashboardStats>("journal_dashboard", {
       since: opts.since ?? null,
       until: opts.until ?? null,
+      filter: opts.filter ?? null,
     }),
-  /** One day at task level — what the ledger's expanded row renders. */
-  dayDetail: (date: string) => invoke<DayDetail>("journal_day_detail", { date }),
+  /** One day at task level — what the ledger's expanded row renders, scoped
+   * by the same filter as the dashboard. */
+  dayDetail: (date: string, filter: DashboardFilter = NO_SCOPE) =>
+    invoke<DayDetail>("journal_day_detail", { date, filter }),
 };
 
 /** A task completed on the picked day (HH:MM of its effective completion,

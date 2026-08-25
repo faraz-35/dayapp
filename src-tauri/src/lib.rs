@@ -124,23 +124,33 @@ async fn list_actions(
 
 // The Journal view's dashboard: done/missed per day, a completion heatmap
 // window, and project/priority splits — pure synthesis over `actions` (see
-// dashboard.rs). Read-only, like the journal itself.
+// dashboard.rs). `filter` scopes every derivation to the selected
+// projects/tiers (None = unfiltered, the CLI's view). Read-only, like the
+// journal itself.
 #[tauri::command]
 async fn journal_dashboard(
     db: State<'_, DbState>, since: Option<String>, until: Option<String>,
+    filter: Option<dashboard::ScopeFilter>,
 ) -> Result<DashboardStats, String> {
-    with_db(db, move |db| db.journal_dashboard(since.as_deref(), until.as_deref())).await
+    let filter = filter.unwrap_or_default();
+    with_db(db, move |db| {
+        db.journal_dashboard(since.as_deref(), until.as_deref(), &filter)
+    })
+    .await
 }
 
 // One day at task level — what the analytics ledger's expanded row renders.
 // The per-task session seconds are layered on here (a separate dimension;
-// day_detail itself never touches `sessions`).
+// day_detail itself never touches `sessions`, and time deliberately doesn't
+// follow the scope filter — see dashboard.rs).
 #[tauri::command]
 async fn journal_day_detail(
     db: State<'_, DbState>, date: String,
+    filter: Option<dashboard::ScopeFilter>,
 ) -> Result<dashboard::DayDetail, String> {
+    let filter = filter.unwrap_or_default();
     with_db(db, move |db| {
-        let mut detail = db.day_detail(&date)?;
+        let mut detail = db.day_detail(&date, &filter)?;
         let next = dashboard::next_day(&date)?;
         let times = db.session_time_by_day(Some(date.as_str()), Some(next.as_str()))?;
         let by_item: std::collections::HashMap<String, i64> =
