@@ -30,18 +30,24 @@ enumerates events. Scoped to Today/Week/Month/All (default **Week**) or any pick
   completion; a live today with nothing yet doesn't break it), **daily missed** (habits
   the day ended without) and **today missed** (tasks that fell to Backlog unfinished —
   the sweep logs those for free).
-- **Heatmap** — ~7 months of per-day completions, GitHub-style, in the app's single
-  accent. Click any day to scope the whole page to it.
+- **Heatmap** — per-day completions, GitHub-style, in the app's single accent (a year on
+  wide windows, ~7 months on the compact one). Click any day to open it.
 - **Projects / Priority splits** — every project's share of the range's completions
-  (zeros visible, so neglected projects read too) and the P1→P3 tiers you actually clear.
-  Both read project/priority snapshotted onto each `actions` row at write time, so the
-  splits are real history — reassigning a task never rewrites the past.
+  (zeros visible, so neglected projects read too) and the priority tiers you actually
+  clear, as one segmented bar. Both read project/priority snapshotted onto each
+  `actions` row at write time, so the splits are real history — reassigning a task never
+  rewrites the past.
 - **Days ledger** — one line per day that had any signal (`MON, AUG 24 · 7 done · 1
-  missed`), clickable like the heatmap. Counts only.
+  missed`). Click a day — here or on the heatmap — and it expands to what actually
+  happened: each task completed (with its time and tracked time), what fell to Backlog,
+  which habits were missed.
 
-The raw action log's textual home is `dayapp --journal`: the same summary block, then
-every action grouped by day. Time appears only as the ledger's per-day total when any
-was tracked — sessions stay a separate dimension, not dashboard stats.
+The page is a stack of elevated cards, and it's responsive: the 480px window stacks
+them; fullscreened on a laptop they lay out as a proper dashboard — the stats card
+across the top, heatmap + distribution beside the day ledger. The raw action log's
+textual home is `dayapp --journal`: the same summary block, then every action grouped
+by day. Time appears only as the ledger's per-day total (and per-task in an expanded
+day) when any was tracked — sessions stay a separate dimension, not dashboard stats.
 
 ## Stack
 

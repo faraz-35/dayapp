@@ -855,23 +855,40 @@ into Notes or edit fields isn't hijacked.
   excluded so an archived habit can't accrue misses forever; the current day never shows
   daily misses — a live day has no verdict), and **Today missed** (`fell_to_backlog` —
   the sweep's own record of a today task the day ended without).
-- **Heatmap**: ~30 Monday-aligned weeks of per-day completions, intensity steps of the
-  one accent, month labels, today ringed. Clicking a cell scopes the whole page to that
-  day (same as the date jump); clicking the picked cell again clears the pick.
-- **Splits**: every project's share of the range's completions (zero-filled from the
-  roster so neglected projects read as 0; a trailing "none" bucket when unprojected work
-  exists) and the priority tiers P1→P3→unmarked with the signal-bars glyph as the label.
-  Both read the `actions.project`/`actions.priority` write-time snapshots.
+- **Heatmap**: per-day completions, Monday-aligned weeks, intensity steps of the one
+  accent, month labels, today ringed, a Less→More legend. 30 weeks on the 480px window;
+  a full year (52) when the window is wide enough to fit it (≥1280px). Clicking a cell
+  picks that day — the ledger row expands to its tasks and the cell is ringed; clicking
+  the picked day again clears the pick. A pick outside the active range widens the range
+  to All so the row has somewhere to render. Picking never re-scopes the stats — the
+  range pills own that.
+- **Splits**: every project's share of the range's completions as label/bar/count rows
+  (zero-filled from the roster so neglected projects read as 0; a trailing "none" bucket
+  when unprojected work exists), and the priority card — one segmented bar (tier
+  proportions as intensity steps of the accent, P1 the strongest) plus a signal-bars
+  glyph legend. Both read the `actions.project`/`actions.priority` write-time snapshots.
 - **Days ledger**: one line per day that had any signal — `MON, AUG 24 · 7 done · 1
-  missed · 2h 7m` (time only when tracked). Clicking a row scopes the page to that day.
-  Counts only — never the raw action rows.
+  missed · 2h 7m` (time only when tracked). Clicking a row expands that day at task
+  level (`journal_day_detail`): the tasks done that day (✓, HH:MM, tracked time), what
+  fell to Backlog (↓), and the missed habits (○) — counts roll up, the expansion is the
+  substance. The open row inverts against the card (bg recess) so the expansion reads as
+  one unit. The picked day stays listed even when empty, so its expansion always has a
+  row. Still counts-first: never the raw action stream.
+- **Responsive**: the page is a stack of elevated cards (the token system's elevated
+  surface — `.an-card`, bg-elev + border hairline + 12px radius): hero stats, activity,
+  distribution, days. The 480px window stacks them; a wide window (≥900px — Faraz
+  fullscreens it via AeroSpace) spans the hero across the top and sets the summary
+  column beside the ledger (grid `1.5fr / 1fr`); ≥1280px switches the heatmap to 52
+  weeks (the component reads the same breakpoint through matchMedia). One `.scroll` flow
+  either way: the grid columns are in-flow content, never nested scrollers.
 - **No time stats in the stats row** (time appears only as the ledger's per-day total
   when it exists), and the page is mouse-first: no focus-grammar wiring (free-mode `j`/`k`
   scrolling still works, like every view).
-- Derivation lives in `src-tauri/src/dashboard.rs` (`journal_dashboard`, behind the
-  `journal_dashboard` command); the UI is `AnalyticsView.tsx` (self-contained, the
-  Notes/Goals pattern). The CLI's `--journal` prints the same summary block ahead of the
-  full raw log — the read surface mirrors the GUI, plus the log the GUI no longer shows.
+- Derivation lives in `src-tauri/src/dashboard.rs` (`journal_dashboard` +
+  `journal_day_detail`, behind commands of the same names); the UI is `AnalyticsView.tsx`
+  (self-contained, the Notes/Goals pattern). The CLI's `--journal` prints the same
+  summary block ahead of the full raw log — the read surface mirrors the GUI, plus the
+  log the GUI no longer shows.
 
 ### What NOT to add (explicit non-goals)
 

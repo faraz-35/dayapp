@@ -26,10 +26,11 @@ use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-/// How far back the heatmap window reaches. The frontend renders 30
-/// Monday-aligned week columns, so the earliest cell can sit up to 30*7−1+6
-/// days behind today; 220 covers that with margin.
-const HEATMAP_LOOKBACK_DAYS: i64 = 220;
+/// How far back the heatmap window reaches. The frontend renders 52
+/// Monday-aligned week columns on wide windows (30 on the 480px one), so the
+/// earliest cell can sit up to 52*7−1+6 days behind today; 380 covers that
+/// with margin.
+const HEATMAP_LOOKBACK_DAYS: i64 = 380;
 
 /// One day's row across the requested range — the day headers' done/missed.
 #[derive(Debug, Serialize)]
@@ -92,6 +93,42 @@ pub struct DashboardStats {
     pub totals: Totals,
 }
 
+/// One task completed on the day, as the ledger's expanded detail renders it.
+/// `secs` starts at 0 here; the command wrapper layers the day's session time
+/// per item on top (sessions are a separate dimension).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoneTaskDetail {
+    pub item_id: String,
+    /// HH:MM of the effective (last) completion.
+    pub time: String,
+    pub text: String,
+    pub project: Option<String>,
+    pub priority: Option<i64>,
+    pub secs: i64,
+}
+
+/// A today task that fell to Backlog that day — the sweep's own record.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FellTaskDetail {
+    pub time: String,
+    pub text: String,
+}
+
+/// A single day at task level — what clicking a day on the analytics page
+/// expands to. Same semantics as the aggregates: effective completions, the
+/// daily-miss replay, fell_to_backlog.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayDetail {
+    pub date: String,
+    pub done: Vec<DoneTaskDetail>,
+    pub fell: Vec<FellTaskDetail>,
+    /// Texts of habits the day ended without (empty for the live today).
+    pub daily_missed: Vec<String>,
+}
+
 /// An item's standing on one day, folded from that day's completed/
 /// uncompleted events in id order: `done` is true only when the last such
 /// event is a completion. The snapshot fields ride the last completion.
@@ -101,6 +138,105 @@ struct Effective {
     from_section: Option<String>,
     project: Option<String>,
     priority: Option<i64>,
+}
+
+// ---- The daily-miss replay -------------------------------------------------
+//
+// Section membership on a past day is reconstructed from the log itself
+// (created/moved/fell/deleted), so habits deleted long ago still count for
+// the days they existed. Currently hidden items are excluded throughout —
+// hide is unlogged, so "currently" is the best the log can say, and an
+// archived habit must not accrue misses forever. Shared by the range replay
+// in journal_dashboard and the single-day day_detail.
+
+/// An item's standing in the replay: alive + current section, plus the latest
+/// text snapshot (for naming missed habits whose row is long gone).
+#[derive(Default, Clone)]
+struct LiveItem {
+    alive: bool,
+    section: Option<String>,
+    text: String,
+}
+
+struct LifeEv {
+    ts: String,
+    item: String,
+    action: String,
+    to_section: Option<String>,
+    text: String,
+}
+
+fn fetch_life_events(conn: &rusqlite::Connection) -> anyhow::Result<Vec<LifeEv>> {
+    let mut stmt = conn.prepare(
+        "SELECT timestamp, item_id, action, to_section, item_text FROM actions
+         WHERE item_id IS NOT NULL
+           AND action IN ('created','moved','fell_to_backlog','deleted')
+         ORDER BY timestamp, id",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(LifeEv {
+            ts: r.get(0)?,
+            item: r.get(1)?,
+            action: r.get(2)?,
+            to_section: r.get(3)?,
+            text: r.get(4)?,
+        })
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
+fn fetch_hidden(conn: &rusqlite::Connection) -> anyhow::Result<HashSet<String>> {
+    let mut stmt = conn.prepare("SELECT id FROM items WHERE hidden = 1")?;
+    let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+/// Fold one lifecycle event into the live map. Events arrive oldest-first;
+/// the map holds each item's standing as of the last event applied.
+fn apply_life_event(live: &mut HashMap<String, LiveItem>, ev: &LifeEv) {
+    let slot = live.entry(ev.item.clone()).or_default();
+    match ev.action.as_str() {
+        "created" => {
+            slot.alive = true;
+            slot.section = ev.to_section.clone();
+            slot.text = ev.text.clone();
+        }
+        "moved" | "fell_to_backlog" => {
+            slot.section = ev.to_section.clone();
+            slot.text = ev.text.clone();
+        }
+        "deleted" => slot.alive = false,
+        _ => {}
+    }
+}
+
+/// The day's missed-habit texts: alive daily items (hidden excluded) whose
+/// day ended without a daily completion.
+fn daily_missed_texts(
+    live: &HashMap<String, LiveItem>,
+    hidden: &HashSet<String>,
+    done_daily: &HashSet<String>,
+) -> Vec<String> {
+    live.iter()
+        .filter(|(id, it)| {
+            it.alive
+                && it.section.as_deref() == Some("daily")
+                && !hidden.contains(*id)
+                && !done_daily.contains(id.as_str())
+        })
+        .map(|(_, it)| it.text.clone())
+        .collect()
+}
+
+/// The ISO day after `date` — the exclusive upper bound for a single-day scan.
+pub fn next_day(date: &str) -> anyhow::Result<String> {
+    use chrono::NaiveDate;
+    let d = NaiveDate::parse_from_str(date, "%Y-%m-%d")?;
+    Ok((d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string())
 }
 
 impl Db {
@@ -187,43 +323,9 @@ impl Db {
         }
 
         // ---- Daily-miss replay ------------------------------------------------
-        // Section membership on a past day is reconstructed from the log
-        // itself (created/moved/fell/deleted), so habits deleted long ago
-        // still count for the days they existed. Currently hidden items are
-        // excluded throughout — hide is unlogged, so "currently" is the best
-        // the log can say, and an archived habit must not accrue misses
-        // forever.
-        struct Ev {
-            ts: String,
-            item: String,
-            action: String,
-            to_section: Option<String>,
-        }
-        let mut events: Vec<Ev> = Vec::new();
-        {
-            let mut stmt = conn.prepare(
-                "SELECT timestamp, item_id, action, to_section FROM actions
-                 WHERE item_id IS NOT NULL
-                   AND action IN ('created','moved','fell_to_backlog','deleted')
-                 ORDER BY timestamp, id",
-            )?;
-            let rows = stmt.query_map([], |r| {
-                Ok(Ev {
-                    ts: r.get(0)?,
-                    item: r.get(1)?,
-                    action: r.get(2)?,
-                    to_section: r.get(3)?,
-                })
-            })?;
-            for row in rows {
-                events.push(row?);
-            }
-        }
-        let hidden: HashSet<String> = {
-            let mut stmt = conn.prepare("SELECT id FROM items WHERE hidden = 1")?;
-            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
-            rows.filter_map(|r| r.ok()).collect()
-        };
+        // The shared helpers above (see their docs for the semantics).
+        let events = fetch_life_events(&conn)?;
+        let hidden = fetch_hidden(&conn)?;
 
         // The range's day span: honor `since` exactly when given; unbounded
         // starts at the log's first item action. The last day is
@@ -249,21 +351,15 @@ impl Db {
 
         let mut days: Vec<DayStat> = Vec::new();
         let mut totals = Totals::default();
-        let mut idx = 0usize;        // item → (alive, section) as of the day being processed.
-        let mut live: HashMap<String, (bool, Option<String>)> = HashMap::new();
+        let mut idx = 0usize;
+        // item → standing as of the day being processed.
+        let mut live: HashMap<String, LiveItem> = HashMap::new();
         let mut d = start_d;
         while d <= end_d {
             let day = d.format("%Y-%m-%d").to_string();
             let day_end = format!("{day}T23:59:59");
             while idx < events.len() && events[idx].ts <= day_end {
-                let ev = &events[idx];
-                let slot = live.entry(ev.item.clone()).or_insert((false, None));
-                match ev.action.as_str() {
-                    "created" => *slot = (true, ev.to_section.clone()),
-                    "moved" | "fell_to_backlog" => slot.1 = ev.to_section.clone(),
-                    "deleted" => slot.0 = false,
-                    _ => {}
-                }
+                apply_life_event(&mut live, &events[idx]);
                 idx += 1;
             }
 
@@ -274,21 +370,13 @@ impl Db {
             // live; misses are a day-end verdict.
             let mut daily_missed = 0i64;
             if day != today {
-                let done_daily: HashSet<&String> = done_map.map_or_else(HashSet::new, |m| {
+                let done_daily: HashSet<String> = done_map.map_or_else(HashSet::new, |m| {
                     m.iter()
                         .filter(|(_, e)| e.done && e.from_section.as_deref() == Some("daily"))
-                        .map(|(id, _)| id)
+                        .map(|(id, _)| id.clone())
                         .collect()
                 });
-                daily_missed = live
-                    .iter()
-                    .filter(|(id, (alive, sec))| {
-                        *alive
-                            && sec.as_deref() == Some("daily")
-                            && !hidden.contains(*id)
-                            && !done_daily.contains(id)
-                    })
-                    .count() as i64;
+                daily_missed = daily_missed_texts(&live, &hidden, &done_daily).len() as i64;
             }
             let today_missed = fell_by_day.get(&day).copied().unwrap_or(0);
 
@@ -375,6 +463,104 @@ impl Db {
         ];
 
         Ok(DashboardStats { days, heatmap, projects, priorities, totals })
+    }
+
+    /// One day at task level — what the ledger's expanded row renders. The
+    /// same semantics as the aggregates (effective completions, the
+    /// daily-miss replay, fell_to_backlog); `secs` is layered on by the
+    /// command wrapper from `session_time_by_day`.
+    pub fn day_detail(&self, date: &str) -> anyhow::Result<DayDetail> {
+        let conn = self.conn.lock().unwrap();
+        let next = next_day(date)?;
+
+        // Effective completions: per item, only the day's LAST completed/
+        // uncompleted event counts (an unchecked-never-redone completion
+        // doesn't; a re-completed misclick counts once, at its final time).
+        // Folded in id order; survivors sorted by their last completion time.
+        let mut slots: HashMap<String, DoneTaskDetail> = HashMap::new();
+        let mut done_sections: HashMap<String, Option<String>> = HashMap::new();
+        {
+            let mut stmt = conn.prepare(
+                "SELECT item_id, item_text, action, timestamp, from_section, project, priority
+                 FROM actions
+                 WHERE item_id IS NOT NULL AND action IN ('completed','uncompleted')
+                   AND timestamp >= ?1 AND timestamp < ?2
+                 ORDER BY id",
+            )?;
+            let rows = stmt.query_map(params![date, next], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, Option<String>>(4)?,
+                    r.get::<_, Option<String>>(5)?,
+                    r.get::<_, Option<i64>>(6)?,
+                ))
+            })?;
+            for row in rows {
+                let (item, text, action, ts, from_section, project, priority) = row?;
+                if action == "completed" {
+                    slots.insert(
+                        item.clone(),
+                        DoneTaskDetail {
+                            item_id: item.clone(),
+                            time: ts[11..16].to_string(),
+                            text,
+                            project,
+                            priority,
+                            secs: 0,
+                        },
+                    );
+                    done_sections.insert(item, from_section);
+                } else {
+                    slots.remove(&item);
+                    done_sections.remove(&item);
+                }
+            }
+        }
+        let mut done: Vec<DoneTaskDetail> = slots.into_values().collect();
+        done.sort_by(|a, b| a.time.cmp(&b.time)); // zero-padded HH:MM sorts chronologically
+
+        // The sweep's record of today tasks the day ended without.
+        let mut fell: Vec<FellTaskDetail> = Vec::new();
+        {
+            let mut stmt = conn.prepare(
+                "SELECT substr(timestamp,12,5), item_text FROM actions
+                 WHERE item_id IS NOT NULL AND action = 'fell_to_backlog'
+                   AND timestamp >= ?1 AND timestamp < ?2
+                 ORDER BY id",
+            )?;
+            let rows = stmt.query_map(params![date, next], |r| {
+                Ok(FellTaskDetail { time: r.get(0)?, text: r.get(1)? })
+            })?;
+            for row in rows {
+                fell.push(row?);
+            }
+        }
+
+        // Missed habits: the replay frozen at this day's end. The live today
+        // has no verdict yet.
+        let mut daily_missed: Vec<String> = Vec::new();
+        if date != today_iso() {
+            let day_end = format!("{date}T23:59:59");
+            let mut live: HashMap<String, LiveItem> = HashMap::new();
+            for ev in &fetch_life_events(&conn)? {
+                if ev.ts > day_end {
+                    break;
+                }
+                apply_life_event(&mut live, ev);
+            }
+            let hidden = fetch_hidden(&conn)?;
+            let done_daily: HashSet<String> = done_sections
+                .iter()
+                .filter(|(_, sec)| sec.as_deref() == Some("daily"))
+                .map(|(id, _)| id.clone())
+                .collect();
+            daily_missed = daily_missed_texts(&live, &hidden, &done_daily);
+        }
+
+        Ok(DayDetail { date: date.to_string(), done, fell, daily_missed })
     }
 }
 
@@ -514,6 +700,42 @@ mod tests {
                 .unwrap();
             assert_eq!(proj.as_deref(), Some("meridian"));
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn day_detail_lists_done_fell_and_missed_habits() {
+        let (db, dir) = tmp_db();
+        {
+            let conn = db.conn.lock().unwrap();
+            // Habits: A done on Jan 2, B missed.
+            act(&conn, "A", "created", None, Some("daily"), None, None, "2026-01-01T09:00:00");
+            act(&conn, "B", "created", None, Some("daily"), None, None, "2026-01-01T09:00:00");
+            act(&conn, "A", "completed", Some("daily"), Some("daily"), None, None, "2026-01-02T08:00:00");
+            // D: complete → uncheck → complete again — one entry, at the final time.
+            act(&conn, "D", "created", None, Some("today"), None, None, "2026-01-01T09:00:00");
+            act(&conn, "D", "completed", Some("today"), Some("today"), Some("meridian"), Some(1), "2026-01-02T09:00:00");
+            act(&conn, "D", "uncompleted", Some("today"), Some("today"), None, None, "2026-01-02T10:00:00");
+            act(&conn, "D", "completed", Some("today"), Some("today"), Some("meridian"), Some(1), "2026-01-02T11:30:00");
+            // F: completed then unchecked and left — not done.
+            act(&conn, "F", "created", None, Some("today"), None, None, "2026-01-01T09:00:00");
+            act(&conn, "F", "completed", Some("today"), Some("today"), None, None, "2026-01-02T12:00:00");
+            act(&conn, "F", "uncompleted", Some("today"), Some("today"), None, None, "2026-01-02T13:00:00");
+            // E from the Backlog.
+            act(&conn, "E", "created", None, Some("backlog"), None, None, "2026-01-01T09:00:00");
+            act(&conn, "E", "completed", Some("backlog"), Some("backlog"), None, None, "2026-01-02T14:00:00");
+            // C fell at the day boundary.
+            act(&conn, "C", "created", None, Some("today"), None, None, "2026-01-01T09:00:00");
+            act(&conn, "C", "fell_to_backlog", Some("today"), Some("backlog"), None, None, "2026-01-02T00:01:00");
+        }
+        let d = db.day_detail("2026-01-02").unwrap();
+        let texts: Vec<&str> = d.done.iter().map(|t| t.text.as_str()).collect();
+        assert_eq!(texts, ["A", "D", "E"]); // chronological, D once, F gone
+        assert_eq!(d.done[1].time, "11:30"); // the final completion's time
+        assert_eq!(d.done[1].project.as_deref(), Some("meridian"));
+        let fell: Vec<&str> = d.fell.iter().map(|f| f.text.as_str()).collect();
+        assert_eq!(fell, ["C"]);
+        assert_eq!(d.daily_missed, ["B"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

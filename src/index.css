@@ -438,54 +438,95 @@ button {
 }
 
 /* ---- Analytics view ----------------------------------------------------- */
-/* The analytics page (top-right ≡): synthesis over the actions log, never
-   the log itself. Range totals, a completion heatmap, project/priority
-   splits, and a one-line-per-day ledger. Inline chrome inside the one
-   .scroll flow — one page, no nested scroll. One accent throughout;
-   intensity steps of it are the heatmap's only colour. */
+/* A dashboard of elevated cards (the token system's elevated surface — the
+   same one notes and modals use): a hero stats card, the activity heatmap,
+   the distribution cards (project bars + a segmented priority bar), and the
+   day ledger. Narrow windows stack the cards; wide windows span the hero
+   across the top and set the summary beside the ledger. One .scroll flow
+   either way — the grid columns are in-flow content, never nested scrollers.
+   One accent throughout; intensity steps of it are the only colour beyond
+   the neutrals. */
 
 .analytics {
-  padding: 10px 16px 32px;
+  padding: 12px 16px 48px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
 }
-.dash-stats {
+.an-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.an-card-title {
   display: flex;
-  gap: 30px;
-  padding: 0 2px;
-  flex-wrap: wrap;
-}
-.dash-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.dash-value {
-  font-size: 18px;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 11px;
   font-weight: 600;
-  line-height: 1.1;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.dash-stat.accent .dash-value { color: var(--accent); }
-.dash-label {
-  font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
+  margin-bottom: 14px;
+}
+.an-card-title .hint {
+  font-weight: 500;
+  letter-spacing: 0.06em;
 }
 
-/* Heatmap: 30 Monday-aligned week columns. The months row and weekday gutter
-   mirror the grid's 11px/3px rhythm so everything lines up. */
-.hm {
+/* Narrow: everything stacks; wide: the grid below takes over. */
+.an-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.an-left {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Hero stats — one card, evenly spread. The numbers carry the page. */
+.an-hero {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 16px 20px;
+  padding: 18px 20px;
+}
+.an-stat {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+.an-stat .v {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.an-stat.accent .v { color: var(--accent); }
+.an-stat .l {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* Heatmap. Cell rhythm is fixed (10px + 3px gap); the months row gets its
+   column count inline from the component so both stay in lockstep at 30 or
+   52 weeks. */
+.hm {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
 .hm-months {
   display: grid;
-  grid-template-columns: repeat(30, 11px);
   gap: 3px;
   margin-left: 18px; /* the weekday gutter (14px label + 4px gap) */
   height: 10px;
@@ -499,28 +540,28 @@ button {
 }
 .hm-days {
   display: grid;
-  grid-template-rows: repeat(7, 11px);
+  grid-template-rows: repeat(7, 10px);
   row-gap: 3px;
   width: 14px;
   flex-shrink: 0;
   font-size: 9px;
-  line-height: 11px;
+  line-height: 10px;
   color: var(--text-faint);
 }
 .hm-days span:empty { line-height: 0; }
 .hm-grid {
   display: grid;
-  grid-template-rows: repeat(7, 11px);
+  grid-template-rows: repeat(7, 10px);
   grid-auto-flow: column;
-  grid-auto-columns: 11px;
+  grid-auto-columns: 10px;
   gap: 3px;
 }
 .hm-cell {
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   padding: 0;
   border: none;
-  border-radius: 2px;
+  border-radius: 2.5px;
   background: var(--bg-hover);
   cursor: pointer;
 }
@@ -537,101 +578,206 @@ button {
 .hm-cell:not(.future):not(.picked):not(.today):hover {
   box-shadow: inset 0 0 0 1px var(--text-dim);
 }
-
-/* Project/priority splits. Two columns on the 480px window; each row is a
-   label, a proportional bar, and the count — zeros stay visible (dimmed) so
-   the whole roster reads. */
-.dash-cols {
-  display: grid;
-  grid-template-columns: 1.3fr 1fr;
-  gap: 20px;
-}
-.dash-h {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-}
-.dash-row {
+/* The intensity legend, GitHub-style. */
+.hm-legend {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 0;
-  font-size: 12px;
+  gap: 4px;
+  justify-content: flex-end;
+  margin-top: 6px;
+  font-size: 9px;
+  color: var(--text-faint);
 }
-.dash-row-label {
-  flex-shrink: 0;
-  width: 40%;
+.hm-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2.5px;
+  display: inline-block;
+}
+
+/* Distribution cards: project bars + the segmented priority bar. */
+.an-split-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+.an-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.an-row .name {
+  width: 34%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
   color: var(--text-dim);
 }
-.dash-row-label.glyph { display: flex; align-items: center; }
-.dash-row-bar {
+.an-row .track {
   flex: 1;
-  height: 3px;
-  border-radius: 2px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
   overflow: hidden;
 }
-.dash-row-fill {
+.an-row .fill {
   display: block;
   height: 100%;
-  border-radius: 2px;
+  border-radius: 3px;
   background: var(--accent);
+  transition: width 0.15s ease;
 }
-.dash-row-count {
+.an-row .count {
   flex-shrink: 0;
   min-width: 2ch;
   text-align: right;
+  font-size: 13px;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
-.dash-row.zero .dash-row-label,
-.dash-row.zero .dash-row-count { color: var(--text-faint); }
-.dash-row.zero .dash-row-fill { background: var(--text-faint); }
+.an-row.zero .name,
+.an-row.zero .count { color: var(--text-faint); }
+.an-row.zero .fill { background: var(--text-faint); }
+
+/* Priority: one segmented bar (tier proportions, intensity steps of the
+   accent — P1 carries the most weight) + the signal-bars glyph legend. */
+.an-segbar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  margin: 2px 0 12px;
+}
+.an-segbar .seg { height: 100%; }
+.an-seg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+.an-seg-legend .leg {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.an-seg-legend .leg.zero { color: var(--text-faint); }
 
 /* Day ledger: one line per day that had any signal — counts only, never the
    raw action rows (the log's textual home is the CLI's --journal). Clicking
-   a row scopes the page to that day. */
-.dash-day {
+   a row expands that day's tasks inline: done (✓ + HH:MM + tracked time),
+   what fell, missed habits. The open row inverts (bg recess) against the
+   card so the expansion reads as one unit. */
+.an-day-wrap {
+  border-radius: 10px;
+}
+.an-day-wrap.open {
+  background: var(--bg);
+  padding: 4px;
+}
+.an-day-wrap.open .an-day { padding: 5px 8px; }
+.an-day {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   width: 100%;
-  padding: 5px 6px;
+  padding: 6px 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: none;
   font: inherit;
   text-align: left;
   cursor: pointer;
   transition: background 0.08s ease;
 }
-.dash-day:hover { background: var(--bg-hover); }
-.dash-day.picked { background: var(--bg-hover); }
-.dash-day-date {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
+.an-day:hover { background: var(--bg-hover); }
+.an-day .d {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text);
+  white-space: nowrap;
 }
-.dash-day.picked .dash-day-date { color: var(--accent); }
-.dash-day-stats {
+.an-day.picked .d { color: var(--accent); }
+.an-day .s {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
-.dash-day-stats span:first-child { color: var(--text); }
-.dash-day-stats .time { color: var(--accent); }
+.an-day .s .done { color: var(--text); }
+.an-day .s .time { color: var(--accent); }
+.an-day-detail {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 6px 4px;
+}
+.dd-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+.dd-mark {
+  width: 12px;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--accent);
+  font-size: 11px;
+}
+.dd-row.fell .dd-mark,
+.dd-row.missed .dd-mark { color: var(--text-faint); }
+.dd-time {
+  width: 36px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.dd-text {
+  flex: 1;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dd-row.fell .dd-text,
+.dd-row.missed .dd-text { color: var(--text-dim); }
+.dd-secs {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.dd-tag {
+  color: var(--text-faint);
+  font-style: italic;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.dd-empty {
+  color: var(--text-faint);
+  font-style: italic;
+  padding: 2px 4px 4px;
+  font-size: 12px;
+}
+/* One chevron glyph, rotated open — the expand affordance. Hidden at rest,
+   revealed on row hover and while open. */
+.dd-chev {
+  color: var(--text-faint);
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.08s ease, transform 0.08s ease;
+}
+.an-day:hover .dd-chev,
+.an-day-wrap.open .dd-chev { opacity: 1; }
+.dd-chev.open { transform: rotate(90deg); }
 .dash-empty {
   color: var(--text-faint);
   font-style: italic;
@@ -682,6 +828,28 @@ button {
 }
 .date-jump:hover { color: var(--text); background: var(--bg-hover); }
 .date-jump.active { color: var(--accent); }
+
+/* Wide window (a fullscreened laptop): the hero spans the top, then the
+   summary column (heatmap + distribution) sits beside the day ledger. The
+   heatmap switches to a full year at ≥1280px — where the left column first
+   fits 52 columns (the component reads the same breakpoint). */
+@media (min-width: 900px) {
+  .analytics-view .filter-bar { padding: 10px 28px; }
+  .analytics {
+    padding: 16px 28px 64px;
+    gap: 16px;
+  }
+  .an-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  .an-left {
+    gap: 16px;
+  }
+  .an-stat .v { font-size: 30px; }
+}
 
 /* Scrollbars — hidden. The single .scroll container (and modal lists) still
    scroll, just without visible chrome, matching the minimal aesthetic.

@@ -131,6 +131,27 @@ async fn journal_dashboard(
     with_db(db, move |db| db.journal_dashboard(since.as_deref(), until.as_deref())).await
 }
 
+// One day at task level — what the analytics ledger's expanded row renders.
+// The per-task session seconds are layered on here (a separate dimension;
+// day_detail itself never touches `sessions`).
+#[tauri::command]
+async fn journal_day_detail(
+    db: State<'_, DbState>, date: String,
+) -> Result<dashboard::DayDetail, String> {
+    with_db(db, move |db| {
+        let mut detail = db.day_detail(&date)?;
+        let next = dashboard::next_day(&date)?;
+        let times = db.session_time_by_day(Some(date.as_str()), Some(next.as_str()))?;
+        let by_item: std::collections::HashMap<String, i64> =
+            times.into_iter().map(|t| (t.item_id, t.seconds)).collect();
+        for t in &mut detail.done {
+            t.secs = by_item.get(&t.item_id).copied().unwrap_or(0);
+        }
+        Ok(detail)
+    })
+    .await
+}
+
 // ---- Notes commands ------------------------------------------------------
 // Separate from items. Notes are content (not activity), so no journal logging.
 
@@ -624,7 +645,7 @@ pub fn run() {
             list_items, create_item, edit_item, complete_item, uncomplete_item,
             move_item, delete_item, run_sweep,
             hide_item, unhide_item,
-            list_actions, journal_dashboard,
+            list_actions, journal_dashboard, journal_day_detail,
             list_notes, create_note, update_note, set_note_priority, set_note_project, delete_note,
             hide_note, unhide_note, save_text_file,
             list_projects, create_project, rename_project, delete_project, set_item_project,

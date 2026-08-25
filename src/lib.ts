@@ -261,7 +261,34 @@ export const journalApi = {
       since: opts.since ?? null,
       until: opts.until ?? null,
     }),
+  /** One day at task level — what the ledger's expanded row renders. */
+  dayDetail: (date: string) => invoke<DayDetail>("journal_day_detail", { date }),
 };
+
+/** A task completed on the picked day (HH:MM of its effective completion,
+ *  plus the day's tracked seconds for it). */
+export interface DoneTaskDetail {
+  itemId: string;
+  time: string;
+  text: string;
+  project: string | null;
+  priority: 1 | 2 | 3 | null;
+  secs: number;
+}
+
+/** A today task that fell to Backlog that day. */
+export interface FellTaskDetail {
+  time: string;
+  text: string;
+}
+
+export interface DayDetail {
+  date: string;
+  done: DoneTaskDetail[];
+  fell: FellTaskDetail[];
+  /** Texts of habits the day ended without (empty for the live today). */
+  dailyMissed: string[];
+}
 
 // ---- Mobile sync ----------------------------------------------------------
 // GitHub-file transport for the Android client (see src-tauri/src/sync.rs).
