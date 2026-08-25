@@ -64,8 +64,8 @@ on its own surface:
 - `##q` — a **quote**. It joins the pool behind the rotating quote line directly under the
   header: one quote at a time, changing every 2 minutes, never the same one twice in a
   row. ⌘P → Show/Hide Quotes toggles the line (Focus Mode hides it too, and Show Default
-  View turns it off). The full pool is managed in the Journal view's Quotes group at the
-  bottom.
+  View turns it off). The line is a quote's only surface — there's no management list
+  anywhere (yet); `##q` captures just join the pool.
 
 The `##` prefix is reserved so it can't collide with the `#tag` project token. Entries
 have no priority/project/hide axes — just text and its day — and like notes they're
@@ -136,7 +136,7 @@ dayapp/
 │   ├── focusNav.ts          ← the grammar's DOM side: digit dispatch to data-kb buttons
 │   ├── Notes.tsx            ← free-form notes (own state + API; ⌘F-in-note find, ⬇ .txt export)
 │   ├── Goals.tsx            ← goals: horizon groups + capture + achieve (own state)
-│   ├── Journal.tsx          ← the ##j view: day-grouped entries + Quotes management group
+│   ├── Journal.tsx          ← the ##j view: day-grouped entries (quotes never render here)
 │   ├── Quotes.tsx           ← the ##q line: one rotating quote under the header
 │   ├── notesApi.ts          ← notes invoke wrappers
 │   ├── log.ts               ← prefixed console logger (webview side)

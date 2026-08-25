@@ -1,9 +1,10 @@
 // Journal — the written journal's own view. Analytics owns the aggregates
 // over `actions`; this page owns the prose captured through the notes bus's
-// `##j` token (plus its own capture line, which defaults to a journal entry —
-// `##q` still routes to quotes from here). Days render newest-first with
-// their entries in capture order underneath; the Quotes group at the bottom
-// is where captured quotes are read, edited, and pruned.
+// `##j` token (plus its own capture line, which defaults to a journal entry).
+// Days render newest-first with their entries in capture order underneath.
+// Quotes are NOT shown here — the rotating line under the header is their one
+// surface, and for now they have no management surface at all (the notes bar's
+// ##q is the natural way in; this view's capture still routes a ##q line too).
 //
 // Self-contained like Notes/Goals: own state, own API, re-fetches on mount
 // (every view switch remounts it) and on reloadEpoch (demo-mode swaps).
@@ -43,8 +44,8 @@ export default function Journal({
   onQuotesChanged,
 }: {
   reloadEpoch?: number;
-  /** Bumped up to App whenever a quote changes here, so the rotating line
-   *  re-fetches its pool. */
+  /** Bumped up to App when a ##q capture routes from this view's capture
+   *  line, so the rotating line re-fetches its pool. */
   onQuotesChanged?: () => void;
 }) {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -58,7 +59,8 @@ export default function Journal({
   }, [reloadEpoch]);
 
   // Journal entries grouped by day in display order (the sort above already
-  // sequences them; this just draws the group boundaries).
+  // sequences them; this just draws the group boundaries). Quotes are filtered
+  // out — they render only in the rotating line, never here.
   const days = useMemo(() => {
     const out: { day: string; entries: Entry[] }[] = [];
     for (const e of entries) {
@@ -69,15 +71,6 @@ export default function Journal({
     }
     return out;
   }, [entries]);
-
-  // Quotes, newest first — the management order (recently captured on top).
-  const quotes = useMemo(
-    () =>
-      entries
-        .filter((e) => e.kind === "quote")
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)),
-    [entries],
-  );
 
   const today = new Date().toLocaleDateString("en-CA"); // local ISO date
 
@@ -103,13 +96,11 @@ export default function Journal({
     if (!t || t === entry.text) return;
     setEntries((s) => sortEntries(s.map((e) => (e.id === entry.id ? { ...e, text: t } : e))));
     entriesApi.update(entry.id, t).catch((e) => log.error("entry edit failed", e));
-    if (entry.kind === "quote") onQuotesChanged?.();
   };
 
   const handleDelete = (entry: Entry) => {
     setEntries((s) => s.filter((e) => e.id !== entry.id));
     entriesApi.delete(entry.id).catch((e) => log.error("entry delete failed", e));
-    if (entry.kind === "quote") onQuotesChanged?.();
   };
 
   const renderRow = (entry: Entry) => (
@@ -173,15 +164,6 @@ export default function Journal({
           {d.entries.map(renderRow)}
         </div>
       ))}
-
-      {quotes.length > 0 && (
-        <>
-          <div className="section-head journal-quotes-head">
-            <span className="section-name">Quotes</span>
-          </div>
-          {quotes.map(renderRow)}
-        </>
-      )}
     </section>
   );
 }

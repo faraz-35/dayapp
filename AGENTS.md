@@ -193,8 +193,9 @@ cannot collide with the `#tag` project token (a lone `#` never starts a tag word
 - `##j` → a **journal entry**: one line of reflection stamped with its day, rendered by the
   **Journal view** (its own page — see UI/UX). The action log stays the journal of *what was
   done*; this table is the journal of *what was thought*.
-- `##q` → a **quote**: rendered by the rotating quote line under the header and managed in
-  the Journal view's Quotes group.
+- `##q` → a **quote**: rendered by the rotating quote line under the header — its one
+  surface. For now quotes have **no management surface** (capture-only; no edit/delete
+  anywhere in the GUI).
 - `day` is the local date at capture; edits never move it (`created_at` keeps the within-day
   order, ULID text order breaking same-second ties). Entries have **no organising axes at
   all** — no priority, project, hide, or sort: just text and its day.
@@ -471,7 +472,7 @@ dayapp/
 │   ├── index.css                   ← the dark theme + all component styles
 │   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + token-caught tier groups + the ##j/##q capture router)
 │   ├── Goals.tsx                   ← goals: horizon groups + capture + achieve (own state; between Notes and the sections)
-│   ├── Journal.tsx                 ← the ##j page: day-grouped entries + capture + inline edit/delete + the Quotes management group (self-contained, the Notes/Analytics pattern)
+│   ├── Journal.tsx                 ← the ##j page: day-grouped entries + capture + inline edit/delete (quotes never render here; self-contained, the Notes/Analytics pattern)
 │   ├── Quotes.tsx                  ← the ##q line: one rotating quote under the header, masthead-rotation pattern (self-contained fetch; `version` prop is the refresh trigger)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
@@ -520,8 +521,8 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 |---|---|---|
 | `App.tsx` | state (incl. the active timer + the one focused thing), effects, the focus grammar key handler, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
 | `Goals.tsx` | goals state + capture + horizon groups + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
-| `Quotes.tsx` | the ##q line: quote pool fetch, 2-min rotation (no consecutive repeats), fade-in render | capture (Notes' router adds quotes), quote editing (Journal's Quotes group) |
-| `Journal.tsx` | the Journal view: entries state, day groups, capture (plain = journal entry), inline edit/delete, Quotes management group (self-contained; remounts per view switch) | the quote line (Quotes.tsx), analytics (AnalyticsView) |
+| `Quotes.tsx` | the ##q line: quote pool fetch, 2-min rotation (no consecutive repeats), fade-in render | capture (Notes' router adds quotes), quote management (none exists — capture-only) |
+| `Journal.tsx` | the Journal view: entries state, day groups, capture (plain = journal entry), inline edit/delete (self-contained; remounts per view switch; quotes filtered out) | the quote line (Quotes.tsx), analytics (AnalyticsView) |
 | `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + capture input + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
@@ -884,8 +885,9 @@ into Notes or edit fields isn't hijacked.
 - Source: `##q` captures (the notes bus) — never projects, never logged. ⌘P →
   Show/Hide Quotes toggles it (persisted, default on); Focus Mode hides it too, and
   Show Default View turns it off (the default working view is the plain task list).
-  Component is `Quotes.tsx` (self-contained fetch + rotation; App bumps its `version`
-  prop on demo swaps, `##q` captures, and quote edits in the Journal view).
+  It is quotes' **only** surface — no management, no list anywhere (Faraz's call,
+  2026-08-25). Component is `Quotes.tsx` (self-contained fetch + rotation; App bumps
+  its `version` prop on demo swaps and `##q` captures).
 
 **Journal view (⌘P → View Journal, or the header `¶`):**
 - The written journal's own page — Analytics replaced the old journal view, so `##j`
@@ -899,9 +901,9 @@ into Notes or edit fields isn't hijacked.
 - **Capture at the top is the bus with a default**: plain lines land as today's journal
   entries; a leading `##q` still routes to quotes from here. No placeholder — the
   section-input language.
-- **Quotes group at the bottom** (when any exist): the quote pool in management order
-  (newest first), same row language — the only place quotes are read in full, edited,
-  or pruned.
+- **Quotes never render here** (Faraz's call, 2026-08-25): the rotating line is their one
+  surface and they carry no management surface at all for now — the view filters them out
+  and shows journal entries only.
 - Mouse-first like Analytics: no focus-grammar wiring (free-mode `j`/`k` scrolling works
   globally). Self-contained (`Journal.tsx`, the Notes pattern): remounts on every view
   switch so it always renders fresh data; `reloadEpoch` covers demo-mode swaps.

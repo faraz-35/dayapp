@@ -1496,9 +1496,6 @@ button {
   color: var(--text-dim);
 }
 
-/* The Quotes management group at the bottom of the Journal view. */
-.journal-quotes-head { margin-top: 20px; }
-
 
 /* ---- Command palette (⌘P) --------------------------------------------- */
 
