@@ -895,7 +895,14 @@ into Notes or edit fields isn't hijacked.
   wall-clock, and never as a modal.
 - Dismissal: any key (beyond a bare modifier chord — ⌘P/⌘F still work, their listener
   closes the modal) or any click ends it instantly; after ~45s (`LINGER_MS`) it
-  dismisses itself — the duration is a default, not a rule. The pick never repeats the
+  dismisses itself — the duration is a default, not a rule. Two WKWebView-era rules
+  learned the hard way (the "modal never appears" bug, 2026-08-26): **the summoning
+  keystroke must not double as its dismissal** (React commits `quoteOpen=true`
+  synchronously during the palette's Enter handling, so the tail of that same event
+  reaches the window handler with the fresh state — `quoteOpenedAt`'s 250ms grace
+  window skips it), and **never animate the fixed full-screen backdrop** (the
+  compositor left an animated fixed layer stuck at the `from { opacity: 0 }` frame —
+  it never painted; only the quote text fades in). The pick never repeats the
   last-shown quote (the masthead rotation's rule, reused; session-only memory).
 - Source: `##q` captures (the notes bus) — never projects, never logged. The palette
   entry hides while the pool is empty (`quoteCount` rides up from `Quotes.tsx` — no

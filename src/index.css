@@ -1471,9 +1471,11 @@ button {
    (it dims the task list the way an inline line never could); the quote
    itself keeps the line's old voice — serif italic, --text (bright),
    ~75% width, centered, multi-line as long as it needs to be (never
-   ellipsized — clipping a quote mid-sentence defeats it). Fades in like
-   every surface; dismissal is instant (any key or click, or the 45s linger
-   ending) — snappy like the palette, not a slow dissolve. */
+   ellipsized — clipping a quote mid-sentence defeats it). No animation on
+   the fixed backdrop itself: WKWebView's compositor left an animated
+   full-screen fixed layer at the `from { opacity: 0 }` frame — it never
+   painted (the "modal never appears" bug's second half). The quote text
+   fades in instead; dismissal is instant. */
 
 .quote-backdrop {
   position: fixed;
@@ -1485,7 +1487,6 @@ button {
   justify-content: center;
   cursor: default;
   -webkit-app-region: no-drag;
-  animation: title-in 0.25s ease;
 }
 
 .quote-text {

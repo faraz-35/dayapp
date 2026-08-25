@@ -190,6 +190,16 @@ function DayApp() {
   // (reported up from Quotes so the palette entry hides while empty).
   // Quotes.tsx owns the rest — pick, linger, dismissal.
   const [quoteOpen, setQuoteOpen] = useState(false);
+  // When the modal was summoned (epoch ms). The keystroke that RUNS the
+  // palette command also bubbles on to the window key handler a moment later
+  // — by then quoteOpen has committed true, so without a grace window the
+  // summoning Enter/click dismisses the modal it just opened (born and killed
+  // in one event; the "modal never appears" bug).
+  const quoteOpenedAt = useRef(0);
+  const openQuote = useCallback(() => {
+    quoteOpenedAt.current = Date.now();
+    setQuoteOpen(true);
+  }, []);
   const [quoteCount, setQuoteCount] = useState(0);
   // Stable identity: Quotes' linger timer depends on onClose, and App
   // re-renders every second while a timer runs — an inline arrow would reset
@@ -514,7 +524,7 @@ function DayApp() {
       id: "show-quote",
       label: "Show a Quote",
       hint: "a moment with one of your ##q captures",
-      run: () => setQuoteOpen(true),
+      run: openQuote,
     }] : []),
     {
       id: "toggle-goals",
@@ -1179,11 +1189,16 @@ function DayApp() {
         return;
       }
       // The quote modal owns the keys while it's open — it has no inputs, so
-      // any key beyond a bare modifier chord (⌘/⌘F still work via their own
-      // listener, which closes this) means "done thinking" and dismisses.
+      // any key means "done thinking" and dismisses (see the grace notes
+      // inside).
       if (quoteOpen) {
         pendingAddr.current = "";
-        if (!(e.metaKey || e.ctrlKey || e.altKey) && e.key !== "Shift") {
+        // Bare modifier chords are prefixes (⌘P/⌘F still work via their own
+        // listener), and the first moments belong to the summoning event's
+        // own tail — neither dismisses. Every other key does.
+        const chordPrefix = e.metaKey || e.ctrlKey || e.altKey || e.key === "Shift";
+        const isSummonTail = Date.now() - quoteOpenedAt.current <= 250;
+        if (!chordPrefix && !isSummonTail) {
           e.preventDefault();
           setQuoteOpen(false);
         }
