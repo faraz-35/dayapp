@@ -1,13 +1,14 @@
 // AnalyticsView — the analytics page (top-right ≡): a dashboard of elevated
 // cards synthesized over the append-only `actions` log, never the log itself.
-// A hero stats card, the activity heatmap (a year on wide windows, ~7 months
-// on the 480px one), the distribution cards (project bars + a segmented
-// priority bar), and the day ledger whose rows expand to that day's tasks
-// (done with times, what fell, missed habits — the raw action log's textual
-// home remains the CLI's --journal). Clicking a heatmap cell, a ledger row,
-// or the date field picks a day; click it again to clear. Responsive: cards
-// stack on the 480px window; a wide window spans the hero across the top and
-// sets the summary beside the ledger. All derivation lives in
+// A hero stats card, the current month as a calendar heatmap (intensity =
+// completions; click a day to open it), the distribution cards (project bars
+// + a segmented priority bar), and the day ledger whose rows expand to that
+// day's tasks (done with times, what fell, missed habits — the raw action
+// log's textual home remains the CLI's --journal). Clicking a calendar cell,
+// a ledger row, or the date field picks a day; click it again to clear.
+// Responsive: cards stack on the 480px window; a wide window spans the hero
+// across the top, sets Activity/Projects/Priority in one row, and gives the
+// ledger its own full-width row. All derivation lives in
 // src-tauri/src/dashboard.rs; per-task time is layered in from sessions.
 
 import { useEffect, useMemo, useState } from "react";
@@ -28,17 +29,10 @@ import { log } from "./log";
 
 type Range = "today" | "week" | "month" | "all";
 
-/** Heatmap weeks: a full year when there's room (wide window), ~7 months on
- *  the 480px one. 52 columns need ~675px of card content, which the wide
- *  grid's left column only reaches at ~1280px of window — below that, 30. */
-const WEEKS_WIDE = 52;
-const WEEKS_NARROW = 30;
-const DAY_MS = 86_400_000;
-
 const level = (done: number): number =>
   done === 0 ? 0 : done >= 7 ? 4 : done >= 4 ? 3 : done >= 2 ? 2 : 1;
 
-/** The level colors as a shared scale — the heatmap cells and its legend. */
+/** The level colors as a shared scale — the calendar cells and its legend. */
 const LEVEL_BG = [
   "var(--bg-hover)",
   "rgba(123, 140, 255, 0.28)",
@@ -48,7 +42,7 @@ const LEVEL_BG = [
 ];
 
 /** Priority's segment colors — intensity steps of the one accent, the same
- *  scale language as the heatmap (P1 carries the most weight). */
+ *  scale language as the calendar (P1 carries the most weight). */
 const TIER_BG: Record<string, string> = {
   "1": "var(--accent)",
   "2": "rgba(123, 140, 255, 0.62)",
@@ -56,42 +50,37 @@ const TIER_BG: Record<string, string> = {
   none: "rgba(123, 140, 255, 0.16)",
 };
 
-type Cell = { date: string; done: number; future: boolean; isToday: boolean };
+type Cell = {
+  date: string;
+  day: number;
+  done: number;
+  future: boolean;
+  isToday: boolean;
+};
 
-function useMedia(query: string): boolean {
-  const [match, setMatch] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const on = () => setMatch(mq.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, [query]);
-  return match;
-}
-
-/** Week columns of cells, oldest week first, Monday at the top. The grid
- *  starts on the Monday on/before (today − (weeks−1) weeks) so the final
- *  column is the current week. */
-function heatmapColumns(map: Map<string, number>, weeks: number): Cell[][] {
+/** The current calendar month as a Monday-first grid: `lead` blanks, then
+ *  one cell per day (intensity = that day's completions). Trailing blanks
+ *  aren't needed — the CSS grid just ends the last row short. */
+function monthCalendar(map: Map<string, number>): (Cell | null)[] {
   const today = localDateStr();
-  const todayMs = new Date(today + "T00:00:00").getTime();
-  const mondayOffset = (new Date(today + "T00:00:00").getDay() + 6) % 7;
-  const firstMonday = todayMs - (mondayOffset + (weeks - 1) * 7) * DAY_MS;
-  const cols: Cell[][] = [];
-  for (let w = 0; w < weeks; w++) {
-    const col: Cell[] = [];
-    for (let d = 0; d < 7; d++) {
-      const date = localDateStr(new Date(firstMonday + (w * 7 + d) * DAY_MS));
-      col.push({
-        date,
-        done: map.get(date) ?? 0,
-        future: date > today,
-        isToday: date === today,
-      });
-    }
-    cols.push(col);
+  const t = new Date(today + "T00:00:00");
+  const year = t.getFullYear();
+  const month = t.getMonth();
+  const lead = (new Date(year, month, 1).getDay() + 6) % 7; // days before Monday
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (Cell | null)[] = [];
+  for (let i = 0; i < lead; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = localDateStr(new Date(year, month, d));
+    cells.push({
+      date,
+      day: d,
+      done: map.get(date) ?? 0,
+      future: date > today,
+      isToday: date === today,
+    });
   }
-  return cols;
+  return cells;
 }
 
 function Stat({ value, label, accent }: { value: string | number; label: string; accent?: boolean }) {
@@ -187,12 +176,9 @@ export default function AnalyticsView() {
   const [times, setTimes] = useState<DayTaskTime[]>([]);
   const [detail, setDetail] = useState<DayDetail | null>(null);
   const [range, setRange] = useState<Range>("week");
-  // The day whose ledger row is expanded (and whose heatmap cell is ringed).
+  // The day whose ledger row is expanded (and whose calendar cell is ringed).
   // Picking never re-scopes the stats — the range pills own that.
   const [pickedDay, setPickedDay] = useState<string | null>(null);
-
-  const yearHeat = useMedia("(min-width: 1280px)");
-  const weeks = yearHeat ? WEEKS_WIDE : WEEKS_NARROW;
 
   // Resolve the half-open [since, until) window from the active range.
   // `until` is the day *after* the target so a day boundary is inclusive.
@@ -243,7 +229,7 @@ export default function AnalyticsView() {
       setPickedDay(null);
       return;
     }
-    // A day outside the active range's ledger (heatmap cell, date field):
+    // A day outside the active range's ledger (calendar cell, date field):
     // widen to All so the expanded row has somewhere to render.
     const { since, until } = bounds;
     if ((since && d < since) || (until && d >= until)) setRange("all");
@@ -258,7 +244,11 @@ export default function AnalyticsView() {
   ];
 
   const heat = useMemo(() => new Map((dash?.heatmap ?? []).map((h) => [h.date, h.done])), [dash]);
-  const cols = useMemo(() => heatmapColumns(heat, weeks), [heat, weeks]);
+  const cells = useMemo(() => monthCalendar(heat), [heat]);
+  const monthLabel = new Date(localDateStr() + "T00:00:00").toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
   const maxProject = Math.max(1, ...(dash?.projects ?? []).map((p) => p.count));
   const maxTier = Math.max(1, ...(dash?.priorities ?? []).map((t) => t.count));
 
@@ -279,7 +269,7 @@ export default function AnalyticsView() {
 
   return (
     <div className="analytics-view">
-      {/* Range segments · date jump. The date field (like a heatmap cell)
+      {/* Range segments · date jump. The date field (like a calendar cell)
           picks a day to expand in the ledger. */}
       <div className="filter-bar">
         {ranges.map((r) => (
@@ -308,162 +298,144 @@ export default function AnalyticsView() {
               <Stat value={dash.totals.todayMissed} label="Today missed" />
             </section>
 
-            <div className="an-grid">
-              <div className="an-left">
-                <section className="an-card">
-                  <div className="an-card-title">
-                    Activity
-                    <span className="hint">Last {weeks} weeks</span>
+            <div className="an-row3">
+              <section className="an-card an-activity">
+                <div className="an-card-title">
+                  Activity
+                  <span className="hint">{monthLabel}</span>
+                </div>
+                <div className="cal">
+                  <div className="cal-head">
+                    {["M", "T", "W", "T", "F", "S", "S"].map((l, i) => (
+                      <span key={i}>{l}</span>
+                    ))}
                   </div>
-                  <div className="hm">
-                    <div
-                      className="hm-months"
-                      style={{ gridTemplateColumns: `repeat(${weeks}, 10px)` }}
-                    >
-                      {cols.map((col, w) => {
-                        const month = col[0].date.slice(5, 7);
-                        const prev = w > 0 ? cols[w - 1][0].date.slice(5, 7) : null;
-                        if (month === prev) return null;
-                        return (
-                          <span key={w} style={{ gridColumn: w + 1 }}>
-                            {new Date(col[0].date + "T00:00:00").toLocaleDateString(undefined, {
-                              month: "short",
-                            })}
-                          </span>
-                        );
-                      })}
-                    </div>
-                    <div className="hm-body">
-                      <div className="hm-days">
-                        {["M", "", "W", "", "F", "", ""].map((l, i) => (
-                          <span key={i}>{l}</span>
-                        ))}
-                      </div>
-                      <div className="hm-grid">
-                        {cols.flat().map((c) => {
-                          const cls = [
-                            "hm-cell",
+                  <div className="cal-grid">
+                    {cells.map((c, i) =>
+                      c == null ? (
+                        <span key={`b-${i}`} className="cal-cell blank" />
+                      ) : (
+                        <button
+                          key={c.date}
+                          className={[
+                            "cal-cell",
                             level(c.done) > 0 ? `l${level(c.done)}` : "",
                             c.future ? "future" : "",
                             c.isToday ? "today" : "",
                             pickedDay === c.date ? "picked" : "",
                           ]
                             .filter(Boolean)
-                            .join(" ");
-                          return (
-                            <button
-                              key={c.date}
-                              className={cls}
-                              disabled={c.future}
-                              title={c.future ? undefined : `${formatReminder(c.date)}${c.done ? ` · ${c.done} done` : ""}`}
-                              onClick={() => pickDay(c.date)}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div className="hm-legend">
-                      Less
-                      {[0, 1, 2, 3, 4].map((l) => (
-                        <i key={l} style={{ background: LEVEL_BG[l] }} />
-                      ))}
-                      More
-                    </div>
+                            .join(" ")}
+                          disabled={c.future}
+                          title={`${formatReminder(c.date)}${c.done ? ` · ${c.done} done` : ""}`}
+                          onClick={() => pickDay(c.date)}
+                        >
+                          <span className="n">{c.day}</span>
+                          {c.done > 0 && <span className="c">{c.done}</span>}
+                        </button>
+                      ),
+                    )}
                   </div>
-                </section>
-
-                <div className="an-split-row">
-                  {dash.projects.length > 0 && (
-                    <section className="an-card an-projects">
-                      <div className="an-card-title">Projects</div>
-                      {dash.projects.map((p) => (
-                        <BarRow
-                          key={p.name ?? "__none"}
-                          label={p.name ?? "none"}
-                          title={p.name ? `#${p.name}` : "no project"}
-                          count={p.count}
-                          max={maxProject}
-                        />
-                      ))}
-                    </section>
-                  )}
-                  <PriorityCard tiers={dash.priorities} max={maxTier} />
+                  <div className="hm-legend">
+                    Less
+                    {[0, 1, 2, 3, 4].map((l) => (
+                      <i key={l} style={{ background: LEVEL_BG[l] }} />
+                    ))}
+                    More
+                  </div>
                 </div>
-              </div>
-
-              <section className="an-card an-days">
-                <div className="an-card-title">Days</div>
-                {ledger.length === 0 && (
-                  <div className="dash-empty">No activity in this range.</div>
-                )}
-                {ledger.map((d) => {
-                  const secs = timeByDay.get(d.date) ?? 0;
-                  const missed = d.dailyMissed + d.todayMissed;
-                  const open = pickedDay === d.date;
-                  return (
-                    <div key={d.date} className={`an-day-wrap${open ? " open" : ""}`} data-day={d.date}>
-                      <button
-                        className={`an-day${open ? " picked" : ""}`}
-                        onClick={() => pickDay(d.date)}
-                        title={open ? "Click again to collapse" : "Show this day's tasks"}
-                      >
-                        <span className="d">
-                          {d.date === today
-                            ? "Today"
-                            : new Date(d.date + "T00:00:00").toLocaleDateString(undefined, {
-                                weekday: "short",
-                                month: "short",
-                                day: "numeric",
-                              })}
-                        </span>
-                        <span className="s">
-                          {d.done > 0 && <span className="done">{d.done} done</span>}
-                          {missed > 0 && <span>{missed} missed</span>}
-                          {secs > 0 && <span className="time">{formatDuration(secs)}</span>}
-                          <Chevron open={open} />
-                        </span>
-                      </button>
-                      {open && (
-                        <div className="an-day-detail">
-                          {detail == null && <div className="dd-empty">…</div>}
-                          {detail?.done.map((t) => (
-                            <div key={t.itemId} className="dd-row done">
-                              <span className="dd-mark">✓</span>
-                              <span className="dd-time">{t.time}</span>
-                              <span className="dd-text">{t.text}</span>
-                              {t.secs > 0 && (
-                                <span className="dd-secs">{formatDuration(t.secs)}</span>
-                              )}
-                            </div>
-                          ))}
-                          {detail?.fell.map((f) => (
-                            <div key={`f-${f.time}-${f.text}`} className="dd-row fell">
-                              <span className="dd-mark">↓</span>
-                              <span className="dd-time">{f.time}</span>
-                              <span className="dd-text">{f.text}</span>
-                              <span className="dd-tag">fell</span>
-                            </div>
-                          ))}
-                          {detail?.dailyMissed.map((m) => (
-                            <div key={`m-${m}`} className="dd-row missed">
-                              <span className="dd-mark">○</span>
-                              <span className="dd-text">{m}</span>
-                              <span className="dd-tag">missed</span>
-                            </div>
-                          ))}
-                          {detail != null &&
-                            detail.done.length === 0 &&
-                            detail.fell.length === 0 &&
-                            detail.dailyMissed.length === 0 && (
-                              <div className="dd-empty">Nothing that day.</div>
-                            )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
               </section>
+
+              {dash.projects.length > 0 && (
+                <section className="an-card an-projects">
+                  <div className="an-card-title">Projects</div>
+                  {dash.projects.map((p) => (
+                    <BarRow
+                      key={p.name ?? "__none"}
+                      label={p.name ?? "none"}
+                      title={p.name ? `#${p.name}` : "no project"}
+                      count={p.count}
+                      max={maxProject}
+                    />
+                  ))}
+                </section>
+              )}
+
+              <PriorityCard tiers={dash.priorities} max={maxTier} />
             </div>
+
+            <section className="an-card an-days">
+              <div className="an-card-title">Days</div>
+              {ledger.length === 0 && (
+                <div className="dash-empty">No activity in this range.</div>
+              )}
+              {ledger.map((d) => {
+                const secs = timeByDay.get(d.date) ?? 0;
+                const missed = d.dailyMissed + d.todayMissed;
+                const open = pickedDay === d.date;
+                return (
+                  <div key={d.date} className={`an-day-wrap${open ? " open" : ""}`} data-day={d.date}>
+                    <button
+                      className={`an-day${open ? " picked" : ""}`}
+                      onClick={() => pickDay(d.date)}
+                      title={open ? "Click again to collapse" : "Show this day's tasks"}
+                    >
+                      <span className="d">
+                        {d.date === today
+                          ? "Today"
+                          : new Date(d.date + "T00:00:00").toLocaleDateString(undefined, {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                      </span>
+                      <span className="s">
+                        {d.done > 0 && <span className="done">{d.done} done</span>}
+                        {missed > 0 && <span>{missed} missed</span>}
+                        {secs > 0 && <span className="time">{formatDuration(secs)}</span>}
+                        <Chevron open={open} />
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="an-day-detail">
+                        {detail == null && <div className="dd-empty">…</div>}
+                        {detail?.done.map((t) => (
+                          <div key={t.itemId} className="dd-row done">
+                            <span className="dd-mark">✓</span>
+                            <span className="dd-time">{t.time}</span>
+                            <span className="dd-text">{t.text}</span>
+                            {t.secs > 0 && (
+                              <span className="dd-secs">{formatDuration(t.secs)}</span>
+                            )}
+                          </div>
+                        ))}
+                        {detail?.fell.map((f) => (
+                          <div key={`f-${f.time}-${f.text}`} className="dd-row fell">
+                            <span className="dd-mark">↓</span>
+                            <span className="dd-time">{f.time}</span>
+                            <span className="dd-text">{f.text}</span>
+                            <span className="dd-tag">fell</span>
+                          </div>
+                        ))}
+                        {detail?.dailyMissed.map((m) => (
+                          <div key={`m-${m}`} className="dd-row missed">
+                            <span className="dd-mark">○</span>
+                            <span className="dd-text">{m}</span>
+                            <span className="dd-tag">missed</span>
+                          </div>
+                        ))}
+                        {detail != null &&
+                          detail.done.length === 0 &&
+                          detail.fell.length === 0 &&
+                          detail.dailyMissed.length === 0 && (
+                            <div className="dd-empty">Nothing that day.</div>
+                          )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </section>
           </>
         )}
       </div>

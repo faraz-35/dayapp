@@ -30,8 +30,8 @@ enumerates events. Scoped to Today/Week/Month/All (default **Week**) or any pick
   completion; a live today with nothing yet doesn't break it), **daily missed** (habits
   the day ended without) and **today missed** (tasks that fell to Backlog unfinished —
   the sweep logs those for free).
-- **Heatmap** — per-day completions, GitHub-style, in the app's single accent (a year on
-  wide windows, ~7 months on the compact one). Click any day to open it.
+- **Activity** — the current month as a calendar heatmap, in the app's single accent.
+  Click any day to open it.
 - **Projects / Priority splits** — every project's share of the range's completions
   (zeros visible, so neglected projects read too) and the priority tiers you actually
   clear, as one segmented bar. Both read project/priority snapshotted onto each
@@ -44,7 +44,8 @@ enumerates events. Scoped to Today/Week/Month/All (default **Week**) or any pick
 
 The page is a stack of elevated cards, and it's responsive: the 480px window stacks
 them; fullscreened on a laptop they lay out as a proper dashboard — the stats card
-across the top, heatmap + distribution beside the day ledger. The raw action log's
+across the top, Activity · Projects · Priority in one row, the day ledger on its own
+row below. The raw action log's
 textual home is `dayapp --journal`: the same summary block, then every action grouped
 by day. Time appears only as the ledger's per-day total (and per-task in an expanded
 day) when any was tracked — sessions stay a separate dimension, not dashboard stats.

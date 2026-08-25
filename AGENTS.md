@@ -855,13 +855,14 @@ into Notes or edit fields isn't hijacked.
   excluded so an archived habit can't accrue misses forever; the current day never shows
   daily misses — a live day has no verdict), and **Today missed** (`fell_to_backlog` —
   the sweep's own record of a today task the day ended without).
-- **Heatmap**: per-day completions, Monday-aligned weeks, intensity steps of the one
-  accent, month labels, today ringed, a Less→More legend. 30 weeks on the 480px window;
-  a full year (52) when the window is wide enough to fit it (≥1280px). Clicking a cell
-  picks that day — the ledger row expands to its tasks and the cell is ringed; clicking
-  the picked day again clears the pick. A pick outside the active range widens the range
-  to All so the row has somewhere to render. Picking never re-scopes the stats — the
-  range pills own that.
+- **Activity**: the current month as a Monday-first calendar heatmap — one square per
+  day (aspect-ratio cells, so one shape serves every window width), intensity steps of
+  the one accent = that day's completions, the day number top-left, the count
+  bottom-right, today ringed, a Less→More legend. Clicking a cell picks that day — the
+  ledger row expands to its tasks and the cell is ringed; clicking the picked day again
+  clears the pick. A pick outside the active range widens the range to All so the row
+  has somewhere to render. Picking never re-scopes the stats — the range pills own
+  that.
 - **Splits**: every project's share of the range's completions as label/bar/count rows
   (zero-filled from the roster so neglected projects read as 0; a trailing "none" bucket
   when unprojected work exists), and the priority card — one segmented bar (tier
@@ -875,12 +876,12 @@ into Notes or edit fields isn't hijacked.
   one unit. The picked day stays listed even when empty, so its expansion always has a
   row. Still counts-first: never the raw action stream.
 - **Responsive**: the page is a stack of elevated cards (the token system's elevated
-  surface — `.an-card`, bg-elev + border hairline + 12px radius): hero stats, activity,
-  distribution, days. The 480px window stacks them; a wide window (≥900px — Faraz
-  fullscreens it via AeroSpace) spans the hero across the top and sets the summary
-  column beside the ledger (grid `1.5fr / 1fr`); ≥1280px switches the heatmap to 52
-  weeks (the component reads the same breakpoint through matchMedia). One `.scroll` flow
-  either way: the grid columns are in-flow content, never nested scrollers.
+  surface — `.an-card`, bg-elev + border hairline + 12px radius): hero stats, then
+  Activity · Projects · Priority in one band, then the days ledger on its own full-width
+  row. The 480px window stacks all four; a wide window (Faraz fullscreens it via
+  AeroSpace) puts the three middle cards side by side (`auto-fit minmax(280px, 1fr)` —
+  the calendar's square cells size with their card). One `.scroll` flow either way: the
+  grid columns are in-flow content, never nested scrollers.
 - **No time stats in the stats row** (time appears only as the ledger's per-day total
   when it exists), and the page is mouse-first: no focus-grammar wiring (free-mode `j`/`k`
   scrolling still works, like every view).
