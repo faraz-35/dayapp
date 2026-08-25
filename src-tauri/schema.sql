@@ -110,6 +110,25 @@ CREATE TABLE IF NOT EXISTS notes (
 CREATE INDEX IF NOT EXISTS idx_notes_order ON notes(sort_order);
 -- `hidden` intentionally unindexed on notes too; see comment on items table.
 
+-- Entries: the typed-capture store behind the notes bus. A leading `##j`/`##q`
+-- token in the Notes capture bar routes the line here instead of creating a
+-- note — same input, different kind of content, stored and displayed
+-- differently (##j → the Journal view, ##q → the rotating quote line). The
+-- reserved `##` prefix can't collide with the `#tag` project token. Entries
+-- are content, not activity (the notes/sessions call): never logged to
+-- `actions`. No priority/project/hide/sort axes — just text and its day.
+-- `day` is the local date at capture; edits never move it (created_at keeps
+-- the within-day order).
+CREATE TABLE IF NOT EXISTS entries (
+    id         TEXT PRIMARY KEY,                          -- ULID
+    kind       TEXT NOT NULL CHECK (kind IN ('journal','quote')),
+    text       TEXT NOT NULL,
+    day        TEXT NOT NULL,                             -- ISO YYYY-MM-DD
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_entries_day ON entries(day);
+
 -- Projects: a second organising axis alongside Sections. Assigning an item to a
 -- project is housekeeping (like hide), so it is NOT logged to `actions` — the
 -- journal stays focused on completion/movement. items.project_id (added via the

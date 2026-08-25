@@ -39,7 +39,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { notesApi, type Note } from "./notesApi";
-import { type HideDuration, type HiddenFilter, parseNoteCapture, projectColor, resolveNoteTag, splitNoteFooter, type Project } from "./lib";
+import { type EntryKind, type HideDuration, type HiddenFilter, entriesApi, parseEntryCapture, parseNoteCapture, projectColor, resolveNoteTag, splitNoteFooter, type Project } from "./lib";
 import { log } from "./log";
 import HideMenu from "./HideMenu";
 import { PriorityBars } from "./components/ItemRow";
@@ -63,7 +63,7 @@ const sortNotes = (list: Note[]) =>
   );
 
 export default function Notes({
-  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, focusMode, onCreateProject,
+  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, focusMode, onCreateProject, onEntryRouted,
 }: {
   hiddenFilter: HiddenFilter;
   focusedId?: string | null;
@@ -82,6 +82,10 @@ export default function Notes({
    *  a footer/capture `#tag` that matches nothing creates its project through
    *  this, so the label renders immediately. */
   onCreateProject: (name: string) => Promise<Project>;
+  /** Notified when a ##j/##q capture was routed to the entries table, so App
+   *  can refresh surfaces it owns (the quote line). The capture itself is done
+   *  here — the notes bar IS the bus. */
+  onEntryRouted?: (kind: EntryKind) => void;
 }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState("");
@@ -194,6 +198,24 @@ export default function Notes({
     window.addEventListener("keydown", onKey, { capture: true });
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, []);
+
+  // The typed-capture router, run ahead of note creation: a leading `##j`/`##q`
+  // line becomes an entry instead of a note — the notes bus's whole idea. A
+  // bare token with no text is swallowed (no empty entries, no junk note).
+  // Entry captures never touch the notes state; App hears about quotes via
+  // onEntryRouted so the rotating line refreshes.
+  const handleCapture = (raw: string) => {
+    const route = parseEntryCapture(raw);
+    if (!route) {
+      handleCreate(raw);
+      return;
+    }
+    if (!route.text) return;
+    entriesApi
+      .add(route.kind, route.text)
+      .then(() => onEntryRouted?.(route.kind))
+      .catch((e) => log.error("entry capture failed", e));
+  };
 
   // Type + Enter creates a real note. Inline `#tag`/`!N` tokens parse exactly
   // like task capture (`@` stays literal — notes have no delegation axis):
@@ -322,7 +344,7 @@ export default function Notes({
                 e.preventDefault();
                 const t = draft.trim();
                 if (t) {
-                  handleCreate(t);
+                  handleCapture(t);
                   setDraft("");
                 }
               }

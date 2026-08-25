@@ -103,6 +103,31 @@ export const projectsApi = {
   delete: (id: string) => invoke<void>("delete_project", { id }),
 };
 
+// ---- Entries (the ##j/##q typed capture) -----------------------------------
+// The notes bus's other destination: a leading `##j`/`##q` token in the Notes
+// capture bar routes the line to the `entries` table instead of creating a
+// note — a journal entry (rendered by the Journal view) or a quote (rendered
+// by the rotating line under the header). Content like notes: never logged to
+// `actions`. See src-tauri/src/journal.rs.
+
+export type EntryKind = "journal" | "quote";
+
+export interface Entry {
+  id: string;
+  kind: EntryKind;
+  text: string;
+  /** ISO `YYYY-MM-DD` — the local day at capture; edits never move it. */
+  day: string;
+  createdAt: string;
+}
+
+export const entriesApi = {
+  list: () => invoke<Entry[]>("list_entries"),
+  add: (kind: EntryKind, text: string) => invoke<Entry>("add_entry", { kind, text }),
+  update: (id: string, text: string) => invoke<void>("update_entry", { id, text }),
+  delete: (id: string) => invoke<void>("delete_entry", { id }),
+};
+
 // ---- Goals ----------------------------------------------------------------
 // The identity layer above the task sections: statements of direction at three
 // horizons — short (months, completable), long (years, completable), timeless
@@ -673,4 +698,24 @@ export function resolveNoteTag(
 ): { projectId: string | null; createProjectName?: string } {
   const p = resolveProjectByName(tag, projects);
   return p ? { projectId: p.id } : { projectId: null, createProjectName: tag };
+}
+
+// ---- Entry tokens (##j / ##q) ------------------------------------------------
+//
+// The typed-capture router: a LEADING `##j` / `##q` token in the notes capture
+// turns the line into a different kind of content (journal entry / quote) that
+// is stored and displayed differently. The reserved `##` prefix can't collide
+// with the `#tag` project token (a lone `#` never starts a tag word, so
+// `#heading` prose is safe too). Leading position only — mid-line `##j` is
+// prose; the text after the token is stored verbatim, tokens never linger in
+// content.
+
+/** Parse a capture line's leading `##j`/`##q` route. Null when the line isn't
+ *  routed (a normal note); `{ kind, text }` with the token stripped otherwise —
+ *  `text` may be empty (a bare token), which the caller treats as a no-op
+ *  rather than creating an empty entry. */
+export function parseEntryCapture(text: string): { kind: EntryKind; text: string } | null {
+  const m = text.match(/^##([jq])(?:\s+|$)/);
+  if (!m) return null;
+  return { kind: m[1] === "j" ? "journal" : "quote", text: text.slice(m[0].length).trim() };
 }

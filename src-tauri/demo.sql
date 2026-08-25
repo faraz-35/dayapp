@@ -25,6 +25,7 @@ DELETE FROM goals;
 DELETE FROM notes;
 DELETE FROM projects;
 DELETE FROM sessions;
+DELETE FROM entries;
 DELETE FROM meta;
 
 -- The day-boundary gate: seeded "today" is today, so the sweep must not run
@@ -179,6 +180,29 @@ INSERT INTO notes (id, body, sort_order, created_at, updated_at, hidden, hidden_
    2,
    date('now','localtime','-12 days') || 'T18:40:00',
    date('now','localtime','-12 days') || 'T18:40:00', 1, NULL, NULL, NULL);
+
+-- ---- Entries (the ##j/##q typed capture) ---------------------------------------
+-- A few journal lines across the week so the Journal view has real days to
+-- group, and four quotes so the rotating line under the header has a pool the
+-- moment demo mode opens. Same persona, same dates as the actions history.
+
+INSERT INTO entries (id, kind, text, day, created_at) VALUES
+  ('demo-e-j1', 'journal', 'Shipped the pricing page rewrite. Fought the urge to A/B everything — picked one headline and moved on.',
+   date('now','localtime','-3 days'), date('now','localtime','-3 days') || 'T18:05:00'),
+  ('demo-e-j2', 'journal', 'Slow morning, good afternoon. The no-phone-before-standup rule is paying for itself.',
+   date('now','localtime','-2 days'), date('now','localtime','-2 days') || 'T21:40:00'),
+  ('demo-e-j3', 'journal', 'Two support replies turned into feature ideas. The inbox is a product roadmap if you read it sideways.',
+   date('now','localtime','-1 days'), date('now','localtime','-1 days') || 'T22:15:00'),
+  ('demo-e-j4', 'journal', 'Demo day for the journal view. The log was already keeping itself — this just gives it a place to be read.',
+   date('now','localtime'), date('now','localtime') || 'T09:30:00'),
+  ('demo-e-q1', 'quote', 'The best time to plant a tree was twenty years ago. The second best time is now.',
+   date('now','localtime','-20 days'), date('now','localtime','-20 days') || 'T08:12:00'),
+  ('demo-e-q2', 'quote', 'Plans are worthless, but planning is everything.',
+   date('now','localtime','-11 days'), date('now','localtime','-11 days') || 'T14:03:00'),
+  ('demo-e-q3', 'quote', 'Simplicity is a great virtue but it requires hard work to achieve it.',
+   date('now','localtime','-6 days'), date('now','localtime','-6 days') || 'T19:47:00'),
+  ('demo-e-q4', 'quote', 'You do not rise to the level of your goals. You fall to the level of your systems.',
+   date('now','localtime','-2 days'), date('now','localtime','-2 days') || 'T07:55:00');
 
 -- ---- Sessions ------------------------------------------------------------------
 -- Closed sessions across the week so per-task ⏱ totals and the journal's

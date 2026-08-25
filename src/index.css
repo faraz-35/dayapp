@@ -1408,6 +1408,97 @@ button {
   flex-shrink: 0;
 }
 
+/* ---- Quotes (the ##q line under the header) ------------------------------ */
+/* One quote at a time, rotating every 2 minutes — never the same one twice in
+   a row, each swap fading in through the masthead's title-in keyframes. The
+   line renders nothing at all while the pool is empty; the full quote rides
+   in the tooltip when it ellipsizes. Display text, so --text (bright) — the
+   serif voice is the masthead's. */
+
+.quote-line {
+  display: flex;
+  justify-content: center;
+  padding: 10px 20px 0;   /* first block on the page — carries the top padding */
+  min-width: 0;
+}
+
+.quote-text {
+  font-family: ui-serif, "New York", Didot, Georgia, serif;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--text);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: title-in 0.35s ease;
+}
+
+/* ---- Journal view (the ##j page) ------------------------------------------ */
+/* The written journal's own view: days newest-first, entries in capture
+   order, single-click to edit inline, hover reveals ×. In-flow block like
+   .notes/.goals — .scroll owns scroll. Rows are the .item language minus
+   every axis an entry doesn't have (no grip, no checkbox, no bars). */
+
+.journal {
+  padding: 8px 8px 0;
+}
+
+/* Day header — the section-name language, but marking a day, not a section. */
+.journal-day {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 14px 8px 2px;
+}
+
+.journal-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: default;
+  transition: background 0.08s ease;
+}
+.journal-row:hover { background: var(--bg-hover); }
+
+/* Primary content, full strength — entries ARE the page. pre-wrap so a
+   multi-line capture keeps its shape; word-break for long unbroken lines. */
+.journal-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+/* The × inherits .item-action's hover-reveal shape; journal rows aren't
+   .item, so the reveal rides this row's own hover. Baseline-aligned with the
+   text (align-items above), not centered — a one-line row reads cleaner. */
+.journal-row .item-action { opacity: 0; align-self: center; }
+.journal-row:hover .item-action { opacity: 1; }
+
+/* The inline editor takes the text's exact slot so the row doesn't shift. */
+.journal-row .item-edit { flex: 1; min-width: 0; }
+
+.journal-empty {
+  color: var(--text-faint);
+  font-size: 13px;
+  padding: 14px 8px;
+}
+.journal-empty code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* The Quotes management group at the bottom of the Journal view. */
+.journal-quotes-head { margin-top: 20px; }
+
 
 /* ---- Command palette (⌘P) --------------------------------------------- */
 

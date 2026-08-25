@@ -8,10 +8,12 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, demoApi, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type HideDuration, type Item, type Project, type Section } from "./lib";
+import { api, demoApi, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type EntryKind, type HideDuration, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import Notes from "./Notes";
 import Goals from "./Goals";
+import Quotes from "./Quotes";
+import Journal from "./Journal";
 import SectionList from "./components/SectionList";
 import AnalyticsView from "./AnalyticsView";
 import CommandPalette, { type Command } from "./CommandPalette";
@@ -22,7 +24,7 @@ import MobileSyncSettings from "./MobileSyncSettings";
 import KeyboardHelp from "./KeyboardHelp";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, popoverOpen, scrollIntoViewEl } from "./focusNav";
 
-type View = "list" | "analytics";
+type View = "list" | "analytics" | "journal";
 
 // Labels for the per-section ⌘P toggles (Show/Hide Today, …).
 const SECTION_LABELS: Record<Section, string> = {
@@ -183,6 +185,16 @@ function DayApp() {
   const [agentTasksVisible, setAgentTasksVisible] = useState(
     () => localStorage.getItem("dayapp-agent-tasks-visible") !== "0",
   );
+  // ⌘P "Show/Hide Quotes" — the rotating ##q line under the header. Persisted
+  // like every layout surface; default on (it's the feature's face). Focus
+  // Mode hides it too — the lens is stricter than the default working view.
+  const [quotesVisible, setQuotesVisible] = useState(
+    () => localStorage.getItem("dayapp-quotes-visible") !== "0",
+  );
+  // The quote line's refresh trigger: bumped on demo-mode swaps and whenever
+  // a ##q capture lands (Notes' onEntryRouted) or a quote changes in the
+  // Journal view. Quotes.tsx re-fetches on it — no polling.
+  const [quotesVersion, setQuotesVersion] = useState(0);
   // ⌘F "@agent/my" — narrow the list to the agent's tasks or Faraz's own;
   // null = off. Session-only like the project filter (a search-shaped focus).
   const [agentFilter, setAgentFilter] = useState<"agent" | "mine" | null>(null);
@@ -298,6 +310,7 @@ function DayApp() {
         setDetailsOpenId(null);
         setProjectFilter(null);
         setDataEpoch((n) => n + 1);
+        setQuotesVersion((n) => n + 1);
         refresh();
         // The active timer lives in whichever db is now active (a real timer
         // left running stays honest across the whole demo session).
@@ -336,9 +349,10 @@ function DayApp() {
     localStorage.setItem("dayapp-hidden-note-priorities", JSON.stringify(hiddenNotePriorities));
     localStorage.setItem("dayapp-focus-mode", focusMode ? "1" : "0");
     localStorage.setItem("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
+    localStorage.setItem("dayapp-quotes-visible", quotesVisible ? "1" : "0");
     // Retired key from the single-tier "only" filter era — one-time cleanup.
     localStorage.removeItem("dayapp-priority");
-  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible]);
+  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quotesVisible]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it.
@@ -482,7 +496,17 @@ function DayApp() {
         setSectionsVisible({ today: true, daily: true, backlog: true });
         setNotesVisible(true);
         setGoalsVisible(false);
+        setQuotesVisible(false);
       },
+    },
+    {
+      id: "toggle-quotes",
+      // The ##q carousel line under the header — one quote at a time, rotating
+      // quietly. A layout surface like Goals: independent, persisted, and off
+      // in the default working view.
+      label: quotesVisible ? "Hide Quotes" : "Show Quotes",
+      hint: "the rotating quote line",
+      run: () => { setView("list"); setQuotesVisible((v) => !v); },
     },
     {
       id: "toggle-goals",
@@ -621,6 +645,7 @@ function DayApp() {
       },
     ]),
     { id: "view-analytics", label: "View Analytics", run: () => setView("analytics") },
+    { id: "view-journal", label: "View Journal", run: () => setView("journal") },
     {
       id: "keyboard-help",
       label: "Keyboard Shortcuts",
@@ -633,7 +658,7 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, demoMode]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quotesVisible, demoMode]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -683,6 +708,14 @@ function DayApp() {
     if (!name) return null;
     return (await handleCreateProject(name)).id;
   };
+
+  // Notes reports a ##j/##q capture it routed to the entries table. Only
+  // quotes matter here — they're the entry kind App surfaces (the rotating
+  // line), so its pool re-fetches; journal entries belong to the Journal
+  // view, which fetches fresh on every mount.
+  const handleEntryRouted = useCallback((kind: EntryKind) => {
+    if (kind === "quote") setQuotesVersion((n) => n + 1);
+  }, []);
 
   // Rename from the ⌘F `#` picker. Optimistic: every label (item rows, note
   // cards, goal rows) renders through this state, so the new name lands
@@ -1247,8 +1280,8 @@ function DayApp() {
             Demo mode outranks both: the masthead reads "Live @ Demo" in every
             view while the disposable demo db is active — the one unmissable
             (but calm) signal of which data is on screen. */}
-        <span className="title" key={demoMode ? "demo" : view === "analytics" ? "analytics" : liveAt}>
-          {demoMode ? "Live @ Demo" : view === "analytics" ? "Analytics" : `Live @ ${liveAt}`}
+        <span className="title" key={demoMode ? "demo" : view === "list" ? liveAt : view}>
+          {demoMode ? "Live @ Demo" : view === "analytics" ? "Analytics" : view === "journal" ? "Journal" : `Live @ ${liveAt}`}
         </span>
         <div className="header-right">
           {/* The running timer is always visible here — survives scrolling away
@@ -1294,6 +1327,17 @@ function DayApp() {
           >
             {view === "analytics" ? "✕" : "≡"}
           </button>
+          {/* ¶ — the Journal view's door (the written word; Analytics keeps
+              the numbers). Same per-button toggle as ≡: the active view's
+              button reads ✕ and returns to the list. */}
+          <button
+            className={`icon-btn ${view === "journal" ? "active" : ""}`}
+            onClick={() => setView(view === "journal" ? "list" : "journal")}
+            title={view === "journal" ? "Back to list" : "View journal"}
+            aria-label="Toggle journal"
+          >
+            {view === "journal" ? "✕" : "¶"}
+          </button>
         </div>
       </header>
 
@@ -1302,6 +1346,13 @@ function DayApp() {
       <div className="scroll">
         {view === "list" ? (
           <>
+            {/* The ##q carousel — one quote at a time under the header, above
+                Notes and everything: the identity zone's ambient line, rotating
+                every 2 minutes like the masthead brand. Self-contained
+                (Quotes.tsx); quotesVersion is its refresh trigger (demo swaps,
+                captures, edits). Hidden by Focus Mode — the lens is stricter
+                than the default working view. */}
+            {quotesVisible && !focusMode && <Quotes version={quotesVersion} />}
             {/* Goals — the identity layer at the very top: horizon statements
                 (timeless / long / short) that give the list its "why".
                 Self-contained like Notes, outside the DnD area; ⌘P → Show/Hide
@@ -1331,6 +1382,7 @@ function DayApp() {
                 hiddenPriorities={hiddenNotePriorities}
                 focusMode={focusMode}
                 onCreateProject={handleCreateProject}
+                onEntryRouted={handleEntryRouted}
               />
             )}
             {(hiddenPriorities.length > 0 || projectFilter !== null || agentFilter !== null) && allVisible.length === 0 && (
@@ -1372,8 +1424,13 @@ function DayApp() {
               onToggleTimer={handleToggleTimer}
             />
           </>
-        ) : (
+        ) : view === "analytics" ? (
           <AnalyticsView />
+        ) : (
+          /* The written journal's own page (##j entries + the Quotes group).
+             Self-contained like Notes; remounts on every view switch, so it
+             always renders fresh data. */
+          <Journal reloadEpoch={dataEpoch} onQuotesChanged={() => setQuotesVersion((n) => n + 1)} />
         )}
       </div>
 

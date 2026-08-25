@@ -5,6 +5,7 @@ mod dashboard;
 mod db;
 mod demo;
 mod goals;
+mod journal;
 mod notes;
 mod projects;
 mod sync;
@@ -224,6 +225,34 @@ async fn save_text_file(default_name: String, contents: String) -> Result<bool, 
         path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default()
     );
     Ok(true)
+}
+
+// ---- Entry commands (the ##j/##q typed capture) ---------------------------
+// The notes bus's other destination: a leading `##j`/`##q` token in the Notes
+// capture bar routes the line to the `entries` table (journal entries → the
+// Journal view, quotes → the rotating line). Content like notes — never
+// logged to `actions` (see journal.rs).
+
+#[tauri::command]
+async fn list_entries(db: State<'_, DbState>) -> Result<Vec<journal::Entry>, String> {
+    with_db(db, move |db| db.list_entries()).await
+}
+
+#[tauri::command]
+async fn add_entry(db: State<'_, DbState>, kind: String, text: String)
+    -> Result<journal::Entry, String>
+{
+    with_db(db, move |db| db.add_entry(&kind, &text)).await
+}
+
+#[tauri::command]
+async fn update_entry(db: State<'_, DbState>, id: String, text: String) -> Result<(), String> {
+    with_db(db, move |db| db.update_entry(&id, &text)).await
+}
+
+#[tauri::command]
+async fn delete_entry(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    with_db(db, move |db| db.delete_entry(&id)).await
 }
 
 // ---- Project commands ----------------------------------------------------
@@ -648,6 +677,7 @@ pub fn run() {
             list_actions, journal_dashboard, journal_day_detail,
             list_notes, create_note, update_note, set_note_priority, set_note_project, delete_note,
             hide_note, unhide_note, save_text_file,
+            list_entries, add_entry, update_entry, delete_entry,
             list_projects, create_project, rename_project, delete_project, set_item_project,
             set_reminder, set_item_priority, set_item_agent, set_item_details,
             list_goals, create_goal, edit_goal, set_goal_project,

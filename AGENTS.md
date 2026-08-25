@@ -176,6 +176,32 @@ cards carry no bars and no metadata chrome beyond the collapsed card's project l
 `dayapp --notes` reconstructs the token line after each body from the columns, so agents
 still read the axes off the text.
 
+### Entries (the ##j/##q typed capture — NOT logged)
+
+```
+entries  id, kind, text, day, created_at
+```
+
+The notes capture bar is the app's **typed capture bus**: a leading `##j` or `##q` token
+routes the line away from note creation and into the `entries` table — same input, a
+different *kind* of content, stored and displayed differently. The reserved `##` prefix
+cannot collide with the `#tag` project token (a lone `#` never starts a tag word).
+
+- `kind` ∈ `journal` (`##j`) | `quote` (`##q`). Parsed by `parseEntryCapture` in `lib.ts`
+  (leading position only — mid-line `##j` is prose; a bare token with no text is a no-op),
+  routed in `Notes.tsx`'s `handleCapture` ahead of `parseNoteCapture`.
+- `##j` → a **journal entry**: one line of reflection stamped with its day, rendered by the
+  **Journal view** (its own page — see UI/UX). The action log stays the journal of *what was
+  done*; this table is the journal of *what was thought*.
+- `##q` → a **quote**: rendered by the rotating quote line under the header and managed in
+  the Journal view's Quotes group.
+- `day` is the local date at capture; edits never move it (`created_at` keeps the within-day
+  order, ULID text order breaking same-second ties). Entries have **no organising axes at
+  all** — no priority, project, hide, or sort: just text and its day.
+- Entries are **content** (the notes/sessions call): never logged to `actions`, excluded
+  from the phone export, no CLI surface (the Journal view is their home). Logic lives in
+  `src-tauri/src/journal.rs`; the UI is `src/Journal.tsx` (view) + `src/Quotes.tsx` (line).
+
 ### Projects (a second organising axis — NOT logged)
 
 ```
@@ -443,8 +469,10 @@ dayapp/
 │   ├── focusNav.ts                 ← the grammar's DOM side: data-kb button dispatch, capture focus, nth note/goal, popover check
 │   ├── main.tsx                    ← React entry
 │   ├── index.css                   ← the dark theme + all component styles
-│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + token-caught tier groups)
+│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + token-caught tier groups + the ##j/##q capture router)
 │   ├── Goals.tsx                   ← goals: horizon groups + capture + achieve (own state; between Notes and the sections)
+│   ├── Journal.tsx                 ← the ##j page: day-grouped entries + capture + inline edit/delete + the Quotes management group (self-contained, the Notes/Analytics pattern)
+│   ├── Quotes.tsx                  ← the ##q line: one rotating quote under the header, masthead-rotation pattern (self-contained fetch; `version` prop is the refresh trigger)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
@@ -464,6 +492,7 @@ dayapp/
     │   ├── lib.rs                  ← Tauri commands + setup (first-run demo, sweeps, reminders, logging plugin) + self_update
     │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, reminders, completions + Db struct (conn swap, launch_sweeps)
     │   ├── notes.rs                ← notes DB logic + setters + the stored-footer migration (methods on Db)
+    │   ├── journal.rs              ← the ##j/##q typed capture: entries table (journal lines + quotes), day-stamped (methods on Db)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
     │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
     │   ├── dashboard.rs            ← the analytics derivation: done/missed per day, daily-miss replay, streak, project/priority splits, heatmap window (method on Db)
@@ -472,7 +501,7 @@ dayapp/
     │   ├── demo.rs                 ← demo mode: dayapp-demo.db open/seed + enter/exit/reset swap under the conn lock
     │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--notes/--projects/--add/--complete/--start/--move/--details/--goals/--deploy/--sync-pull-peek (+ global --demo)
     │   └── main.rs                 ← binary entrypoint (GUI, or cli::run when given flags)
-    ├── schema.sql                  ← items + actions + meta + notes + projects + goals + sessions
+    ├── schema.sql                  ← items + actions + meta + notes + projects + goals + sessions + entries
     ├── demo.sql                    ← the demo seed (relative timestamps; embedded via include_str!, never commit the .db)
     ├── Cargo.toml
     ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target
@@ -491,6 +520,8 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 |---|---|---|
 | `App.tsx` | state (incl. the active timer + the one focused thing), effects, the focus grammar key handler, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
 | `Goals.tsx` | goals state + capture + horizon groups + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
+| `Quotes.tsx` | the ##q line: quote pool fetch, 2-min rotation (no consecutive repeats), fade-in render | capture (Notes' router adds quotes), quote editing (Journal's Quotes group) |
+| `Journal.tsx` | the Journal view: entries state, day groups, capture (plain = journal entry), inline edit/delete, Quotes management group (self-contained; remounts per view switch) | the quote line (Quotes.tsx), analytics (AnalyticsView) |
 | `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + capture input + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
@@ -516,10 +547,10 @@ separately" bug.
 .app       display:flex column; height:100%; overflow:hidden   ← the shell, never scrolls
   .header  flex-shrink:0                                       ← pinned
   .scroll   flex:1; overflow-y:auto; min-height:0              ← THE ONE scroll container
-    Goals / Notes / SectionList / AnalyticsView                  ← in-flow, no own scroll
+    Quotes / Goals / Notes / SectionList / AnalyticsView / Journal ← in-flow, no own scroll
 ```
 
-`.notes`, `.goals`, `.sections`, `.analytics`, `.hidden-view` must **not** set `overflow`,
+`.notes`, `.goals`, `.sections`, `.analytics`, `.journal`, `.hidden-view` must **not** set `overflow`,
 `max-height`, `flex: 1`, or `min-height: 0` — they are plain in-flow blocks
 inside `.scroll`. If you ever need a region to scroll independently, you are
 changing the architecture: update this section and justify why.
@@ -574,9 +605,10 @@ keyboard-first.** Every choice below is intentional.
 5. **One accent colour.** `#7b8cff` means "active/selected/completed/done-today." Do not
    introduce a second accent.
 6. **Dark, always dark.** No light theme, no `prefers-color-scheme` switching. `color-scheme: dark`.
-7. **Identity first, then capture.** Goals — the identity layer — render at the very
-   top; Notes, the lowest-friction capture surface, right below. There is always
-   a ready textarea.
+7. **Identity first, then capture.** The rotating quote line (the `##q` carousel)
+   sits directly under the header; Goals — the identity layer — at the very top of
+   the content under it; Notes, the lowest-friction capture surface, right below.
+   There is always a ready textarea.
 
 ### Colour tokens (from `index.css` — use these, do not hardcode hex)
 
@@ -595,9 +627,10 @@ keyboard-first.** Every choice below is intentional.
 
 Typography: `-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif`.
 Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spacing.
-The one serif surface is the centered header masthead (the "Live @ Faraz" brand, or
-"Analytics" in the analytics view): `ui-serif` (New York) italic at 14px, Didot/Georgia
-fallbacks. The brand rotates like a station ident — "Faraz" is home, and every 2
+The serif surfaces are the centered header masthead (the "Live @ Faraz" brand, or
+"Analytics"/"Journal" in those views) and the rotating quote line: `ui-serif` (New York)
+italic, Didot/Georgia fallbacks (14px for the masthead, 13px for the quote). The brand
+rotates like a station ident — "Faraz" is home, and every 2
 minutes it steps out to a random word from `MASTHEAD_THEMES` in `App.tsx`
 (growth/money/journey/learn, never the same one twice in a row) and back, each swap
 fading in (`title-in`). It is always rendered, even while a timer runs — the timer chip
@@ -709,7 +742,7 @@ Do not reintroduce bare single-letter verbs that collide with the address
 prefixes `n`/`t`/`d`/`b`/`g`.
 
 **Show/Hide toggles (⌘P):** every layout surface is an independent, persisted toggle
-whose label reflects its state — `Goals`, `Notes`, `Today`/`Daily`/`Backlog` sections,
+whose label reflects its state — `Goals`, `Notes`, `Quotes` (the ##q line), `Today`/`Daily`/`Backlog` sections,
 `Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
 dimmed, ↺/× actions), the per-tier `Priority 1/2/3 Tasks` toggles, the notes' own
 `Priority 1/2/3 Notes` toggles (independent of the task tiers, like Hidden Notes ≠
@@ -733,8 +766,8 @@ map back to full-list space in `handleMoveItem`). The set persists across launch
 notes' tier groups — independent of the task tiers.
 
 **Focus Mode (⌘P):** `Enter/Exit Focus Mode` is a **lens**, not a batch of toggle
-mutations — P1 notes only, Today, Daily, and P1 Backlog only (Goals hidden too: the lens
-is stricter than the default working view). It composes with the filters/toggles in the
+mutations — P1 notes only, Today, Daily, and P1 Backlog only (Goals and the quote line
+hidden too: the lens is stricter than the default working view). It composes with the filters/toggles in the
 same `displayItems`/Notes pipelines and never mutates them: exiting restores whatever
 they were. Persisted (`dayapp-focus-mode`); Show Default View exits it. A capture that
 doesn't match the lens (an unmarked note, a non-P1 backlog row) is created but not
@@ -764,8 +797,8 @@ same `displayItems` pipeline.
 **Show Default View is the universal reset:** hidden entries excluded, priority tiers
 (tasks + notes), project and agent filters cleared, agent tasks shown, focus mode off,
 all three sections + Notes shown —
-and Goals hidden (the default working view is the plain task list). One command always
-restores it.
+and Goals + Quotes hidden (the default working view is the plain task list). One command
+always restores it.
 
 The keyboard handler **ignores events when an `<input>`/`<textarea>` is focused** so typing
 into Notes or edit fields isn't hijacked.
@@ -841,6 +874,38 @@ into Notes or edit fields isn't hijacked.
   `ProjectMenu` items use. ⌘P → Show/Hide Goals toggles the whole section (persisted).
   Every mutation is logged to `actions` (goal_* values) — see the data model.
 
+**Quotes line (the ##q carousel):**
+- One quote at a time in a single centered serif-italic line directly under the header —
+  above Notes and everything, the first block in `.scroll`. Rotates every 2 minutes
+  (never the same quote twice in a row; each swap fades in through the masthead's
+  `title-in` keyframes — the brand rotation's rules, reused). Ellipsized when long; the
+  full quote rides in the tooltip. Renders **nothing at all** while the pool is empty —
+  no empty-state chrome.
+- Source: `##q` captures (the notes bus) — never projects, never logged. ⌘P →
+  Show/Hide Quotes toggles it (persisted, default on); Focus Mode hides it too, and
+  Show Default View turns it off (the default working view is the plain task list).
+  Component is `Quotes.tsx` (self-contained fetch + rotation; App bumps its `version`
+  prop on demo swaps, `##q` captures, and quote edits in the Journal view).
+
+**Journal view (⌘P → View Journal, or the header `¶`):**
+- The written journal's own page — Analytics replaced the old journal view, so `##j`
+  entries get this one. The masthead reads `Journal`; the header button is a per-view
+  toggle like `≡` (the active view's button reads ✕ and returns to the list).
+- **Days ledger, prose edition**: days newest-first under uppercase day headers
+  ("Today" / "Mon, Aug 24"), entries in capture order within a day. Rows are the
+  `.item` language minus every axis an entry lacks (no grip/checkbox/bars): single-click
+  edits inline (the shared `EditInput`), hover reveals × delete. Empty commit is a
+  no-op; edits never move an entry's day.
+- **Capture at the top is the bus with a default**: plain lines land as today's journal
+  entries; a leading `##q` still routes to quotes from here. No placeholder — the
+  section-input language.
+- **Quotes group at the bottom** (when any exist): the quote pool in management order
+  (newest first), same row language — the only place quotes are read in full, edited,
+  or pruned.
+- Mouse-first like Analytics: no focus-grammar wiring (free-mode `j`/`k` scrolling works
+  globally). Self-contained (`Journal.tsx`, the Notes pattern): remounts on every view
+  switch so it always renders fresh data; `reloadEpoch` covers demo-mode swaps.
+
 **Analytics view (⌘P → View Analytics, or the header `≡`):**
 - The analytics page is **synthesis, never the log**: it answers questions over the
   append-only `actions` history, it does not enumerate events. The raw action log's
@@ -906,7 +971,11 @@ into Notes or edit fields isn't hijacked.
   steps only, no time stats in the stats row (the timer's payoff stays the per-row
   cumulative + the per-day ledger total; `--journal` keeps the per-task breakdown).
   Don't grow it toward an analytics-surface product.
-- No journal surface / blank-page daily note. The log IS the journal.
+- No blank-page daily-note journaling surface. The activity journal IS the `actions` log
+  (Analytics synthesizes it, `--journal` prints it); the *written* journal is `##j`
+  entries captured through the notes bus and rendered by the Journal view — never a
+  dedicated editor, prompts, or a per-day template. Don't grow the Journal view toward a
+  journaling product.
 - No agent writes (read-only bridge, planned Phase 3).
 - Do not log Notes, Projects, goal-project assignment, reminder-setting, or timer sessions
   to `actions`.

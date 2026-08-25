@@ -50,6 +50,27 @@ textual home is `dayapp --journal`: the same summary block, then every action gr
 by day. Time appears only as the ledger's per-day total (and per-task in an expanded
 day) when any was tracked — sessions stay a separate dimension, not dashboard stats.
 
+## Journal & quotes (##j / ##q)
+
+The notes capture bar is a **typed bus**: plain text becomes a note, and a leading token
+reroutes the line into a different kind of content — stored in its own table, displayed
+on its own surface:
+
+- `##j` — a **journal entry**. One line of reflection, stamped with its day. The `¶` view
+  (top-right, or ⌘P → View Journal) renders them as days newest-first, entries in capture
+  order — the written journal, next to Analytics' computed one. Its capture line adds
+  entries directly (plain text = today's entry; `##q` still routes to quotes from there),
+  single-click edits inline, hover reveals delete.
+- `##q` — a **quote**. It joins the pool behind the rotating quote line directly under the
+  header: one quote at a time, changing every 2 minutes, never the same one twice in a
+  row. ⌘P → Show/Hide Quotes toggles the line (Focus Mode hides it too, and Show Default
+  View turns it off). The full pool is managed in the Journal view's Quotes group at the
+  bottom.
+
+The `##` prefix is reserved so it can't collide with the `#tag` project token. Entries
+have no priority/project/hide axes — just text and its day — and like notes they're
+content, never logged to `actions` and never exported to the phone.
+
 ## Stack
 
 - **Tauri 2** (Rust backend + native macOS window)
@@ -97,13 +118,13 @@ Your data in `~/Library/.../dayapp.db` is never touched.
 
 VS Code / Linear–style: press **⌘P** anywhere, type to filter, ↑/↓ to move, Enter to run.
 Currently: Show Default View (the universal reset), the Show/Hide toggles — Goals, Notes,
-Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3 Tasks, Priority 1/2/3 Notes,
+Quotes, Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3 Tasks, Priority 1/2/3 Notes,
 Agent Tasks — **Enter/Exit Focus Mode** (the deep-work lens: P1 notes + Today + Daily +
 P1 Backlog only),
 Enter/Exit Demo Mode + Reset Demo Data, the mobile sync commands (Deploy Task List Now /
-Pull Captures Now / Configure Sync…), View Analytics, Keyboard Shortcuts (the focus-grammar
-reference card), and Update DayApp. Trivially extensible — add a command to the registry
-in `App.tsx`.
+Pull Captures Now / Configure Sync…), View Analytics, View Journal, Keyboard Shortcuts
+(the focus-grammar reference card), and Update DayApp. Trivially extensible — add a
+command to the registry in `App.tsx`.
 
 ## Where things live
 
@@ -115,6 +136,8 @@ dayapp/
 │   ├── focusNav.ts          ← the grammar's DOM side: digit dispatch to data-kb buttons
 │   ├── Notes.tsx            ← free-form notes (own state + API; ⌘F-in-note find, ⬇ .txt export)
 │   ├── Goals.tsx            ← goals: horizon groups + capture + achieve (own state)
+│   ├── Journal.tsx          ← the ##j view: day-grouped entries + Quotes management group
+│   ├── Quotes.tsx           ← the ##q line: one rotating quote under the header
 │   ├── notesApi.ts          ← notes invoke wrappers
 │   ├── log.ts               ← prefixed console logger (webview side)
 │   ├── HideMenu.tsx         ← shared ◐ hide-duration popover
@@ -134,6 +157,7 @@ dayapp/
     │   ├── lib.rs           ← Tauri commands + setup (sweeps, reminders, sync loop on launch)
     │   ├── db.rs            ← DB layer: items, actions, sweep, hide, reminders, completions
     │   ├── notes.rs         ← notes DB logic
+    │   ├── journal.rs       ← the ##j/##q typed capture: entries table (journal lines + quotes)
     │   ├── projects.rs      ← projects DB logic + item.project_id assignment
     │   ├── goals.rs         ← goals DB logic: horizons, achieve, project link
     │   ├── timers.rs        ← timer sessions: start/stop/discard/totals/per-day
