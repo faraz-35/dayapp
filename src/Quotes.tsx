@@ -1,8 +1,9 @@
-// Quotes — the ##q carousel line. A single calm line of serif italic directly
+// Quotes — the ##q carousel line. A single calm block of serif italic directly
 // under the header, above Notes and everything else: one quote at a time,
 // rotating every 2 minutes (never the same one twice in a row — the masthead
 // brand rotation's rule, same cadence), each swap fading in through the same
-// `title-in` keyframes. The full quote rides in the tooltip when it ellipsizes.
+// `title-in` keyframes. The quote wraps — ~75% width, centered, as many lines
+// as it needs (never ellipsized).
 //
 // "Carousel" in the minimal sense Faraz specified: different quotes appear at
 // different times. No dots, no controls, no chrome — the line simply exists
@@ -68,7 +69,7 @@ export default function Quotes({ version = 0 }: { version?: number }) {
   if (current == null) return null;
 
   return (
-    <div className="quote-line" title={current}>
+    <div className="quote-line">
       {/* Keyed so every rotation remounts the span and fades the new quote
           in — the masthead's quiet-ident trick, reused. */}
       <span className="quote-text" key={current}>{current}</span>

@@ -1411,26 +1411,29 @@ button {
 /* ---- Quotes (the ##q line under the header) ------------------------------ */
 /* One quote at a time, rotating every 2 minutes — never the same one twice in
    a row, each swap fading in through the masthead's title-in keyframes. The
-   line renders nothing at all while the pool is empty; the full quote rides
-   in the tooltip when it ellipsizes. Display text, so --text (bright) — the
-   serif voice is the masthead's. */
+   line renders nothing at all while the pool is empty. Display text, so
+   --text (bright) — the serif voice is the masthead's. The quote wraps: it
+   occupies ~75% of the width, centered, multi-line as long as it needs to be
+   (never ellipsized — clipping a quote mid-sentence defeats it), with 12px
+   of vertical breathing room on either side. */
 
 .quote-line {
   display: flex;
   justify-content: center;
-  padding: 10px 20px 0;   /* first block on the page — carries the top padding */
+  padding: 4px 16px 0;   /* first block on the page — carries the top padding */
   min-width: 0;
 }
 
 .quote-text {
+  width: 75%;
+  margin: 12px 0;
   font-family: ui-serif, "New York", Didot, Georgia, serif;
   font-style: italic;
   font-size: 13px;
+  line-height: 1.5;
   color: var(--text);
   text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
   animation: title-in 0.35s ease;
 }
 
