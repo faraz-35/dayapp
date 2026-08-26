@@ -73,6 +73,10 @@ on its own surface:
   shows the same quote twice in a row. The entry hides while the pool is empty. That modal
   is a quote's only surface — there's no management list anywhere (yet); `##q` captures
   just join the pool.
+- The modal also doubles as a **screensaver**: after 2 minutes with no input while the
+  app is focused — reading and thinking count as no input; time spent in another app
+  doesn't count toward it — a quote appears and stays until any key or click. ⌘P →
+  **Enable/Disable Quote Screensaver** turns it off (default on; hides with an empty pool).
 
 The `##` prefix is reserved so it can't collide with the `#tag` project token. Entries
 have no priority/project/hide axes — just text and its day — and like notes they're
@@ -129,7 +133,8 @@ Today / Daily / Backlog, Hidden Tasks, Hidden Notes, Priority 1/2/3 Tasks, Prior
 Agent Tasks — **Enter/Exit Focus Mode** (the deep-work lens: P1 notes + Today + Daily +
 P1 Backlog only),
 Enter/Exit Demo Mode + Reset Demo Data, the mobile sync commands (Deploy Task List Now /
-Pull Captures Now / Configure Sync…), View Analytics, View Journal, Show a Quote,
+Pull Captures Now / Configure Sync…), View Analytics, View Journal, Show a Quote +
+Enable/Disable Quote Screensaver,
 Keyboard Shortcuts
 (the focus-grammar reference card), and Update DayApp. Trivially extensible — add a
 command to the registry in `App.tsx`.
@@ -145,7 +150,7 @@ dayapp/
 │   ├── Notes.tsx            ← free-form notes (own state + API; ⌘F-in-note find, ⬇ .txt export)
 │   ├── Goals.tsx            ← goals: horizon groups + capture + achieve (own state)
 │   ├── Journal.tsx          ← the ##j view: day-grouped entries (quotes never render here)
-│   ├── Quotes.tsx           ← the ##q moment: one quote on a dim backdrop, ⌘P-summoned
+│   ├── Quotes.tsx           ← the ##q moment: one quote on a dim backdrop, ⌘P-summoned or idle-screensavered
 │   ├── notesApi.ts          ← notes invoke wrappers
 │   ├── log.ts               ← prefixed console logger (webview side)
 │   ├── HideMenu.tsx         ← shared ◐ hide-duration popover

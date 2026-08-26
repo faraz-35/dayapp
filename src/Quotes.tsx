@@ -5,29 +5,36 @@
 // read; Faraz's call, 2026-08-26), so now a quote appears only when asked
 // for, holds the screen for a quiet moment, and goes.
 //
+// The exception that proves the rule: the screensaver. Two minutes of
+// focused stillness and App's idle watcher summons this same modal unprompted
+// — the one sanctioned auto-invocation, because it arrives only in *absence*
+// (never interrupts) and lingers until input instead of LINGER_MS (a
+// screensaver that dismisses itself into blank idleness defeats itself).
+//
 // Dismissal is the point: any key or click ends it (App's global handler
 // owns that — the modal has no inputs, so every key means "done thinking"),
-// or LINGER_MS passes and it dismisses itself. The pick never repeats the
-// last-shown quote (the masthead brand rotation's rule, reused).
+// or LINGER_MS passes on a ⌘P summon and it dismisses itself. The pick never
+// repeats the last-shown quote (the masthead brand rotation's rule, reused).
 //
 // Self-contained like Notes/Goals: App owns only the open boolean (the
 // floating-surface gate in its key handler needs it) and the refresh
 // trigger — `version` bumps on demo-mode swaps and whenever a ##q capture
 // lands, so the pool is always current without polling. The pool size rides
-// `onCount` up to App so the ⌘P entry can hide while there's nothing to
-// summon (quotes have no management surface — no pool, no entry).
+// `onCount` up to App so the ⌘P entries can hide while there's nothing to
+// summon (quotes have no management surface — no pool, no entries).
 
 import { useEffect, useRef, useState } from "react";
 import { entriesApi, type Entry } from "./lib";
 import { log } from "./log";
 
-// How long the moment holds the screen before dismissing itself. A default,
-// not a rule — any key or click ends it sooner.
+// How long a summoned moment holds the screen before dismissing itself. A
+// default, not a rule — any key or click ends it sooner.
 const LINGER_MS = 45_000;
 
 export default function Quotes({
   version = 0,
   open = false,
+  lingerForever = false,
   onClose,
   onCount,
 }: {
@@ -35,8 +42,11 @@ export default function Quotes({
   version?: number;
   /** App's render flag — the modal exists only while true. */
   open?: boolean;
+  /** Screensaver opens never end themselves — the moment lasts until a key
+      or click, not a timer. ⌘P summons keep the LINGER_MS self-dismissal. */
+  lingerForever?: boolean;
   onClose: () => void;
-  /** Reports the pool size up so App can hide the ⌘P entry when empty. */
+  /** Reports the pool size up so App can hide the ⌘P entries when empty. */
   onCount?: (n: number) => void;
 }) {
   const [quotes, setQuotes] = useState<Entry[]>([]);
@@ -67,13 +77,16 @@ export default function Quotes({
     setCurrent(pick.text);
   }, [open, quotes]);
 
-  // The moment ends itself after LINGER_MS — an unattended modal shouldn't
-  // hold the screen forever. Key/click dismissal comes from App's handler.
+  // A ⌘P summon ends itself after LINGER_MS — an unattended modal shouldn't
+  // hold the screen forever. The screensaver's open is the opposite case: it
+  // arrived *because* nothing is happening, so it outlives the timer and
+  // waits for input (App's dismissal handler). Key/click dismissal comes
+  // from App's handler either way.
   useEffect(() => {
-    if (!open) return;
+    if (!open || lingerForever) return;
     const id = setTimeout(onClose, LINGER_MS);
     return () => clearTimeout(id);
-  }, [open, onClose]);
+  }, [open, lingerForever, onClose]);
 
   if (!open || current == null) return null;
 
