@@ -1489,6 +1489,16 @@ button {
   -webkit-app-region: no-drag;
 }
 
+/* The screensaver twin: it arrives in absence and holds the screen until
+   input, so it gets total quiet — a near-black wash plus a blur of whatever
+   sat beneath. Static filter only: same no-animation-on-the-backdrop rule
+   as above. */
+.quote-backdrop.quote-screensaver {
+  background: rgba(0, 0, 0, 0.8);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
 .quote-text {
   width: 75%;
   font-family: ui-serif, "New York", Didot, Georgia, serif;

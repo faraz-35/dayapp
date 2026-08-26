@@ -90,8 +90,14 @@ export default function Quotes({
 
   if (!open || current == null) return null;
 
+  // The screensaver opens into its own backdrop twin — darker and blurred,
+  // since its job is total quiet rather than a pause between tasks (see
+  // .quote-backdrop.quote-screensaver in index.css).
   return (
-    <div className="quote-backdrop" onClick={onClose}>
+    <div
+      className={`quote-backdrop${lingerForever ? " quote-screensaver" : ""}`}
+      onClick={onClose}
+    >
       {/* Keyed so every summon remounts the span and fades the quote in —
           the masthead's quiet-ident trick, reused. */}
       <span className="quote-text" key={current}>{current}</span>

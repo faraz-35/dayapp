@@ -886,6 +886,10 @@ into Notes or edit fields isn't hijacked.
   0.4 — the dim *is* the pause) — a single centered serif-italic line, ~75% width,
   multi-line wrap (never ellipsized), no card, no close button, no countdown chrome.
   The backdrop is what creates the "think about this" moment; an inline line can't.
+  **Screensaver opens get the darker, blurred twin** — `.quote-screensaver`
+  (`rgba(0,0,0,0.8)` + `backdrop-filter: blur(20px)`, on when `lingerForever`): an
+  idle-born moment should erase what sat beneath, not merely dim it. Static filter
+  only — same never-animate-the-fixed-backdrop rule as below.
 - **Summoned, never ambient.** The rotating quote line under the header (shipped
   2026-08-25, retired 2026-08-26) failed because a quote always in view becomes
   wallpaper — rarity plus deliberate invocation is what gives a quote weight. An
