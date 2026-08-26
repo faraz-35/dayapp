@@ -248,7 +248,7 @@ function DayApp() {
     toastTimer.current = window.setTimeout(() => setToast(null), 2600);
   }, []);
 
-  // Capture a db snapshot (⌘B / ⌘P → Backups: Capture Now). The backend
+  // Capture a db snapshot (⌘P → Backups: Capture Now). The backend
   // refuses in demo mode — backups protect the real db only.
   const captureBackup = useCallback(() => {
     backupApi.capture()
@@ -743,7 +743,7 @@ function DayApp() {
       {
         id: "backup-capture",
         label: "Backups: Capture Now",
-        hint: "snapshot the db (⌘B)",
+        hint: "snapshot the db",
         run: captureBackup,
       },
       {
@@ -767,13 +767,13 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, captureBackup, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quoteScreensaver, quoteCount, demoMode]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quoteScreensaver, quoteCount, demoMode]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
-  // (⌘0 resets); ⌘B captures a db backup. All intercept globally (they're
-  // modifier combos, so they don't interfere with typing in a field). Opening
-  // the palette or search also closes the quote modal — it sits above both in
-  // z-order, so leaving it open would cover the surface being summoned.
+  // (⌘0 resets). All intercept globally (they're modifier combos, so they
+  // don't interfere with typing in a field). Opening the palette or search
+  // also closes the quote modal — it sits above both in z-order, so leaving
+  // it open would cover the surface being summoned.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -794,14 +794,11 @@ function DayApp() {
       } else if (e.key === "0") {
         e.preventDefault();
         setZoom(1);
-      } else if (e.key === "b") {
-        e.preventDefault();
-        captureBackup();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [captureBackup]);
+  }, []);
 
   // ---- Mutations --------------------------------------------------------
 

@@ -457,8 +457,8 @@ async fn sync_status(db: State<'_, DbState>) -> Result<SyncStatus, String> {
 }
 
 // ---- Backup commands -------------------------------------------------------
-// Point-in-time snapshots of the real db (see backup.rs): ⌘B / ⌘P capture,
-// reveal opens the backups folder in Finder. Capture-only — no restore surface.
+// Point-in-time snapshots of the real db (see backup.rs): ⌘P capture, reveal
+// opens the backups folder in Finder. Capture-only — no restore surface.
 
 #[tauri::command]
 async fn capture_backup(db: State<'_, DbState>) -> Result<String, String> {

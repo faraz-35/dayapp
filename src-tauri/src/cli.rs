@@ -116,7 +116,7 @@ fn usage() -> i32 {
 
 /// Snapshot the real db into backups/ (see backup.rs). Refuses while --demo is
 /// active. Prints the new file's path so a remote session can scp it off the
-/// machine — the GUI-side capture (⌘B) is this same code path.
+/// machine — the GUI's ⌘P capture is this same code path.
 fn backup_cmd(db: &Db) -> anyhow::Result<()> {
     let path = crate::backup::capture(db)?;
     println!("{}", path.display());

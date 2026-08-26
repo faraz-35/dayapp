@@ -180,7 +180,7 @@ dayapp/
     │   ├── projects.rs      ← projects DB logic + item.project_id assignment
     │   ├── goals.rs         ← goals DB logic: horizons, achieve, project link
     │   ├── timers.rs        ← timer sessions: start/stop/discard/totals/per-day
-    │   ├── backup.rs        ← db backups: VACUUM INTO snapshot into backups/ (⌘B / --backup)
+    │   ├── backup.rs        ← db backups: VACUUM INTO snapshot into backups/ (⌘P / --backup)
     │   ├── sync.rs          ← mobile sync: tasks.json export/deploy + capture inbox pull
     │   ├── demo.rs          ← demo mode: dayapp-demo.db swap under the connection lock
     │   ├── cli.rs           ← headless CLI (--list/--task/--search/--journal/--notes/--projects/
@@ -218,7 +218,6 @@ Shortcuts** shows the reference card in-app.
 | drag handle (⠿) | drag between sections |
 | `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
 | `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` switches it to the project filter, a leading `@` to the agent/my filter. While you're editing a note, it's a find bar **inside that note** instead |
-| `⌘B` | capture a db backup into `backups/` beside the db (⌘P → Backups: Reveal Folder opens it in Finder; refuses in demo mode) |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets; persists across launches) |
 
 The first key of an address (`n`/`t`/`d`/`b`/`g`) clears focus, so a digit

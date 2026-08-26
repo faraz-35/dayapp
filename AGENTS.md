@@ -422,7 +422,7 @@ logged to `actions` — the Analytics view surfaces time as a separate dimension
 
 ### Backups (point-in-time snapshots — capture-only)
 
-⌘B (or ⌘P → Backups: Capture Now, or `dayapp --backup`) snapshots the real db into
+⌘P → Backups: Capture Now (or `dayapp --backup`) snapshots the real db into
 `backups/` beside it as `dayapp-YYYYMMDD-HHMMSS.db`. One deliberate capture per file —
 nothing runs automatically, and there is deliberately no retention pruning (deleting
 backups unprompted is worse than keeping them; the db is small). Mechanism: SQLite's
@@ -523,7 +523,7 @@ dayapp/
     │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
     │   ├── dashboard.rs            ← the analytics derivation: done/missed per day, daily-miss replay, streak, project/priority splits, heatmap window (method on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
-    │   ├── backup.rs               ← db backups: VACUUM INTO snapshot into backups/ + reveal (⌘B / --backup; demo-gated)
+    │   ├── backup.rs               ← db backups: VACUUM INTO snapshot into backups/ + reveal (--backup; demo-gated)
     │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API; demo-gated)
     │   ├── demo.rs                 ← demo mode: dayapp-demo.db open/seed + enter/exit/reset swap under the conn lock
     │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--notes/--projects/--add/--complete/--start/--move/--details/--goals/--backup/--deploy/--sync-pull-peek (+ global --demo)
@@ -766,7 +766,6 @@ its digit share the one real onClick handler).
 | single-click | task: select + enter edit mode (caret at end, not full-select); note/goal: focus it |
 | `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, keyboard help, …) |
 | `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` flips it to the project filter picker, a leading `@` to the agent/my picker. **While a note's textarea (or its find bar) has focus, ⌘F is note-local instead** — see Notes below |
-| `⌘B` | capture a db backup into `backups/` beside the db (⌘P → Reveal Folder opens it in Finder; refuses in demo mode) |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets) — CSS `zoom` on `<html>`, persisted in localStorage (`dayapp-zoom`); scales every px dimension together, so the design's proportions hold at any size |
 
 The single-key `t` (timer), `d` (details), and `⌫` (delete) verbs are retired

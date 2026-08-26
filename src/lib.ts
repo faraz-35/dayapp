@@ -385,7 +385,7 @@ export const demoApi = {
 };
 
 // ---- Backups ------------------------------------------------------------------
-// Point-in-time snapshots of the real db (⌘B / ⌘P → Backups: Capture Now /
+// Point-in-time snapshots of the real db (⌘P → Backups: Capture Now /
 // dayapp --backup). Capture-only — no restore surface yet; files land in
 // backups/ beside the db. Gated in demo mode like mobile sync.
 

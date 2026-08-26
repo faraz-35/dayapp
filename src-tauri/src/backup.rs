@@ -1,4 +1,4 @@
-// Point-in-time backups of the real db (⌘B / ⌘P → Backups: Capture Now /
+// Point-in-time backups of the real db (⌘P → Backups: Capture Now /
 // dayapp --backup). Capture-only by design — there is no restore surface yet;
 // restoring means quitting the app and swapping the file by hand.
 //
