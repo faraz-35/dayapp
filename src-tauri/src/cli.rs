@@ -14,6 +14,7 @@
 //   dayapp --move "query" --to today        move between sections (appends; logs moved)
 //   dayapp --details "query" "body"         replace the details body ("" clears; not logged)
 //   dayapp --goals                          print goals grouped by horizon
+//   dayapp --backup                         snapshot the db into backups/ (prints the path)
 //   dayapp --deploy                         force-push tasks.json now (read-only)
 //   dayapp --sync-pull-peek                 print the phone's pending captures
 //   dayapp --demo <any of the above>        run against the demo db instead
@@ -70,6 +71,7 @@ pub fn run(args: Vec<String>) -> i32 {
         "--notes" => notes(&db, &rest),
         "--projects" => projects(&db),
         "--goals" => goals(&db),
+        "--backup" => backup_cmd(&db),
         "--deploy" => sync::deploy(&db, true).map(|o| println!("{}", o.describe())),
         "--sync-pull-peek" => peek(&db),
         "--help" | "-h" => {
@@ -97,6 +99,7 @@ usage: dayapp [--demo] <command> [args]
   --notes [query] [--hidden]     notes, optionally filtered by body substring
   --projects                     projects as #tags
   --goals                        goals grouped by horizon
+  --backup                       snapshot the db into backups/ (prints the path)
   --add \"text\" [--to section]   create (today|daily|backlog; default backlog)
   --complete <query>             complete (stops its timer first)
   --start <query>                start the single active timer
@@ -109,6 +112,15 @@ usage: dayapp [--demo] <command> [args]
 fn usage() -> i32 {
     eprintln!("{USAGE}");
     1
+}
+
+/// Snapshot the real db into backups/ (see backup.rs). Refuses while --demo is
+/// active. Prints the new file's path so a remote session can scp it off the
+/// machine — the GUI-side capture (⌘B) is this same code path.
+fn backup_cmd(db: &Db) -> anyhow::Result<()> {
+    let path = crate::backup::capture(db)?;
+    println!("{}", path.display());
+    Ok(())
 }
 
 /// Print goals grouped by horizon, the way the GUI shows them (timeless →

@@ -51,6 +51,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
 
         <div className="help-section">Everywhere</div>
         <Row keys={["⌘P", "⌘F"]}>command palette · search (⌘F while editing a note: find in that note)</Row>
+        <Row keys={["⌘B"]}>capture a db backup — snapshot lands in backups/ (⌘P reveals the folder)</Row>
         <Row keys={["⌘+", "⌘-", "⌘0"]}>zoom in / out / reset</Row>
       </div>
     </div>

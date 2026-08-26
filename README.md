@@ -180,10 +180,11 @@ dayapp/
     │   ├── projects.rs      ← projects DB logic + item.project_id assignment
     │   ├── goals.rs         ← goals DB logic: horizons, achieve, project link
     │   ├── timers.rs        ← timer sessions: start/stop/discard/totals/per-day
+    │   ├── backup.rs        ← db backups: VACUUM INTO snapshot into backups/ (⌘B / --backup)
     │   ├── sync.rs          ← mobile sync: tasks.json export/deploy + capture inbox pull
     │   ├── demo.rs          ← demo mode: dayapp-demo.db swap under the connection lock
     │   ├── cli.rs           ← headless CLI (--list/--task/--search/--journal/--notes/--projects/
-    │   │                      --add/--complete/--start/--move/--details/--goals/--deploy/--sync-pull-peek)
+    │   │                      --add/--complete/--start/--move/--details/--goals/--backup/--deploy/--sync-pull-peek)
     │   └── main.rs          ← binary entrypoint (GUI, or CLI when given flags)
     ├── schema.sql           ← items + actions + meta + notes + projects + goals + sessions
     ├── demo.sql             ← the demo seed (relative timestamps, embedded in the binary)
@@ -217,6 +218,7 @@ Shortcuts** shows the reference card in-app.
 | drag handle (⠿) | drag between sections |
 | `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |
 | `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` switches it to the project filter, a leading `@` to the agent/my filter. While you're editing a note, it's a find bar **inside that note** instead |
+| `⌘B` | capture a db backup into `backups/` beside the db (⌘P → Backups: Reveal Folder opens it in Finder; refuses in demo mode) |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets; persists across launches) |
 
 The first key of an address (`n`/`t`/`d`/`b`/`g`) clears focus, so a digit
@@ -574,6 +576,7 @@ dayapp --start "ship mobile build"    # start the single active timer
 dayapp --move "call bank" --to today  # move between sections (appends at the end)
 dayapp --details "call bank" "..."    # replace the details body — the agent prompt ("" clears)
 dayapp --goals                        # print goals grouped by horizon (achieved last)
+dayapp --backup                       # snapshot the db into backups/ (prints the new file's path)
 dayapp --deploy                       # force-push tasks.json now
 dayapp --sync-pull-peek               # peek at the phone's pending captures
 dayapp --demo --list                  # any of the above against the demo db

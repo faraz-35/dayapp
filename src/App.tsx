@@ -8,7 +8,7 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, demoApi, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type EntryKind, type HideDuration, type Item, type Project, type Section } from "./lib";
+import { api, backupApi, demoApi, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type EntryKind, type HideDuration, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import Notes from "./Notes";
 import Goals from "./Goals";
@@ -247,6 +247,18 @@ function DayApp() {
     window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 2600);
   }, []);
+
+  // Capture a db snapshot (⌘B / ⌘P → Backups: Capture Now). The backend
+  // refuses in demo mode — backups protect the real db only.
+  const captureBackup = useCallback(() => {
+    backupApi.capture()
+      .then((path) => {
+        const name = path.split("/").pop() ?? path;
+        log.info(`backup: captured ${name}`);
+        showToast(`Backup saved: ${name}`);
+      })
+      .catch((e) => { log.error("backup: capture failed", e); showToast(`Backup failed: ${e}`); });
+  }, [showToast]);
   // Demo mode (⌘P → Enter/Exit): the backend swapped the whole database to the
   // disposable demo file. Session-only — the initial query catches the first-run
   // tour, the "demo-mode" event catches toggles/resets. `dataEpoch` bumps on
@@ -726,6 +738,20 @@ function DayApp() {
         hint: "repo + token",
         run: () => setSyncSettingsOpen(true),
       },
+      // Backups of the real db — hidden in demo mode like the mobile entries
+      // (the backend gate refuses regardless; capture_backup bails).
+      {
+        id: "backup-capture",
+        label: "Backups: Capture Now",
+        hint: "snapshot the db (⌘B)",
+        run: captureBackup,
+      },
+      {
+        id: "backup-reveal",
+        label: "Backups: Reveal Folder",
+        hint: "in Finder",
+        run: () => backupApi.reveal().catch((e) => log.error("backup: reveal failed", e)),
+      },
     ]),
     { id: "view-analytics", label: "View Analytics", run: () => setView("analytics") },
     { id: "view-journal", label: "View Journal", run: () => setView("journal") },
@@ -741,13 +767,13 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quoteScreensaver, quoteCount, demoMode]);
+  ], [startUpdate, refresh, showToast, captureBackup, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quoteScreensaver, quoteCount, demoMode]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
-  // (⌘0 resets). All intercept globally (they're modifier combos, so they
-  // don't interfere with typing in a field). Opening the palette or search
-  // also closes the quote modal — it sits above both in z-order, so leaving
-  // it open would cover the surface being summoned.
+  // (⌘0 resets); ⌘B captures a db backup. All intercept globally (they're
+  // modifier combos, so they don't interfere with typing in a field). Opening
+  // the palette or search also closes the quote modal — it sits above both in
+  // z-order, so leaving it open would cover the surface being summoned.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -768,11 +794,14 @@ function DayApp() {
       } else if (e.key === "0") {
         e.preventDefault();
         setZoom(1);
+      } else if (e.key === "b") {
+        e.preventDefault();
+        captureBackup();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [captureBackup]);
 
   // ---- Mutations --------------------------------------------------------
 

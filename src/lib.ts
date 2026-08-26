@@ -384,6 +384,17 @@ export const demoApi = {
   reset: () => invoke<void>("reset_demo_data"),
 };
 
+// ---- Backups ------------------------------------------------------------------
+// Point-in-time snapshots of the real db (⌘B / ⌘P → Backups: Capture Now /
+// dayapp --backup). Capture-only — no restore surface yet; files land in
+// backups/ beside the db. Gated in demo mode like mobile sync.
+
+export const backupApi = {
+  /** Captures a snapshot and resolves with the new file's absolute path. */
+  capture: () => invoke<string>("capture_backup"),
+  reveal: () => invoke<void>("reveal_backups"),
+};
+
 /** Compact cumulative duration: "1h 23m", "42m", "45s". */
 export const formatDuration = (seconds: number): string => {
   const s = Math.max(0, Math.floor(seconds));

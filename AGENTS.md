@@ -346,7 +346,8 @@ seeded demo always shows a live-looking week of journal history.
 ### CLI (remote access)
 
 The binary doubles as a headless CLI (`--list`, `--task`, `--search`, `--journal`, `--notes`,
-`--projects`, `--add`, `--complete`, `--start`, `--move`, `--details`, `--goals`, `--deploy`,
+`--projects`, `--add`, `--complete`, `--start`, `--move`, `--details`, `--goals`, `--backup`,
+`--deploy`,
 `--sync-pull-peek`, plus the global `--demo` modifier) for
 SSH/zcode sessions — see `cli.rs`. It opens the
 same db the GUI holds: WAL + `busy_timeout(5s)` make the two processes safe together,
@@ -382,6 +383,8 @@ and it logs `moved` like any section change; `--details <query> <body>` replaces
 details body whole (`""` clears; words after the query join with spaces) — content, not
 logged, same as GUI edits. Together they close the delegation loop remotely: claim a 🤖
 task by moving it to Today, work it, write the outcome back into the body, complete it.
+`--backup` runs the GUI's capture path and prints the new file's path, so a remote session
+can snapshot the db and scp it off the machine.
 The flags are deliberately ungated (the CLI is Faraz's remote access too) — the
 "agents touch only their 🤖 queue" discipline lives in the agent's instructions, not the
 binary.
@@ -416,6 +419,25 @@ logged to `actions` — the Analytics view surfaces time as a separate dimension
 - Logic lives in `src-tauri/src/timers.rs`; the row control is in `src/components/ItemRow.tsx`,
   the header chip + digit `1` on the focused row in `src/App.tsx`. Live elapsed ticks once a second in the
   frontend; the backend is stateless between ticks (it derives elapsed from `started_at`).
+
+### Backups (point-in-time snapshots — capture-only)
+
+⌘B (or ⌘P → Backups: Capture Now, or `dayapp --backup`) snapshots the real db into
+`backups/` beside it as `dayapp-YYYYMMDD-HHMMSS.db`. One deliberate capture per file —
+nothing runs automatically, and there is deliberately no retention pruning (deleting
+backups unprompted is worse than keeping them; the db is small). Mechanism: SQLite's
+`VACUUM INTO` through the active connection, written to a per-process temp file then
+atomically renamed — so the copy is transactionally consistent even while the GUI holds
+the db open in WAL mode with the CLI writing concurrently, and it travels as one
+standalone file (no `-wal`/`-shm` siblings), safe to copy/archive anywhere.
+
+- There is **no restore surface** yet: restoring means quitting the app and swapping the
+  file by hand.
+- Gated in demo mode like mobile sync (`capture` bails; the two ⌘P entries hide) — this
+  feature protects the REAL data; a snapshot of the seeded sample db would masquerade as one.
+- ⌘P → Backups: Reveal Folder opens the folder in Finder (creating it first).
+- Logic lives in `src-tauri/src/backup.rs`; the capture logs one INFO line
+  (`backup: captured dayapp-…db (240 KB)`).
 
 ---
 
@@ -501,9 +523,10 @@ dayapp/
     │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
     │   ├── dashboard.rs            ← the analytics derivation: done/missed per day, daily-miss replay, streak, project/priority splits, heatmap window (method on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
+    │   ├── backup.rs               ← db backups: VACUUM INTO snapshot into backups/ + reveal (⌘B / --backup; demo-gated)
     │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API; demo-gated)
     │   ├── demo.rs                 ← demo mode: dayapp-demo.db open/seed + enter/exit/reset swap under the conn lock
-    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--notes/--projects/--add/--complete/--start/--move/--details/--goals/--deploy/--sync-pull-peek (+ global --demo)
+    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--notes/--projects/--add/--complete/--start/--move/--details/--goals/--backup/--deploy/--sync-pull-peek (+ global --demo)
     │   └── main.rs                 ← binary entrypoint (GUI, or cli::run when given flags)
     ├── schema.sql                  ← items + actions + meta + notes + projects + goals + sessions + entries
     ├── demo.sql                    ← the demo seed (relative timestamps; embedded via include_str!, never commit the .db)
@@ -743,6 +766,7 @@ its digit share the one real onClick handler).
 | single-click | task: select + enter edit mode (caret at end, not full-select); note/goal: focus it |
 | `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, keyboard help, …) |
 | `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` flips it to the project filter picker, a leading `@` to the agent/my picker. **While a note's textarea (or its find bar) has focus, ⌘F is note-local instead** — see Notes below |
+| `⌘B` | capture a db backup into `backups/` beside the db (⌘P → Reveal Folder opens it in Finder; refuses in demo mode) |
 | `⌘+` / `⌘-` | zoom the whole UI in/out (`⌘0` resets) — CSS `zoom` on `<html>`, persisted in localStorage (`dayapp-zoom`); scales every px dimension together, so the design's proportions hold at any size |
 
 The single-key `t` (timer), `d` (details), and `⌫` (delete) verbs are retired

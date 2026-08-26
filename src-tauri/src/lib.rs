@@ -1,6 +1,7 @@
 // Tauri app entry. Thin async command wrappers around the db layer.
 // DB work (rusqlite is sync) is dispatched to a blocking thread so the UI stays fluid.
 
+mod backup;
 mod dashboard;
 mod db;
 mod demo;
@@ -455,6 +456,23 @@ async fn sync_status(db: State<'_, DbState>) -> Result<SyncStatus, String> {
     with_db(db, move |db| Ok(db.sync_status())).await
 }
 
+// ---- Backup commands -------------------------------------------------------
+// Point-in-time snapshots of the real db (see backup.rs): ⌘B / ⌘P capture,
+// reveal opens the backups folder in Finder. Capture-only — no restore surface.
+
+#[tauri::command]
+async fn capture_backup(db: State<'_, DbState>) -> Result<String, String> {
+    with_db(db, move |db| {
+        backup::capture(&db).map(|p| p.to_string_lossy().into_owned())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn reveal_backups(db: State<'_, DbState>) -> Result<(), String> {
+    with_db(db, move |db| backup::reveal(&db.real_path)).await
+}
+
 // ---- Demo mode -----------------------------------------------------------
 // A second, disposable db (dayapp-demo.db) swapped in under the connection
 // lock — see demo.rs for the invariants. The "demo-mode" event tells the
@@ -696,6 +714,7 @@ pub fn run() {
             time_totals, session_time_by_day,
             sync_get_config, sync_set_config, sync_deploy,
             sync_pull_captures, sync_mark_ingested, sync_status,
+            capture_backup, reveal_backups,
             demo_mode, enter_demo_mode, exit_demo_mode, reset_demo_data,
             self_update,
         ])
