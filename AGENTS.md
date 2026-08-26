@@ -636,7 +636,9 @@ Typography: `-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-u
 Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spacing.
 The serif surfaces are the centered header masthead (the "Live @ Faraz" brand, or
 "Analytics"/"Journal" in those views) and the quote modal's line: `ui-serif` (New York)
-italic, Didot/Georgia fallbacks (14px for the masthead, 15px for the quote). The brand
+italic, Didot/Georgia fallbacks (14px for the masthead; the quote scales with the
+window — `clamp(19px, 2.5vw, 30px)`, line-height 1.75 — a pull-quote when
+fullscreened, compact in the 480px frame). The brand
 rotates like a station ident — "Faraz" is home, and every 2
 minutes it steps out to a random word from `MASTHEAD_THEMES` in `App.tsx`
 (growth/money/journey/learn, never the same one twice in a row) and back, each swap

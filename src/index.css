@@ -1495,8 +1495,10 @@ button {
   width: 75%;
   font-family: ui-serif, "New York", Didot, Georgia, serif;
   font-style: italic;
-  font-size: 15px;
-  line-height: 1.6;
+  /* Whole-screen moment: scales with the window — compact in the 480px
+     frame, pull-quote sized when Faraz fullscreens it via AeroSpace. */
+  font-size: clamp(19px, 2.5vw, 30px);
+  line-height: 1.75;
   color: var(--text);
   text-align: center;
   overflow-wrap: break-word;
