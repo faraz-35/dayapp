@@ -637,7 +637,7 @@ Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spac
 The serif surfaces are the centered header masthead (the "Live @ Faraz" brand, or
 "Analytics"/"Journal" in those views) and the quote modal's line: `ui-serif` (New York)
 italic, Didot/Georgia fallbacks (14px for the masthead; the quote scales with the
-window — `clamp(19px, 2.5vw, 24px)`, line-height 1.75 — never above 24px,
+window — `clamp(19px, 2.5vw, 22px)`, line-height 1.75 — never above 22px,
 compact in the 480px frame). The brand
 rotates like a station ident — "Faraz" is home, and every 2
 minutes it steps out to a random word from `MASTHEAD_THEMES` in `App.tsx`
@@ -884,8 +884,8 @@ into Notes or edit fields isn't hijacked.
   Every mutation is logged to `actions` (goal_* values) — see the data model.
 
 **Quote modal (⌘P → Show a Quote):**
-- One quote at a time on a dim, blurred backdrop (`rgba(0,0,0,0.7)` +
-  `backdrop-filter: blur(16px)`, deeper than the palette's 0.4 — the dim *is* the
+- One quote at a time on a dim, blurred backdrop (`rgba(0,0,0,0.65)` +
+  `backdrop-filter: blur(12px)`, deeper than the palette's 0.4 — the dim *is* the
   pause) — a single centered serif-italic line, ~75% width,
   multi-line wrap (never ellipsized), no card, no close button, no countdown chrome.
   The backdrop is what creates the "think about this" moment; an inline line can't.

@@ -1480,9 +1480,9 @@ button {
 .quote-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);   /* deeper than the palette's 0.4 — the dim is the point */
-  -webkit-backdrop-filter: blur(16px);  /* erase what sat beneath, both surfaces */
-  backdrop-filter: blur(16px);
+  background: rgba(0, 0, 0, 0.65);   /* deeper than the palette's 0.4 — the dim is the point */
+  -webkit-backdrop-filter: blur(12px);  /* erase what sat beneath, both surfaces */
+  backdrop-filter: blur(12px);
   z-index: 105;                     /* above search (90), below update (110) */
   display: flex;
   align-items: center;
@@ -1497,7 +1497,7 @@ button {
   font-style: italic;
   /* Whole-screen moment: scales with the window — compact in the 480px
      frame, pull-quote sized when Faraz fullscreens it via AeroSpace. */
-  font-size: clamp(19px, 2.5vw, 24px);
+  font-size: clamp(19px, 2.5vw, 22px);
   line-height: 1.75;
   color: var(--text);
   text-align: center;
