@@ -1480,23 +1480,15 @@ button {
 .quote-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);  /* deeper than the palette's 0.4 — the dim is the point */
+  background: rgba(0, 0, 0, 0.7);   /* deeper than the palette's 0.4 — the dim is the point */
+  -webkit-backdrop-filter: blur(20px);  /* erase what sat beneath, both surfaces */
+  backdrop-filter: blur(20px);
   z-index: 105;                     /* above search (90), below update (110) */
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: default;
   -webkit-app-region: no-drag;
-}
-
-/* The screensaver twin: it arrives in absence and holds the screen until
-   input, so it gets total quiet — a near-black wash plus a blur of whatever
-   sat beneath. Static filter only: same no-animation-on-the-backdrop rule
-   as above. */
-.quote-backdrop.quote-screensaver {
-  background: rgba(0, 0, 0, 0.8);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
 }
 
 .quote-text {
