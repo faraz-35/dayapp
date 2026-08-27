@@ -4,11 +4,13 @@ A native macOS "live today list" with auto-journaling. Not a journal app — a f
 daily-action tool whose **timestamped action log** *is* the journal, for free.
 
 <p align="center">
-  <a href="assets/demo-dayapp.mp4">
+  <a href="assets/demo-dayapp-short.mp4">
     <img width="720" src="assets/demo-list.png" alt="DayApp in demo mode — the Today / Daily / Backlog list, priority tier dividers in the Backlog"><br>
     <img width="720" src="assets/demo-notes.png" alt="DayApp in demo mode — free-form notes above the sections"><br>
-    <strong>▶ Watch the demo — 5:42, every feature, keystroke-annotated</strong>
+    <strong>▶ Watch the demo — 1:25, every feature, keystroke-annotated</strong>
   </a>
+  <br><em>Prefer the full tour? <a href="assets/demo-dayapp.mp4">Download the complete 5:42 video</a> — capture, edit, timers,
+  notes, journal, goals, analytics, all of it.</em>
 </p>
 
 <p align="center">
