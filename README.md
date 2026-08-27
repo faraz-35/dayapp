@@ -6,7 +6,10 @@ daily-action tool whose **timestamped action log** *is* the journal, for free.
 <p align="center">
   
 
-https://github.com/user-attachments/assets/f49c5e78-2327-469a-918d-90196626a024
+
+https://github.com/user-attachments/assets/0158f871-5672-44c1-bccb-6fa5355809be
+
+
 
 
    
