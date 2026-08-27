@@ -879,7 +879,7 @@ button {
   cursor: pointer;
   transition: background 0.08s ease;
 }
-.anf-menu-item:hover { background: var(--bg-hover); }
+.anf-menu-item:hover, .anf-menu-item.hi { background: var(--bg-hover); }
 .anf-menu-item .anf-name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .anf-dot {
   width: 8px;

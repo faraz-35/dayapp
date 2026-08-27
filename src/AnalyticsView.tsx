@@ -214,6 +214,48 @@ export default function AnalyticsView() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [projMenu]);
 
+  // The picker is keyboard-first like everything else: `#` opens it, arrows +
+  // Enter toggle the highlighted project, Esc closes. Capture phase so the
+  // global free-mode arrows don't scroll the page underneath the menu.
+  const projChoices = [...projects.map((p) => p.name), ""]; // "" = No project, last
+  const [projHi, setProjHi] = useState(0);
+  useEffect(() => {
+    if (projMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "#") return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest?.("input,textarea")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setProjHi(0);
+      setProjMenu(true);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [projMenu]);
+  useEffect(() => {
+    if (!projMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "#" || e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setProjMenu(false);
+      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        e.stopPropagation();
+        const n = projChoices.length;
+        setProjHi((h) => (h + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleProject(projChoices[projHi]);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projMenu, projHi, projChoices]);
+
   const filter = useMemo<DashboardFilter>(
     () => ({
       projects: selProjects.size
@@ -376,10 +418,10 @@ export default function AnalyticsView() {
             >{projLabel} ▾</button>
             {projMenu && (
               <div className="anf-menu" role="menu">
-                {projects.map((p) => (
+                {projects.map((p, pi) => (
                   <button
                     key={p.id}
-                    className={`anf-menu-item${selProjects.has(p.name) ? " on" : ""}`}
+                    className={`anf-menu-item${selProjects.has(p.name) ? " on" : ""}${projHi === pi ? " hi" : ""}`}
                     onClick={() => toggleProject(p.name)}
                   >
                     <i className="anf-dot" style={{ background: projectColor(p.id) }} />
@@ -388,7 +430,7 @@ export default function AnalyticsView() {
                   </button>
                 ))}
                 <button
-                  className={`anf-menu-item${selProjects.has("") ? " on" : ""}`}
+                  className={`anf-menu-item${selProjects.has("") ? " on" : ""}${projHi === projects.length ? " hi" : ""}`}
                   onClick={() => toggleProject("")}
                 >
                   <i className="anf-dot hollow" />

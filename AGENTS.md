@@ -1040,7 +1040,10 @@ into Notes or edit fields isn't hijacked.
   grid columns are in-flow content, never nested scrollers.
 - **No time stats in the stats row** (time appears only as the ledger's per-day total
   when it exists), and the page is mouse-first: no focus-grammar wiring (free-mode `j`/`k`
-  scrolling still works, like every view).
+  scrolling still works, like every view). The one keyboard path is the project picker
+  itself — `#` opens it (capture phase, inputs skipped), ↑/↓ walk the highlight, Enter
+  toggles, `#`/Esc close; still not an addressable surface.
+
 - Derivation lives in `src-tauri/src/dashboard.rs` (`journal_dashboard` +
   `journal_day_detail`, behind commands of the same names); the UI is `AnalyticsView.tsx`
   (self-contained, the Notes/Goals pattern). The CLI's `--journal` prints the same
