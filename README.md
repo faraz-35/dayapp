@@ -11,8 +11,6 @@ daily-action tool whose **timestamped action log** *is* the journal, for free.
   </a>
 </p>
 
-![DayApp demo — 5:42, every feature, keystroke-annotated](assets/demo-dayapp.mp4)
-
 <p align="center">
   <em>All shots fullscreened, in the built-in demo mode (⌘P → Enter Demo Mode).</em>
 </p>
