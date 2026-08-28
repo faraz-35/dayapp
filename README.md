@@ -3,6 +3,8 @@
 A native macOS "live today list" with auto-journaling. Not a journal app — a focused
 daily-action tool whose **timestamped action log** *is* the journal, for free.
 
+**On the web:** [getdayapp.vercel.app](https://getdayapp.vercel.app) — the landing page, with a live in-browser demo of the list and its log.
+
 <p align="center">
   
 
