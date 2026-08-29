@@ -104,11 +104,18 @@ The `##` prefix is reserved so it can't collide with the `#tag` project token. E
 have no priority/project/hide axes — just text and its day — and like notes they're
 content, never logged to `actions` and never exported to the phone.
 
+The **task capture routes the same way**, over destinations: one input above the
+Today / Daily / Backlog stack replaced the three per-section fields. A leading
+`##t`, `##d`, or `##b` sends the line to Today, Daily, or Backlog — bare text lands
+in Today. The item tokens (`#tag`, `!1..3`, `@`) compose after the route
+(`##b someday maybe !3`), and routes are capture-only: an edit never moves a row
+(the drag and the ↑ button do that).
+
 Typed tokens **color as you type** — in every capture field and while editing: task and
 goal edits, and a note's pending footer line (blank line + tokens-only last line), all in
 the app's one accent. What colors is exactly what will process at Enter/blur, and nothing
 else colors (`#tag` in the Journal capture is plain prose there; inline tokens in a note
-body never process, so they never color). And `nj` / `nq`
+body never process, so they never color). And `nj` / `nq` / `nt` / `nd` / `nb`
 (see [Keyboard shortcuts](#keyboard-shortcuts)) type the route token for you.
 
 ## Stack
@@ -231,8 +238,8 @@ Shortcuts** shows the reference card in-app.
 
 | Keys | Action |
 |---|---|
-| `nn` / `nt` / `nd` / `nb` | focus the Notes / Today / Daily / Backlog capture input |
-| `nj` / `nq` | the Notes capture with the route typed for you (`##j ` / `##q `) — journal line or quote, no token typing |
+| `nn` / `nj` / `nq` | the Notes capture; `nj`/`nq` pre-route a journal line / quote (`##j ` / `##q ` typed for you) |
+| `nt` / `nd` / `nb` | the task capture with the destination typed for you (`##t ` / `##d ` / `##b ` → Today / Daily / Backlog); bare text lands in Today |
 | `t1`–`t9` / `d1`–`d9` | focus a Today / Daily row |
 | `b11`–`b49` | focus a Backlog row — first digit is the tier (4 = unprioritized), second the row |
 | `n1`–`n9` / `g1`–`g9` | focus a note / goal |

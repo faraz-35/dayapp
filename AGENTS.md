@@ -194,6 +194,14 @@ The notes capture bar is the app's **typed capture bus**: a leading `##j` or `##
 routes the line away from note creation and into the `entries` table — same input, a
 different *kind* of content, stored and displayed differently. The reserved `##` prefix
 cannot collide with the `#tag` project token (a lone `#` never starts a tag word).
+The **task capture routes the same prefix over destinations**: one input above the
+section stack (SectionList) replaced the three per-section capture inputs — a leading
+`##t`/`##d`/`##b` sends the line to Today/Daily/Backlog via `parseTaskCapture` in
+`lib.ts`, no token = Today (the default working destination), a bare token is a no-op,
+and the item grammar (`#tag`/`!N`/`@`) composes after the route. The `nt`/`nd`/`nb`
+addresses focus it with the token pre-swapped (the `nj`/`nq` pattern). Routes are
+capture-only, like the entry routes: an edit never re-routes a row — the drag and the
+↑ promote button are how a row moves.
 
 - `kind` ∈ `journal` (`##j`) | `quote` (`##q`). Parsed by `parseEntryCapture` in `lib.ts`
   (leading position only — mid-line `##j` is prose; a bare token with no text is a no-op),
@@ -520,8 +528,8 @@ dayapp/
 │   ├── MobileView.tsx              ← Android client: read-only list + capture bar (GitHub fetch, renders when UA is Android)
 │   ├── MobileSyncSettings.tsx      ← ⌘P sync-config modal (repo/branch/token + validate-by-deploy)
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
-│       ├── SectionList.tsx         ← DndContext + drag handlers + maps the 3 sections
-│       ├── SectionView.tsx         ← one section (head + capture input + sortable items + dropzone; Backlog tier dividers)
+│       ├── SectionList.tsx         ← the ONE task capture (##t/##d/##b routing) + DndContext + drag handlers + maps the 3 sections
+│       ├── SectionView.tsx         ← one section (head + sortable items + dropzone; Backlog tier dividers)
 │       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput + shared PriorityBars/ItemDetailsBody
 │       ├── AnalyticsView.tsx       ← the analytics page: stats + heatmap + splits + day ledger over dashboard.rs (no raw log)
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
@@ -561,8 +569,8 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `Goals.tsx` | goals state + capture + horizon groups + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
 | `Quotes.tsx` | the ##q moment: quote pool fetch, the modal's pick (no consecutive repeats), 45s linger (⌘P summons) / linger-until-input (screensaver opens) | capture (Notes' router adds quotes), the idle watcher (App's), quote management (none exists — capture-only) |
 | `Journal.tsx` | the Journal view: entries state, day groups, capture (plain = journal entry), inline edit/delete (self-contained; remounts per view switch; quotes filtered out) | the quote modal (Quotes.tsx), analytics (AnalyticsView) |
-| `SectionList.tsx` | `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
-| `SectionView.tsx` | one section's header + capture input + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers |
+| `SectionList.tsx` | the task capture bus (##t/##d/##b route, default Today), `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
+| `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
 | `AnalyticsView.tsx` | the analytics page: range/dayPick state, dashboard + time fetch, stats/heatmap/splits/day-ledger render | derivation (all in `dashboard.rs`), item state |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
@@ -693,21 +701,23 @@ window; below 455px of width a media query hides the masthead.
 ### Interaction patterns (existing — match these for new features)
 
 **Token coloring (`TokenField.tsx`):** every capture input AND the token-editing
-surfaces color the typed-token grammar live — `##j`/`##q` routes, `#tag`, `!N`, and
-`@` all in the one accent (Faraz's call, 2026-08-29: same purple for every family —
-a token reads as "this processes", nothing more). Edit surfaces: task inline edits
-(`EditInput` with the full grammar), goal edits (`#tag`), and a note body's **pending
-footer line** — `scanNoteFooterTokens` in `lib.ts` is `splitNoteFooter`'s live twin,
-coloring exactly the line the blur-catch will strip and apply. Mechanism: the field's
-real text is transparent and a mirror div underneath (`.token-mirror`) renders the
-same text with colored spans; scroll positions sync because the field scrolls its
-content while the mirror clips. The note body uses the same flip (transparent
-textarea, visible mirror) with ONE mirror carrying both find marks and footer
-tokens. The spans come from `scanTokens` in `lib.ts` — the ONE matcher the capture
-parsers also strip through — so coloring can never drift from processing: a line the
-surface wouldn't parse (an `@` in the notes bar, a `#tag` in the Journal capture —
-plain prose there) stays uncolored, past a leading route token nothing colors either
-(the routed line is verbatim content), and inline tokens in a note body never color
+surfaces color the typed-token grammar live — the `##j`/`##q`/`##t`/`##d`/`##b` routes,
+`#tag`, `!N`, and `@` all in the one accent (Faraz's call, 2026-08-29: same purple for
+every family — a token reads as "this processes", nothing more). Edit surfaces: task
+inline edits (`EditInput` with the full grammar), goal edits (`#tag`), and a note body's
+**pending footer line** — `scanNoteFooterTokens` in `lib.ts` is `splitNoteFooter`'s
+live twin, coloring exactly the line the blur-catch will strip and apply. Mechanism:
+the field's real text is transparent and a mirror div underneath (`.token-mirror`)
+renders the same text with colored spans; scroll positions sync because the field
+scrolls its content while the mirror clips. The note body uses the same flip
+(transparent textarea, visible mirror) with ONE mirror carrying both find marks and
+footer tokens. The spans come from `scanTokens` in `lib.ts` — the ONE matcher the
+capture parsers also strip through — so coloring can never drift from processing: a
+line the surface wouldn't parse (an `@` in the notes bar, a `#tag` in the Journal
+capture — plain prose there) stays uncolored, past a notes-bar route (`##j`/`##q`)
+nothing colors either (the routed entry line is verbatim content), while the task
+capture's `##t`/`##d`/`##b` only routes the destination so its item grammar keeps
+coloring past it; inline tokens in a note body never color
 (they never process there). Horizon words in the Goals surfaces are prose, not sigil
 tokens — they stay plain. Journal entry EDITS stay plain too (entries store
 verbatim); the details body has no grammar at all.
@@ -782,8 +792,8 @@ its digit share the one real onClick handler).
 
 | Keys | Action |
 |---|---|
-| `nn` / `nt` / `nd` / `nb` | focus the Notes / Today / Daily / Backlog capture input |
-| `nj` / `nq` | the notes capture, pre-routed — the leading `##j ` / `##q ` token is swapped in for you |
+| `nn` / `nj` / `nq` | the notes capture; `nj`/`nq` pre-route — the leading `##j ` / `##q ` token is swapped in for you |
+| `nt` / `nd` / `nb` | the ONE task capture with the destination pre-swapped-in (`##t ` / `##d ` / `##b ` → Today / Daily / Backlog); bare text lands in Today |
 | `t1`–`9` / `d1`–`9` | focus a Today / Daily row (visible rows, filter-aware) |
 | `b11`–`49` | focus a Backlog row — tier digit first (4 = unprioritized), then row |
 | `n1`–`9` / `g1`–`9` | focus a note / goal (DOM order = visual order) |

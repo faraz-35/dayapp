@@ -1157,10 +1157,10 @@ function DayApp() {
 
   // ---- Keyboard nav + the focus grammar ----------------------------------
   //
-  // The grammar (⌘P → Keyboard Shortcuts is the reference card):
-  //   nn / nt / nd / nb   focus the Notes / Today / Daily / Backlog capture
-  //   nj / nq             the notes capture, pre-routed (##j / ##q swapped in)
-  //   t1-9 / d1-9         focus a Today / Daily row
+// The grammar (⌘P → Keyboard Shortcuts is the reference card):
+//   nn / nj / nq        the Notes capture (nj/nq pre-route ##j / ##q)
+//   nt / nd / nb        the one task capture, ##t/##d/##b pre-swapped
+//   t1-9 / d1-9         focus a Today / Daily row
   //   b11-49              focus a Backlog row (tier 4 = unprioritized)
   //   n1-9 / g1-9         focus a note / goal
   //   1-6 / 1-3           fire the focused thing's buttons, in visual order
@@ -1212,8 +1212,7 @@ function DayApp() {
   // Resolve a complete address sequence. Row indexes come from renderItems
   // (filters and toggled-off sections compose for free); notes and goals come
   // from the DOM (Notes/Goals own their lists — DOM order is visual order).
-  // An address that lands nowhere (t9 with three rows, a hidden section's
-  // capture) is a silent no-op.
+  // An address that lands nowhere (t9 with three rows) is a silent no-op.
   const resolveAddress = (seq: string) => {
     const [p, a, b] = seq;
     const n = Number(a);
@@ -1221,9 +1220,9 @@ function DayApp() {
       if (a === "n") focusCapture("notes");
       else if (a === "j") focusCapture("notes", "##j");
       else if (a === "q") focusCapture("notes", "##q");
-      else if (a === "t") focusCapture("today");
-      else if (a === "d") focusCapture("daily");
-      else if (a === "b") focusCapture("backlog");
+      else if (a === "t") focusCapture("tasks", "##t");
+      else if (a === "d") focusCapture("tasks", "##d");
+      else if (a === "b") focusCapture("tasks", "##b");
       else if (n >= 1 && n <= 9) {
         const id = noteIdAt(n);
         if (id) focusNote(id);

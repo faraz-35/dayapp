@@ -17,15 +17,17 @@ export function clickKbButton(scope: Element | null, n: number): boolean {
   return true;
 }
 
-// The notes-bus route prefill: `nj`/`nq` focus the notes capture with the
-// leading ##j/##q token already swapped in. focusCapture dispatches this event
-// on the field; TokenField (with `route` set) hears it and rewrites the value.
+// The route prefill: `nj`/`nq` focus the notes capture and `nt`/`nd`/`nb` the
+// task capture, each with its leading ##x token already swapped in.
+// focusCapture dispatches this event on the field; TokenField (with `route`
+// set) hears it and rewrites the value.
 export const ROUTE_EVENT = "dayapp-route";
 
-// Focus a capture input by address (`nn` notes, `nt`/`nd`/`nb` the sections;
-// `nj`/`nq` pass a route token for the notes bar). false when the surface is
-// toggled off — its input isn't in the DOM.
-export function focusCapture(which: "notes" | "today" | "daily" | "backlog", route?: string): boolean {
+// Focus a capture input by address (`nn`/`nj`/`nq` the notes bar, the last
+// two with their route pre-swapped; `nt`/`nd`/`nb` the ONE task capture with
+// its ##t/##d/##b route — there are no per-section inputs anymore). false
+// when the surface isn't rendered — its input isn't in the DOM.
+export function focusCapture(which: "notes" | "tasks", route?: string): boolean {
   const el = document.querySelector(`[data-capture="${which}"]`);
   if (!(el instanceof HTMLElement)) return false;
   el.focus();

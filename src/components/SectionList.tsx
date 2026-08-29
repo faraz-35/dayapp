@@ -1,5 +1,7 @@
-// SectionList — the three task sections inside a DndContext. Owns drag
-// start/end, renders the DragOverlay, and maps the three SectionViews.
+// SectionList — the ONE task capture above the three task sections inside a
+// DndContext. Owns the capture bus (a leading ##t/##d/##b routes the line to
+// Today/Daily/Backlog, no token = Today — the notes bar's ##j/##q pattern),
+// drag start/end, renders the DragOverlay, and maps the three SectionViews.
 //
 // All drag logic lives here (not in App) so App stays a thin shell. The parent
 // owns item state and the mutation callbacks; this component just wires DnD
@@ -18,7 +20,8 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { type HideDuration, type Item, type Project, type Section } from "../lib";
+import { parseTaskCapture, type HideDuration, type Item, type Project, type Section } from "../lib";
+import TokenField from "../TokenField";
 import SectionView from "./SectionView";
 
 // The section definitions live here — they're presentation-only metadata the
@@ -66,6 +69,9 @@ export default function SectionList({
   onToggleTimer: (id: string) => void;
 }) {
   const [activeDrag, setActiveDrag] = useState<Item | null>(null);
+  // The task bus's draft. One field for all three destinations — the route
+  // token decides at Enter, so it survives while the user retypes it.
+  const [draft, setDraft] = useState("");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -116,55 +122,92 @@ export default function SectionList({
     onMoveItem(activeItem.id, overSection, newIndex);
   };
 
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-    >
-      <main className="sections">
-        {SECTIONS.filter((sec) => visible[sec.id]).map((sec) => (
-          <SectionView
-            key={sec.id}
-            section={sec.id}
-            label={sec.label}
-            hint={sec.hint}
-            items={items[sec.id]}
-            projects={projects}
-            selectedId={selectedId}
-            editingId={editingId}
-            detailsOpenId={detailsOpenId}
-            onSelect={onSelect}
-            onComplete={onComplete}
-            onDelete={onDelete}
-            onCommitEdit={onCommitEdit}
-            onStartEdit={onStartEdit}
-            onQuickAdd={onQuickAdd}
-            onHide={onHide}
-            onUnhide={onUnhide}
-            onSetProject={onSetProject}
-            onCreateProject={onCreateProject}
-            onSetReminder={onSetReminder}
-            onPromote={onPromote}
-            onToggleDetails={onToggleDetails}
-            onSetDetails={onSetDetails}
-            activeTimerId={activeTimerId}
-            liveElapsed={liveElapsed}
-            timeTotals={timeTotals}
-            onToggleTimer={onToggleTimer}
-          />
-        ))}
-      </main>
+  const submit = () => {
+    const t = draft.trim();
+    if (!t) return;
+    const { section, text } = parseTaskCapture(t);
+    // A bare route token with no text is a no-op — no junk row, the entries
+    // rule. The stripped text still runs App's item grammar (#tag/!N/@).
+    if (text) onQuickAdd(section, text);
+    setDraft("");
+  };
 
-      <DragOverlay>
-        {activeDrag ? (
-          <div className="drag-overlay">
-            <span style={{ color: "var(--text-faint)" }}>⠿</span>
-            <span className="item-text">{activeDrag.text}</span>
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+  return (
+    <>
+      {/* The one task capture, above the stack: type + Enter to add, a leading
+          ##t/##d/##b to choose the destination (no token = Today). No button,
+          no click-to-reveal — the input itself is the affordance. Mounted
+          outside the DndContext so typing is never a drag surface;
+          data-capture="tasks" is the grammar's nt/nd/nb target, `route` wires
+          the token prefill, and TokenField colors the typed grammar (##route,
+          #tag, !N, @) — exactly what Enter parses. */}
+      <div className="capture task-capture">
+        <TokenField
+          kinds={["section", "project", "priority", "agent"]}
+          capture="tasks"
+          route
+          value={draft}
+          onChange={setDraft}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); submit(); }
+            // Empty draft → blur: the Esc ladder's editing → nothing rung
+            // for captures (a capture input isn't a grammar focus target).
+            else if (e.key === "Escape") {
+              if (draft) setDraft("");
+              else e.currentTarget.blur();
+            }
+          }}
+        />
+      </div>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+      >
+        <main className="sections">
+          {SECTIONS.filter((sec) => visible[sec.id]).map((sec) => (
+            <SectionView
+              key={sec.id}
+              section={sec.id}
+              label={sec.label}
+              hint={sec.hint}
+              items={items[sec.id]}
+              projects={projects}
+              selectedId={selectedId}
+              editingId={editingId}
+              detailsOpenId={detailsOpenId}
+              onSelect={onSelect}
+              onComplete={onComplete}
+              onDelete={onDelete}
+              onCommitEdit={onCommitEdit}
+              onStartEdit={onStartEdit}
+              onHide={onHide}
+              onUnhide={onUnhide}
+              onSetProject={onSetProject}
+              onCreateProject={onCreateProject}
+              onSetReminder={onSetReminder}
+              onPromote={onPromote}
+              onToggleDetails={onToggleDetails}
+              onSetDetails={onSetDetails}
+              activeTimerId={activeTimerId}
+              liveElapsed={liveElapsed}
+              timeTotals={timeTotals}
+              onToggleTimer={onToggleTimer}
+            />
+          ))}
+        </main>
+
+        <DragOverlay>
+          {activeDrag ? (
+            <div className="drag-overlay">
+              <span style={{ color: "var(--text-faint)" }}>⠿</span>
+              <span className="item-text">{activeDrag.text}</span>
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    </>
   );
 }

@@ -13,9 +13,9 @@
 // Journal capture — stays plain: the color never lies.
 //
 // The grammar's route prefill rides here too: `nj`/`nq` focus the notes
-// capture (focusNav.focusCapture) and dispatch ROUTE_EVENT on it; a TokenField
-// with `route` set swaps the leading ##j/##q token. Typing the address IS
-// typing the token.
+// capture and `nt`/`nd`/`nb` the task capture (focusNav.focusCapture), each
+// dispatching ROUTE_EVENT on its field; a TokenField with `route` set swaps
+// the leading route token. Typing the address IS typing the token.
 
 import { useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type Ref } from "react";
 import { scanTokens, type TokenKind } from "./lib";
@@ -52,7 +52,7 @@ export default function TokenField({
   /** The notes capture is a multi-line field (Shift+Enter drafts) — the mirror
    *  wraps like a textarea instead of clipping like a single-line input. */
   multiline?: boolean;
-  /** Listen for the grammar's route prefill (nj/nq) — the notes bar. */
+  /** Listen for the grammar's route prefill (nj/nq, nt/nd/nb). */
   route?: boolean;
   rows?: number;
   /** The field element itself, for focus/caret control by the owning surface
@@ -78,13 +78,14 @@ export default function TokenField({
   }, [value]);
 
   // The route prefill: replace any leading route token with the requested one
-  // (`nq` on a ##j draft re-routes it) and land the caret at the end.
+  // (`nq` on a ##j draft re-routes the note; `nd` on a ##t draft re-routes the
+  // task) and land the caret at the end.
   useEffect(() => {
     const el = fieldRef.current;
     if (!el || !route) return;
     const onRoute = (e: Event) => {
       const token = (e as CustomEvent<string>).detail;
-      onChange(`${token} ${value.replace(/^##[jq]\s*/, "")}`);
+      onChange(`${token} ${value.replace(/^##[tjdqb]\s*/, "")}`);
       requestAnimationFrame(() => {
         el.focus();
         el.setSelectionRange(el.value.length, el.value.length);

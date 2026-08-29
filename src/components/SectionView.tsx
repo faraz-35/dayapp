@@ -1,20 +1,20 @@
 // SectionView — one of the three task sections (Today / Daily / Backlog).
-// Renders: header (label + count), always-open capture input, sortable item
-// rows, and a droppable empty zone so the section accepts drops even when empty.
+// Renders: header (label), sortable item rows, and a droppable empty zone so
+// the section accepts drops even when empty. Capture happens once, above the
+// stack (SectionList's task bus) — sections hold no input of their own.
 // In the Backlog (sorted P1 → P3 → unmarked) each tier group is introduced by
 // a hairline divider labeled with the group's signal bars, making the existing
 // sort legible.
 
-import { Fragment, useState } from "react";
+import { Fragment } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { type HideDuration, type Item, type Project, type Section } from "../lib";
-import TokenField from "../TokenField";
 import ItemRow, { ItemDetailsBody, PriorityBars } from "./ItemRow";
 
 export default function SectionView({
   section, label, hint, items, projects, selectedId, editingId, detailsOpenId,
-  onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
+  onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide, onUnhide,
   onSetProject, onCreateProject, onSetReminder, onPromote, onToggleDetails, onSetDetails,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
@@ -31,7 +31,6 @@ export default function SectionView({
   onDelete: (id: string, section: Section) => void;
   onCommitEdit: (id: string, text: string) => void;
   onStartEdit: (id: string) => void;
-  onQuickAdd: (section: Section, text: string) => void;
   onHide: (id: string, section: Section, duration: HideDuration) => void;
   onUnhide: (id: string) => void;
   onSetProject: (id: string, projectId: string | null) => void;
@@ -46,7 +45,6 @@ export default function SectionView({
   timeTotals: Record<string, number>;
   onToggleTimer: (id: string) => void;
 }) {
-  const [draft, setDraft] = useState("");
   const { setNodeRef, isOver } = useDroppable({ id: `dropzone-${section}` });
 
   // A Backlog whose items all share one tier (including all-unmarked) is a
@@ -54,38 +52,10 @@ export default function SectionView({
   const singleTier =
     items.length > 0 && items.every((i) => i.priority === items[0].priority);
 
-  const submit = () => {
-    const t = draft.trim();
-    if (t) onQuickAdd(section, t);
-    setDraft("");
-  };
-
   return (
     <section className="section" style={{ minHeight: 40 }}>
       <div className="section-head" title={hint}>
         <span className="section-name">{label}</span>
-      </div>
-
-      {/* Always-open capture at the top of the section: type + Enter to add.
-          No button, no click-to-reveal — the input itself is the affordance.
-          data-capture is the focus grammar's target (`nt` / `nd` / `nb`);
-          TokenField colors the typed tokens (#tag, !N, @) while you type. */}
-      <div className="capture">
-        <TokenField
-          kinds={["project", "priority", "agent"]}
-          capture={section}
-          value={draft}
-          onChange={setDraft}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); submit(); }
-            // Empty draft → blur: the Esc ladder's editing → nothing rung
-            // for captures (a capture input isn't a grammar focus target).
-            else if (e.key === "Escape") {
-              if (draft) setDraft("");
-              else e.currentTarget.blur();
-            }
-          }}
-        />
       </div>
 
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>

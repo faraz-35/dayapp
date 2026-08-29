@@ -505,7 +505,7 @@ export function parseItemTags(
 // what colors as a token while you type is exactly what processes at Enter —
 // the two can never drift apart.
 
-export type TokenKind = "entry" | "project" | "priority" | "agent";
+export type TokenKind = "entry" | "section" | "project" | "priority" | "agent";
 
 /** A matched token. `start`/`end` span the sigil through the token's last
  *  char (the word-boundary space before it stays plain text); `value` is the
@@ -526,6 +526,10 @@ const AGENT_RE = /(?:^|\s)@([01]?)(?=\s|$)/g;
 // The notes-bus route: a leading ##j/##q only (lookahead, so the token itself
 // is exactly the three chars and the text after it starts at a boundary).
 const ENTRY_RE = /^##([jq])(?=\s|$)/;
+// The task-capture route: a leading ##t/##d/##b picks the destination section.
+// Unlike the entry route it doesn't own the line — the rest keeps parsing the
+// item grammar, so it colors AND strips independently of what follows.
+const SECTION_RE = /^##([tdb])(?=\s|$)/;
 // The notes' project-clear twin of !0 — stripped ahead of parseProjectTag so a
 // project literally named "0" can never resolve.
 const NOTE_CLEAR_RE = /(?:^|\s)#0(?=\s|$)/g;
@@ -566,17 +570,23 @@ function stripSpans(text: string, spans: SigilSpan[]): string {
 }
 
 /** Every token in the line, for the capture fields' syntax coloring. `kinds`
- *  picks the surface's grammar — the section captures carry `@`, the notes
- *  bar doesn't, only the two bus surfaces (notes + journal captures) route
- *  entries. A routed line is the one exception with a grammar of its own:
- *  past a leading ##j/##q everything is verbatim content — no other token
- *  processes there, so none colors there either. */
+ *  picks the surface's grammar — the task capture carries `@`, the notes bar
+ *  doesn't, and each bus routes its own leading token: the notes bar's ##j/##q
+ *  owns the WHOLE line (past it everything is verbatim content — no other
+ *  token processes there, so none colors there either), while the task
+ *  capture's ##t/##d/##b only picks the destination, so the line's item
+ *  grammar keeps scanning past it. A line a surface wouldn't parse stays
+ *  plain: the color never lies. */
 export function scanTokens(text: string, kinds: readonly TokenKind[]): TokenSpan[] {
   if (kinds.includes("entry")) {
     const m = text.match(ENTRY_RE);
     if (m) return [{ kind: "entry", start: 0, end: m[0].length, value: m[1] }];
   }
   const out: TokenSpan[] = [];
+  if (kinds.includes("section")) {
+    const m = text.match(SECTION_RE);
+    if (m) out.push({ kind: "section", start: 0, end: m[0].length, value: m[1] });
+  }
   const sigils: Array<[TokenKind, RegExp]> = [
     ["project", PROJECT_RE],
     ["priority", PRIORITY_RE],
@@ -820,15 +830,20 @@ export function resolveNoteTag(
   return p ? { projectId: p.id } : { projectId: null, createProjectName: tag };
 }
 
-// ---- Entry tokens (##j / ##q) ------------------------------------------------
+// ---- Route tokens (##j / ##q / ##t / ##d / ##b) ------------------------------
 //
-// The typed-capture router: a LEADING `##j` / `##q` token in the notes capture
-// turns the line into a different kind of content (journal entry / quote) that
-// is stored and displayed differently. The reserved `##` prefix can't collide
-// with the `#tag` project token (a lone `#` never starts a tag word, so
-// `#heading` prose is safe too). Leading position only — mid-line `##j` is
-// prose; the text after the token is stored verbatim, tokens never linger in
-// content.
+// The typed-capture routers: a LEADING `##x` token in a capture turns the line
+// into a different kind of content. The notes bar routes it to a different
+// TABLE (journal entry / quote — stored and displayed differently); the task
+// capture routes it to a different SECTION of the same table (Today / Daily /
+// Backlog — the one capture that replaced the three per-section inputs). Both
+// share the reserved `##` prefix, which can't collide with the `#tag` project
+// token (a lone `#` never starts a tag word, so `#heading` prose is safe too).
+// Leading position only — mid-line `##x` is prose. Entry text is stored
+// verbatim past the token; task text keeps its item grammar (`#tag`/`!N`/`@`
+// compose after the route). Routes are capture-only: editing an existing
+// thing never re-routes it (notes stopped that build by decision; tasks move
+// by drag or the ↑ button).
 
 /** Parse a capture line's leading `##j`/`##q` route. Null when the line isn't
  *  routed (a normal note); `{ kind, text }` with the token stripped otherwise —
@@ -838,4 +853,17 @@ export function parseEntryCapture(text: string): { kind: EntryKind; text: string
   const m = text.match(ENTRY_RE);
   if (!m) return null;
   return { kind: m[1] === "j" ? "journal" : "quote", text: text.slice(m[0].length).trim() };
+}
+
+/** Parse the task capture's leading `##t`/`##d`/`##b` route into a section,
+ *  stripped from the text. No token = Today — the default working destination.
+ *  A bare token with no text is the caller's no-op (no junk row), same rule as
+ *  the entry routes. */
+export function parseTaskCapture(text: string): { section: Section; text: string } {
+  const m = text.match(SECTION_RE);
+  if (!m) return { section: "today", text };
+  return {
+    section: m[1] === "t" ? "today" : m[1] === "d" ? "daily" : "backlog",
+    text: text.slice(m[0].length).trim(),
+  };
 }

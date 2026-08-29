@@ -33,8 +33,9 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
         <div className="help-title">Keyboard</div>
 
         <div className="help-section">Focus an address</div>
-        <Row keys={["nn", "nt", "nd", "nb"]}>focus the Notes / Today / Daily / Backlog capture</Row>
+        <Row keys={["nn"]}>focus the Notes capture</Row>
         <Row keys={["nj", "nq"]}>Notes capture with a journal / quote route typed for you</Row>
+        <Row keys={["nt", "nd", "nb"]}>the task capture — ##t / ##d / ##b (Today / Daily / Backlog) typed for you; bare text lands in Today</Row>
         <Row keys={["t1–9", "d1–9"]}>focus a Today / Daily row</Row>
         <Row keys={["b11–49"]}>focus a Backlog row — tier 4 is unprioritized</Row>
         <Row keys={["n1–9", "g1–9"]}>focus a note / goal</Row>

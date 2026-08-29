@@ -399,9 +399,9 @@ button {
 :is(.item:hover, .item.selected, .item.dragging) .grip { opacity: 0.6; }
 .item.dragging { opacity: 0.3; }
 
-/* ---- Capture input (per section) -------------------------------------- */
+/* ---- Capture input (the notes bar + the one task bus) ------------------ */
 /* Minimal: just a bottom border that goes accent on focus. No fill, no box,
-   no placeholder — the line is the affordance. Sits at the top of its section. */
+   no placeholder — the line is the affordance. */
 
 .capture {
   margin: 0 8px 6px;
@@ -410,6 +410,11 @@ button {
   transition: border-color 0.1s ease;
 }
 .capture:focus-within { border-color: var(--accent); }
+
+/* The task capture rides above the section stack (outside .sections' own
+   padding), so its margins re-align it: rows' left edge, one notes-gap above
+   the Today head. One input for all three destinations — ##t/##d/##b route. */
+.capture.task-capture { margin: 2px 8px 8px; }
 .capture input,
 .capture textarea {
   width: 100%;
