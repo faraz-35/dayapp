@@ -44,6 +44,14 @@ writes itself), not fight it.
   engine. The Mac app is the single writer of the database; see "Mobile sync"
   under Data model before touching anything in that area.
 
+- **Launch placement (AeroSpace):** every launch lands the window fullscreened in
+  AeroSpace workspace 10 — two halves by necessity. `~/.aerospace.toml`'s
+  `on-window-detected` moves the window to workspace 10 (AeroSpace callbacks only
+  support layout/move commands); `aerospace_fullscreen` in `lib.rs` setup then asks the
+  `aerospace` CLI to fullscreen OUR window (pid-matched from `list-windows`, retried
+  while AeroSpace attaches). Idempotent; a silent no-op wherever AeroSpace isn't
+  installed.
+
 ### Stack rules (do not break these)
 
 - **Rust commands return `Result<T, String>`, not `anyhow::Result`.** `anyhow::Error` is

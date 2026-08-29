@@ -587,15 +587,16 @@ function NoteInput({
   // exactly what the catch will strip and apply) and the find matches (tinted
   // marks, while finding). Both layers are just intervals over the same text,
   // so they merge into one split; a mark around a token keeps both — tint
-  // behind, accent glyphs on it. Rendered only when there's something to show
-  // — zero cost to the plain editing path.
+  // behind, accent glyphs on it. With nothing to color the plain text still
+  // renders through the mirror — since the transparency flip it IS the
+  // visible text layer, so it must always mount with the textarea.
   const mirrorNodes = useMemo(() => {
     const tokens = scanNoteFooterTokens(val);
     const finds = findOpen ? matches : [];
-    if (tokens.length === 0 && finds.length === 0) return null;
     // A trailing newline collapses at the mirror's block end (the textarea
     // still reserves the line); a zero-width tail makes the mirror take it.
     const tail = val.endsWith("\n") ? "\u200b" : "";
+    if (tokens.length === 0 && finds.length === 0) return val + tail;
     const bounds = new Set<number>([0, val.length]);
     for (const t of tokens) {
       bounds.add(t.start);
@@ -685,11 +686,10 @@ function NoteInput({
           {/* The visible text layer: a copy of the text laid out exactly under
               the textarea (same font/wrap — see .note-mirror in index.css)
               carrying the find marks and the pending footer's colored tokens;
-              the textarea above paints its own glyphs transparent.
+              the textarea above paints its own glyphs transparent, so this
+              always mounts — no mirror, no visible text.
               pointer-events: none in CSS, so it never intercepts the editor. */}
-          {mirrorNodes !== null && (
-            <div className="note-mirror" aria-hidden="true">{mirrorNodes}</div>
-          )}
+          <div className="note-mirror" aria-hidden="true">{mirrorNodes}</div>
           <textarea
             ref={ref}
             className="note-textarea"

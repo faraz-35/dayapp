@@ -125,6 +125,10 @@ npm install
 npm run tauri dev      # hot-reloading dev window
 ```
 
+On machines running [AeroSpace](https://github.com/nikitabobko/AeroSpace), the app
+fullscreens itself into workspace 10 at launch (it asks the `aerospace` CLI; without
+AeroSpace installed this is a silent no-op).
+
 ## Build a release `.app`
 
 ```bash

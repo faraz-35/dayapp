@@ -622,6 +622,47 @@ async fn self_update(app: AppHandle) -> Result<(), String> {
 
 // ---- Setup ----------------------------------------------------------------
 
+// The launch placement ritual, automated: DayApp always lands fullscreened in
+// AeroSpace workspace 10 (the manual alt-shift-0 + alt-f sequence). The
+// workspace move lives in ~/.aerospace.toml's on-window-detected — AeroSpace
+// callbacks only support layout/move commands, so the fullscreen half lives
+// here: find OUR window in AeroSpace's list (matched by pid + app name, so
+// never another app's) and ask the CLI to fullscreen that window id,
+// retrying briefly while AeroSpace is still attaching us. `on` is idempotent;
+// wherever AeroSpace isn't installed the first command simply fails and this
+// is a silent no-op (DayApp is public-source — not every machine tiles).
+fn aerospace_fullscreen() {
+    let pid = std::process::id().to_string();
+    std::thread::spawn(move || {
+        for delay_ms in [400u64, 1200, 2500, 5000] {
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            let Ok(out) = std::process::Command::new("aerospace")
+                .args(["list-windows", "--all", "--format", "%{window-id} %{app-pid} %{app-name}"])
+                .output()
+            else {
+                return; // no aerospace binary — nothing to ask
+            };
+            let listing = String::from_utf8_lossy(&out.stdout);
+            let our_window = listing.lines().find(|l| {
+                let mut f = l.split_whitespace();
+                f.next().is_some() && f.next() == Some(pid.as_str()) && f.next() == Some("DayApp")
+            });
+            let Some(wid) = our_window.and_then(|l| l.split_whitespace().next()) else {
+                continue; // window not attached to the tree yet
+            };
+            let fullscreen = std::process::Command::new("aerospace")
+                .args(["fullscreen", "--window-id", wid, "on"])
+                .output()
+                .is_ok_and(|o| o.status.success());
+            if fullscreen {
+                log::info!("placement: aerospace fullscreened window {wid}");
+                return;
+            }
+        }
+        log::debug!("placement: aerospace never attached the window; skipped fullscreen");
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -695,6 +736,10 @@ pub fn run() {
                 });
             }
             app.manage(DbState(db));
+            // AeroSpace placement (see aerospace_fullscreen): the workspace-10
+            // half is ~/.aerospace.toml's on-window-detected; this asks for the
+            // fullscreen half once AeroSpace has attached the window.
+            aerospace_fullscreen();
             log::info!("DayApp ready");
             Ok(())
         })
