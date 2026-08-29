@@ -279,6 +279,14 @@ button {
 .section-name.surface-name {
   color: var(--text-dim);
 }
+/* The Tasks head isn't wrapped in a padded section like Notes' (whose head
+   sits 16px in: the section's 8px + its own 8px), so it carries the full
+   inset itself. The top margin gives the Notes→Tasks seam the sections' 36px
+   rhythm (28px here + the 8px the Notes block already adds below it). */
+.section-head.surface-head {
+  margin-top: 28px;
+  padding: 0 16px 6px;
+}
 
 .section-dropzone {
   min-height: 8px;

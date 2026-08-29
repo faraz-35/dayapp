@@ -733,7 +733,15 @@ the sigil, TokenField's fields hide the native caret/selection (they track the R
 value and would drift off the visible words) and draw their own over the
 SUBSTITUTED layout — Range rects over the mirror's own text nodes, wrap- and
 scroll-exact (`.tok-caret`/`.tok-sel-rect`; the real↔display index map rides the
-same one-pass mirror model). The value is never rewritten — display only; parsers
+same one-pass mirror model). The caret paints in the value render's own layout
+pass (`paint()` in `TokenField.tsx` reads the field's selection at paint time —
+never state: a state round-trip lands a frame late, so the caret trailed the
+typed text and every keystroke cost a second render; the event listeners only
+schedule rAF-deferred pure-DOM paints, honoring the WebKit selectionchange trap's
+no-setState-in-dispatch rule), and the single-line mirror tracks the caret for
+horizontal scroll instead of copying the input's scrollLeft — the substituted
+content is a different width than the raw text, so a copied scrollLeft diverges
+from the caret. The value is never rewritten — display only; parsers
 still strip the raw tokens. The note body's mirror keeps its native caret (no
 overlay there), so its footer bars render width-fitted to the raw `!N`
 (`baseTextWidth`) and nothing drifts.

@@ -136,8 +136,10 @@ export default function SectionList({
     <>
       {/* The stack's surface header — the Notes pattern: a name above the
           capture, a step brighter than the Today/Daily/Backlog names (it
-          labels the whole task surface, not a subsection of it). */}
-      <div className="section-head">
+          labels the whole task surface, not a subsection of it). Not inside
+          a padded section like Notes' head, so .surface-head carries the
+          extra inset (and the seam's breathing room) itself. */}
+      <div className="section-head surface-head">
         <span className="section-name surface-name">Tasks</span>
       </div>
 
