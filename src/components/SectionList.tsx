@@ -134,6 +134,13 @@ export default function SectionList({
 
   return (
     <>
+      {/* The stack's surface header — the Notes pattern: a name above the
+          capture, a step brighter than the Today/Daily/Backlog names (it
+          labels the whole task surface, not a subsection of it). */}
+      <div className="section-head">
+        <span className="section-name surface-name">Tasks</span>
+      </div>
+
       {/* The one task capture, above the stack: type + Enter to add, a leading
           ##t/##d/##b to choose the destination (no token = Today). No button,
           no click-to-reveal — the input itself is the affordance. Mounted

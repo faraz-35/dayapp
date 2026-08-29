@@ -328,7 +328,7 @@ export default function Notes({
   return (
     <section className="notes">
       <div className="section-head">
-        <span className="section-name">Notes</span>
+        <span className="section-name surface-name">Notes</span>
       </div>
 
       {/* Always-open capture: type + Enter writes a note. No + button.

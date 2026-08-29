@@ -274,6 +274,12 @@ button {
   color: var(--text-faint);
 }
 
+/* Tasks and Notes label whole capture surfaces — one step brighter than the
+   Today/Daily/Backlog names, which label subsections of the task stack. */
+.section-name.surface-name {
+  color: var(--text-dim);
+}
+
 .section-dropzone {
   min-height: 8px;
   transition: background 0.1s ease, min-height 0.1s ease;
