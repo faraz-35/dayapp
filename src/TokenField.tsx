@@ -196,6 +196,17 @@ export default function TokenField({
     const end = field.selectionEnd ?? 0;
     const box = mirror.getBoundingClientRect();
     const cs = getComputedStyle(mirror);
+    // The ⌘± zoom lives on <html>, so getBoundingClientRect() reports VISUAL
+    // pixels while the overlays' transforms run inside the zoomed subtree in
+    // CSS pixels — an unconverted delta would land scaled by the zoom twice
+    // and overshoot proportionally to its distance from the box's edge (the
+    // "caret drifts right as you type" bug: invisible at short lengths,
+    // growing with every character). One read, divided into every delta.
+    const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    const toContent = (r: DOMRect) => ({
+      x: (r.left - box.left) / zoom + mirror.scrollLeft,
+      y: (r.top - box.top) / zoom + mirror.scrollTop,
+    });
     // A display index → (text node, offset), walking the mirror's own text
     // nodes — the concatenated dl's equal their lengths, so the walk IS the
     // map. Priority-bars markup carries no text node and is stepped over,
@@ -211,10 +222,6 @@ export default function TokenField({
       }
       return null;
     };
-    const toContent = (r: DOMRect) => ({
-      x: r.left - box.left + mirror.scrollLeft,
-      y: r.top - box.top + mirror.scrollTop,
-    });
     // A collapsed (or any) range's viewport rect at one text position.
     const rangeRect = (p: { node: Text; offset: number }): DOMRect | null => {
       const rg = document.createRange();
@@ -236,7 +243,7 @@ export default function TokenField({
         if (r && !(r.left === 0 && r.top === 0 && r.width === 0 && r.height === 0)) {
           const c = toContent(r);
           caret.style.transform = `translate(${c.x}px, ${c.y}px)`;
-          caret.style.height = `${r.height || parseFloat(cs.lineHeight) || 18}px`;
+          caret.style.height = `${(r.height / zoom) || parseFloat(cs.lineHeight) || 18}px`;
           if (!multiline) {
             // Single-line: keep the caret inside the window the way a native
             // input does. The mirror can't copy the input's scrollLeft (the
@@ -279,8 +286,8 @@ export default function TokenField({
             const rect = document.createElement("i");
             rect.className = "tok-sel-rect";
             rect.style.transform = `translate(${c.x}px, ${c.y}px)`;
-            rect.style.width = `${r.width}px`;
-            rect.style.height = `${r.height}px`;
+            rect.style.width = `${r.width / zoom}px`;
+            rect.style.height = `${r.height / zoom}px`;
             selEl.appendChild(rect);
           }
         }

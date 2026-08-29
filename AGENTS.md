@@ -741,7 +741,12 @@ schedule rAF-deferred pure-DOM paints, honoring the WebKit selectionchange trap'
 no-setState-in-dispatch rule), and the single-line mirror tracks the caret for
 horizontal scroll instead of copying the input's scrollLeft — the substituted
 content is a different width than the raw text, so a copied scrollLeft diverges
-from the caret. The value is never rewritten — display only; parsers
+from the caret), and every visual→overlay conversion divides by the `<html>`
+⌘± zoom: `getBoundingClientRect()` reports visual pixels while the transforms
+run inside the zoomed subtree in CSS pixels, so an unconverted delta overshoots
+proportionally to its distance from the field's edge — the "caret drifts right
+as you type" bug (2026-08-30), invisible at short lengths and growing with
+every character. The value is never rewritten — display only; parsers
 still strip the raw tokens. The note body's mirror keeps its native caret (no
 overlay there), so its footer bars render width-fitted to the raw `!N`
 (`baseTextWidth`) and nothing drifts.
