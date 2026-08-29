@@ -699,6 +699,58 @@ function resolveProjectByName(tag: string, projects: Project[]): Project | null 
 // and `#0` clears the project (tasks' `!0` rule plus its project twin — notes
 // have no popover to clear through).
 
+/** The pending footer's position: the last non-empty line, only when a blank
+ *  line separates it from the prose above (splitNoteFooter's shape). `start`/
+ *  `end` span the raw line in `body`; `proseEnd` is where the body ends once
+ *  the footer and its blank line are dropped. Null when there's no candidate
+ *  — nothing above, or the line sits first. */
+function footerLine(body: string): { start: number; end: number; proseEnd: number } | null {
+  const lines = body.split("\n");
+  let last = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].trim()) { last = i; break; }
+  }
+  if (last <= 0 || lines[last - 1].trim()) return null;
+  let start = 0;
+  for (let i = 0; i < last; i++) start += lines[i].length + 1;
+  return { start, end: start + lines[last].length, proseEnd: start - lines[last - 1].length - 1 };
+}
+
+/** One footer word's kind, by the strict shapes splitNoteFooter accepts:
+ *  `!0..3` priority, `#word` project (`#0` included — it processes as the
+ *  clear). Anything else is prose and makes the line just text. */
+function footerTokenKind(word: string): TokenKind | null {
+  if (/^![0-3]$/.test(word)) return "priority";
+  if (/^#[\w-]+$/.test(word)) return "project";
+  return null;
+}
+
+/** The note body's live coloring: the token spans a pending footer line would
+ *  color with while it's still being typed — the blur-catch's twin, so what
+ *  colors is exactly what the catch will strip and apply. Empty when the last
+ *  line isn't a catchable footer (prose on the line, no blank line above, or
+ *  nothing to catch) — and inline tokens elsewhere in the body never color,
+ *  because they never process there. */
+export function scanNoteFooterTokens(body: string): TokenSpan[] {
+  const f = footerLine(body);
+  if (!f) return [];
+  const line = body.slice(f.start, f.end);
+  const out: TokenSpan[] = [];
+  const re = /\S+/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) {
+    const kind = footerTokenKind(m[0]);
+    if (kind === null) return [];
+    out.push({
+      kind,
+      start: f.start + m.index,
+      end: f.start + m.index + m[0].length,
+      value: m[0],
+    });
+  }
+  return out;
+}
+
 /** Split a body's trailing token line: the last non-empty line, when a blank
  *  line separates it from the prose above and it holds ONLY `!0..3` / `#tag`
  *  tokens. Returns the body without it plus the parsed values — `body` is what
@@ -714,24 +766,20 @@ export function splitNoteFooter(body: string): {
   /** A `#0` token — the explicit project clear. */
   clearProject: boolean;
 } {
-  const lines = body.split("\n");
-  let last = -1;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].trim()) { last = i; break; }
-  }
-  if (last > 0 && !lines[last - 1].trim()) {
+  const f = footerLine(body);
+  if (f) {
     let priority: 0 | 1 | 2 | 3 | null = null;
     let tag: string | null = null;
     let clearProject = false;
     let ok = true;
-    for (const tok of lines[last].trim().split(/\s+/)) {
+    for (const tok of body.slice(f.start, f.end).trim().split(/\s+/)) {
       if (/^![0-3]$/.test(tok)) priority = Number(tok[1]) as 0 | 1 | 2 | 3; // last wins
       else if (tok === "#0") clearProject = true;
       else if (/^#[\w-]+$/.test(tok)) tag = tok.slice(1);                   // last wins
       else { ok = false; break; }
     }
     if (ok && (priority !== null || tag !== null || clearProject)) {
-      return { body: lines.slice(0, last - 1).join("\n").trimEnd(), priority, tag, clearProject };
+      return { body: body.slice(0, f.proseEnd).trimEnd(), priority, tag, clearProject };
     }
   }
   return { body, priority: null, tag: null, clearProject: false };

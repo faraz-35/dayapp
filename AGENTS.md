@@ -505,7 +505,7 @@ dayapp/
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
-│   ├── TokenField.tsx              ← capture input with live token coloring (transparent text + mirror div; scanTokens is the one matcher)
+│   ├── TokenField.tsx              ← capture/edit field with live token coloring (transparent text + mirror div; scanTokens is the one matcher)
 │   ├── CommandPalette.tsx          ← ⌘P modal: filter + keyboard nav
 │   ├── KeyboardHelp.tsx            ← ⌘P keyboard reference card (the focus grammar, documented)
 │   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
@@ -684,20 +684,25 @@ window; below 455px of width a media query hides the masthead.
 
 ### Interaction patterns (existing — match these for new features)
 
-**Token coloring in capture fields (`TokenField.tsx`):** every capture input colors the
-typed-token grammar live — `##j`/`##q` routes, `#tag`, `!N`, and `@` all in the one
-accent (Faraz's call, 2026-08-29: same purple for every family — a token reads as
-"this processes", nothing more). Mechanism: the field's real text is transparent
-and a mirror div underneath (`.token-mirror` — the note find-bar's technique) renders
-the same text with colored spans; scroll positions sync because the field scrolls its
-content while the mirror clips. The spans come from `scanTokens` in `lib.ts` — the ONE
-matcher the capture parsers also strip through — so coloring can never drift from
-processing: a line the surface wouldn't parse (an `@` in the notes bar, a `#tag` in the
-Journal capture — plain prose there) stays uncolored, and past a leading route token
-nothing colors either (the routed line is verbatim content). Horizon words in the Goals
-capture are prose, not sigil tokens — they stay plain. Inline *edit* inputs and note
-*bodies* are deliberately not colored: the ask was the capture inputs, and the note
-body's mirror is already committed to find-highlighting.
+**Token coloring (`TokenField.tsx`):** every capture input AND the token-editing
+surfaces color the typed-token grammar live — `##j`/`##q` routes, `#tag`, `!N`, and
+`@` all in the one accent (Faraz's call, 2026-08-29: same purple for every family —
+a token reads as "this processes", nothing more). Edit surfaces: task inline edits
+(`EditInput` with the full grammar), goal edits (`#tag`), and a note body's **pending
+footer line** — `scanNoteFooterTokens` in `lib.ts` is `splitNoteFooter`'s live twin,
+coloring exactly the line the blur-catch will strip and apply. Mechanism: the field's
+real text is transparent and a mirror div underneath (`.token-mirror`) renders the
+same text with colored spans; scroll positions sync because the field scrolls its
+content while the mirror clips. The note body uses the same flip (transparent
+textarea, visible mirror) with ONE mirror carrying both find marks and footer
+tokens. The spans come from `scanTokens` in `lib.ts` — the ONE matcher the capture
+parsers also strip through — so coloring can never drift from processing: a line the
+surface wouldn't parse (an `@` in the notes bar, a `#tag` in the Journal capture —
+plain prose there) stays uncolored, past a leading route token nothing colors either
+(the routed line is verbatim content), and inline tokens in a note body never color
+(they never process there). Horizon words in the Goals surfaces are prose, not sigil
+tokens — they stay plain. Journal entry EDITS stay plain too (entries store
+verbatim); the details body has no grammar at all.
 
 **Item rows:**
 - Resting: the checkbox circle + text, plus any right-aligned metadata (agent robot badge,

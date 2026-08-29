@@ -160,7 +160,7 @@ export default function Goals({
         )}
 
         {editing ? (
-          <EditInput initial={goal.text} onCommit={(text) => handleCommitEdit(goal, text)} />
+          <EditInput initial={goal.text} onCommit={(text) => handleCommitEdit(goal, text)} kinds={["project"]} />
         ) : (
           <span className="item-text">{goal.text}</span>
         )}

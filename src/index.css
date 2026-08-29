@@ -352,6 +352,24 @@ button {
   outline: none;
   font-family: inherit;
 }
+/* TokenField mode (task/goal edits): the wrapper carries the .item-edit box,
+   and the field inside goes bare — the transparent-text + mirror layers share
+   the wrapper's content box, so metrics can't drift. The mirror repeats the
+   box padding because absolute inset:0 spans the wrapper's padding box. */
+.token-field.item-edit > :is(input, textarea) {
+  width: 100%;
+  display: block;
+  padding: 0;
+  background: none;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.token-field.item-edit .token-mirror {
+  padding: 2px 6px;
+}
 
 .item-action {
   width: 22px;
@@ -1101,20 +1119,28 @@ button {
    where it lives relative to the text when the bar is closed. */
 .note.finding .note-actions { top: 36px; }
 
-/* The mirror: absolutely under the textarea (which sits above it with
-   transparent background — z-index on a positioned element, the wrapper owns
-   both), laying out the same text with the same metrics — .note-textarea's
-   font, size, line-height, zero padding, pre-wrap + break-word — so each mark
-   lands exactly under its matched glyphs. Text color transparent: only the
-   marks' backgrounds read through. pointer-events none, so it never
-   intercepts the editor. */
+/* The mirror: absolutely under the textarea, laying out the same text with
+   the same metrics — .note-textarea's font, size, line-height, zero padding,
+   pre-wrap + break-word — so each mark lands exactly under its matched
+   glyphs. The textarea's own glyphs render transparent (caret stays via
+   caret-color); the mirror is the visible text, and it carries both layers:
+   the find marks' background tints and the pending footer's accent tokens.
+   pointer-events: none, so it never intercepts the editor. */
 .note-body-wrap { position: relative; }
-.note-body-wrap .note-textarea { position: relative; z-index: 1; }
+.note-body-wrap .note-textarea {
+  position: relative;
+  z-index: 1;
+  color: transparent;
+  caret-color: var(--text);
+}
+.note-body-wrap .note-textarea::selection {
+  background: rgba(123, 140, 255, 0.3);
+}
 .note-mirror {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  color: transparent;
+  color: var(--text);
   font: inherit;
   font-size: 13px;
   line-height: 1.5;
@@ -1129,10 +1155,10 @@ button {
    here (same pattern as the reminder chip / dropzone tints). */
 .note-mirror mark {
   background: rgba(123, 140, 255, 0.25);
-  color: transparent;
   border-radius: 2px;
 }
 .note-mirror mark.note-find-cur { background: rgba(123, 140, 255, 0.55); }
+.note-mirror .tok { color: var(--accent); }
 
 .note-delete {
   width: 18px;

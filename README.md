@@ -104,9 +104,11 @@ The `##` prefix is reserved so it can't collide with the `#tag` project token. E
 have no priority/project/hide axes — just text and its day — and like notes they're
 content, never logged to `actions` and never exported to the phone.
 
-Typed tokens **color as you type** in every capture field — `##j`/`##q`, `#tag`, `!N`, `@`
-all in the app's one accent: what colors is exactly what will process at Enter, and
-nothing else colors (`#tag` in the Journal capture is plain prose there). And `nj` / `nq`
+Typed tokens **color as you type** — in every capture field and while editing: task and
+goal edits, and a note's pending footer line (blank line + tokens-only last line), all in
+the app's one accent. What colors is exactly what will process at Enter/blur, and nothing
+else colors (`#tag` in the Journal capture is plain prose there; inline tokens in a note
+body never process, so they never color). And `nj` / `nq`
 (see [Keyboard shortcuts](#keyboard-shortcuts)) type the route token for you.
 
 ## Stack
@@ -183,7 +185,7 @@ dayapp/
 │   ├── HideMenu.tsx         ← shared ◐ hide-duration popover
 │   ├── ProjectMenu.tsx      ← # assign/clear/create project popover
 │   ├── ReminderMenu.tsx     ← ◷ reminder-date popover
-│   ├── TokenField.tsx       ← capture input with live token coloring (the mirror trick)
+│   ├── TokenField.tsx       ← capture/edit input with live token coloring (the mirror trick)
 │   ├── CommandPalette.tsx   ← ⌘P command palette modal
 │   ├── KeyboardHelp.tsx     ← the keyboard reference card (⌘P → Keyboard Shortcuts)
 │   ├── UpdateOverlay.tsx    ← self-update progress modal

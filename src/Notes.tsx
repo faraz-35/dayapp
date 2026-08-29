@@ -39,7 +39,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { notesApi, type Note } from "./notesApi";
-import { type EntryKind, type HideDuration, type HiddenFilter, entriesApi, parseEntryCapture, parseNoteCapture, projectColor, resolveNoteTag, splitNoteFooter, type Project } from "./lib";
+import { type EntryKind, type HideDuration, type HiddenFilter, entriesApi, parseEntryCapture, parseNoteCapture, projectColor, resolveNoteTag, scanNoteFooterTokens, splitNoteFooter, type Project } from "./lib";
 import { log } from "./log";
 import HideMenu from "./HideMenu";
 import TokenField from "./TokenField";
@@ -582,26 +582,46 @@ function NoteInput({
     saveTimer.current = setTimeout(() => onUpdate(note.id, body), 600);
   };
 
-  // The mirror's children: the text split at match boundaries, each match a
-  // <mark> (the current one distinct). Rendered only while finding — zero cost
-  // to the normal editing path.
+  // The mirror's children: the text split at the boundaries of the pending
+  // footer's tokens (colored — the blur-catch's live twin, so the line colors
+  // exactly what the catch will strip and apply) and the find matches (tinted
+  // marks, while finding). Both layers are just intervals over the same text,
+  // so they merge into one split; a mark around a token keeps both — tint
+  // behind, accent glyphs on it. Rendered only when there's something to show
+  // — zero cost to the plain editing path.
   const mirrorNodes = useMemo(() => {
-    if (!findOpen || matches.length === 0) return null;
+    const tokens = scanNoteFooterTokens(val);
+    const finds = findOpen ? matches : [];
+    if (tokens.length === 0 && finds.length === 0) return null;
     // A trailing newline collapses at the mirror's block end (the textarea
     // still reserves the line); a zero-width tail makes the mirror take it.
     const tail = val.endsWith("\n") ? "\u200b" : "";
+    const bounds = new Set<number>([0, val.length]);
+    for (const t of tokens) {
+      bounds.add(t.start);
+      bounds.add(t.end);
+    }
+    for (const [s, e] of finds) {
+      bounds.add(s);
+      bounds.add(e);
+    }
+    const pts = [...bounds].sort((a, b) => a - b);
     const parts: ReactNode[] = [];
-    let pos = 0;
-    matches.forEach(([s, e], i) => {
-      if (s > pos) parts.push(val.slice(pos, s));
+    for (let i = 0; i < pts.length - 1; i++) {
+      const s = pts[i];
+      const e = pts[i + 1];
+      if (e <= s) continue;
+      const text = val.slice(s, e);
+      const inToken = tokens.some((t) => t.start <= s && e <= t.end);
+      const mi = finds.findIndex(([ms, me]) => ms <= s && e <= me);
+      const inner = inToken ? <span className="tok">{text}</span> : text;
       parts.push(
-        <mark key={i} className={i === cur ? "note-find-cur" : undefined}>
-          {val.slice(s, e)}
-        </mark>,
+        mi === -1
+          ? inner
+          : <mark key={i} className={mi === cur ? "note-find-cur" : undefined}>{inner}</mark>,
       );
-      pos = e;
-    });
-    parts.push(val.slice(pos) + tail);
+    }
+    parts.push(tail);
     return parts;
   }, [findOpen, matches, cur, val]);
 
@@ -662,10 +682,11 @@ function NoteInput({
         </div>
       ) : (
         <div className="note-body-wrap">
-          {/* The match highlight: a transparent-text copy of the text laid out
-              exactly under the textarea (same font/wrap — see .note-mirror in
-              index.css), marks tinted through it. pointer-events: none in CSS,
-              so it never intercepts the editor. */}
+          {/* The visible text layer: a copy of the text laid out exactly under
+              the textarea (same font/wrap — see .note-mirror in index.css)
+              carrying the find marks and the pending footer's colored tokens;
+              the textarea above paints its own glyphs transparent.
+              pointer-events: none in CSS, so it never intercepts the editor. */}
           {mirrorNodes !== null && (
             <div className="note-mirror" aria-hidden="true">{mirrorNodes}</div>
           )}

@@ -16,13 +16,14 @@
 // Single click selects AND enters edit mode; the checkbox/buttons all
 // stopPropagation so they keep working without triggering edit.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { formatDuration, formatLiveDuration, formatReminder, localDateStr, projectColor, type HideDuration, type Item, type Project } from "../lib";
+import { formatDuration, formatLiveDuration, formatReminder, localDateStr, projectColor, type HideDuration, type Item, type Project, type TokenKind } from "../lib";
 import HideMenu from "../HideMenu";
 import ProjectMenu from "../ProjectMenu";
 import ReminderMenu from "../ReminderMenu";
+import TokenField from "../TokenField";
 
 export default function ItemRow({
   item, projects, selected, editing, detailsOpen,
@@ -103,7 +104,11 @@ export default function ItemRow({
       />
 
       {editing ? (
-        <EditInput initial={item.text} onCommit={onCommitEdit} />
+        <EditInput
+          initial={item.text}
+          onCommit={onCommitEdit}
+          kinds={["project", "priority", "agent"]}
+        />
       ) : (
         <span className="item-text">{item.text}</span>
       )}
@@ -332,14 +337,18 @@ export function PriorityBars({ priority }: { priority: 1 | 2 | 3 | null }) {
 
 // Controlled input that commits on Enter/blur, cancels on Escape.
 // Focus lands at the end of the text (not a full select) so a click-to-edit
-// appends naturally, like the notes textareas. Shared with Goals.tsx.
-export function EditInput({  initial, onCommit,
-}: {
+// appends naturally, like the notes textareas. Shared with Goals.tsx and
+// Journal.tsx. With `kinds` set it renders as a TokenField so the edit colors
+// the tokens its commit will parse (task edits carry the full grammar, goal
+// edits the #tag); without it, the plain input — the surface parses nothing
+// (Journal entries are stored verbatim).
+export function EditInput({ initial, onCommit, kinds }: {
   initial: string;
   onCommit: (text: string) => void;
+  kinds?: readonly TokenKind[];
 }) {
   const [val, setVal] = useState(initial);
-  const ref = useRef<HTMLInputElement>(null);
+  const ref = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -347,18 +356,34 @@ export function EditInput({  initial, onCommit,
     const end = initial.length;
     el.setSelectionRange(end, end);
   }, [initial]);
-  return (
+  // Clicks must not fall through to the row's select+edit handler, and the
+  // commit rules are the same whichever field renders.
+  const handlers = {
+    onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+    onBlur: () => onCommit(val),
+    // The union element keeps one handler assignable to both fields — the
+    // plain input and TokenField's input-or-textarea.
+    onKeyDown: (e: ReactKeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (e.key === "Enter") { e.preventDefault(); onCommit(val); }
+      if (e.key === "Escape") onCommit(initial);
+    },
+  };
+  return kinds ? (
+    <TokenField
+      ref={ref}
+      className="item-edit"
+      kinds={kinds}
+      value={val}
+      onChange={setVal}
+      {...handlers}
+    />
+  ) : (
     <input
       ref={ref}
       className="item-edit"
       value={val}
       onChange={(e) => setVal(e.target.value)}
-      onClick={(e) => e.stopPropagation()}
-      onBlur={() => onCommit(val)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") { e.preventDefault(); onCommit(val); }
-        if (e.key === "Escape") onCommit(initial);
-      }}
+      {...handlers}
     />
   );
 }
