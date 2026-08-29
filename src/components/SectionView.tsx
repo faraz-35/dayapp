@@ -76,7 +76,6 @@ export default function SectionView({
           capture={section}
           value={draft}
           onChange={setDraft}
-          projects={projects}
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); submit(); }
             // Empty draft → blur: the Esc ladder's editing → nothing rung

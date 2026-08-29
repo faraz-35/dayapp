@@ -685,9 +685,9 @@ window; below 455px of width a media query hides the masthead.
 ### Interaction patterns (existing — match these for new features)
 
 **Token coloring in capture fields (`TokenField.tsx`):** every capture input colors the
-typed-token grammar live — `##j`/`##q` routes in the accent, `#tag` in its resolved
-project's hue (an unknown name hashes its own, provisional), `!N` in `--tok-priority`
-(amber), `@` in `--tok-agent` (cyan). Mechanism: the field's real text is transparent
+typed-token grammar live — `##j`/`##q` routes, `#tag`, `!N`, and `@` all in the one
+accent (Faraz's call, 2026-08-29: same purple for every family — a token reads as
+"this processes", nothing more). Mechanism: the field's real text is transparent
 and a mirror div underneath (`.token-mirror` — the note find-bar's technique) renders
 the same text with colored spans; scroll positions sync because the field scrolls its
 content while the mirror clips. The spans come from `scanTokens` in `lib.ts` — the ONE

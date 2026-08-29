@@ -11,11 +11,6 @@
   --accent: #7b8cff;
   --done: #3a3f48;
   --danger: #e5484d;
-  /* Typed-token tints (capture-field syntax coloring): each token family its
-     own color so the eye reads WHAT a token will do before Enter. Routes
-     (##j/##q) use the accent itself; #tag takes its project's hue at runtime. */
-  --tok-priority: #e2a45c;
-  --tok-agent: #62b6c4;
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif;
   font-size: 13px;
   color-scheme: dark;
@@ -465,10 +460,9 @@ button {
   white-space: pre-wrap;
   word-break: break-word;
 }
-.tok-entry { color: var(--accent); }
-.tok-priority { color: var(--tok-priority); }
-.tok-agent { color: var(--tok-agent); }
-/* .tok-project colors inline (its project hue) — see TokenField.tsx. */
+/* Every token family in the one accent — a token reads as "this processes",
+   and only the real content stays plain text. */
+.token-mirror .tok { color: var(--accent); }
 
 .empty {
   padding: 6px 10px;

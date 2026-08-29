@@ -3,6 +3,8 @@
 // style substrings, so the field's real text renders transparent and a mirror
 // div underneath paints the same text with the token spans colored — the note
 // find-bar's mirror technique (Notes.tsx), applied to every capture surface.
+// Every token family shares the one accent: a token reads as "this
+// processes", and only the real content stays plain text.
 //
 // The spans come from scanTokens (lib.ts), the same matcher the capture
 // parsers strip with, so what colors is exactly what processes at Enter. A
@@ -15,7 +17,7 @@
 // typing the token.
 
 import { useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { projectColor, resolveProjectByName, scanTokens, type Project, type TokenKind } from "./lib";
+import { scanTokens, type TokenKind } from "./lib";
 import { ROUTE_EVENT } from "./focusNav";
 
 type FieldElement = HTMLInputElement | HTMLTextAreaElement;
@@ -28,7 +30,6 @@ export default function TokenField({
   onKeyDown,
   multiline = false,
   route = false,
-  projects,
   rows,
 }: {
   /** The surface's grammar — exactly the tokens its Enter handler parses. */
@@ -43,9 +44,6 @@ export default function TokenField({
   multiline?: boolean;
   /** Listen for the grammar's route prefill (nj/nq) — the notes bar. */
   route?: boolean;
-  /** Colors #tag spans with the resolved project's hue; an unknown name hashes
-   *  its own — provisional color for a project the tag is about to create. */
-  projects?: Project[];
   rows?: number;
 }) {
   const fieldRef = useRef<FieldElement | null>(null);
@@ -84,29 +82,21 @@ export default function TokenField({
   }, [route, value, onChange]);
 
   // The mirror's children: the text split at token boundaries, each token a
-  // span in its kind's color (projects in their resolved hue). A trailing
-  // newline gets a zero-width tail so the mirror keeps the empty last line the
-  // multiline field still reserves (the note-mirror rule).
+  // span in the shared accent (`.tok` in index.css). A trailing newline gets
+  // a zero-width tail so the mirror keeps the empty last line the multiline
+  // field still reserves (the note-mirror rule).
   const mirrorNodes = useMemo(() => {
     const spans = scanTokens(value, kinds);
     const parts: ReactNode[] = [];
     let pos = 0;
     spans.forEach((s, i) => {
       if (s.start > pos) parts.push(value.slice(pos, s.start));
-      parts.push(
-        <span
-          key={i}
-          className={`tok-${s.kind}`}
-          style={s.kind === "project" ? { color: hueForTag(s.value, projects) } : undefined}
-        >
-          {value.slice(s.start, s.end)}
-        </span>,
-      );
+      parts.push(<span key={i} className="tok">{value.slice(s.start, s.end)}</span>);
       pos = s.end;
     });
     parts.push(value.slice(pos) + (multiline && value.endsWith("\n") ? "\u200b" : ""));
     return parts;
-  }, [value, kinds, projects, multiline]);
+  }, [value, kinds, multiline]);
 
   const attach = (el: FieldElement | null) => {
     fieldRef.current = el;
@@ -131,11 +121,3 @@ export default function TokenField({
     </div>
   );
 }
-
-// A #tag's hue: its project's own when the name resolves under the item-tag
-// rules (the label the row will wear), else a hash of the name — provisional
-// color for a project the tag is about to create.
-const hueForTag = (name: string, projects?: Project[]): string => {
-  const p = projects ? resolveProjectByName(name, projects) : null;
-  return projectColor(p ? p.id : name);
-};

@@ -679,7 +679,7 @@ function stripTag(
 
 /** Exact (case-insensitive) name match wins; otherwise a unique prefix match.
  *  No match, or an ambiguous prefix (≥2 projects), resolves to null. */
-export function resolveProjectByName(tag: string, projects: Project[]): Project | null {
+function resolveProjectByName(tag: string, projects: Project[]): Project | null {
   const lower = tag.toLowerCase();
   const exact = projects.find((p) => p.name.toLowerCase() === lower);
   if (exact) return exact;

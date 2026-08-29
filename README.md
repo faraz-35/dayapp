@@ -104,11 +104,10 @@ The `##` prefix is reserved so it can't collide with the `#tag` project token. E
 have no priority/project/hide axes — just text and its day — and like notes they're
 content, never logged to `actions` and never exported to the phone.
 
-Typed tokens **color as you type** in every capture field: routes (`##j`/`##q`) in the
-accent, `#tag` in its project's hue, `!N` in amber, `@` in cyan — what colors is exactly
-what will process at Enter, and nothing else colors (`#tag` in the Journal capture is
-plain prose there). And `nj` / `nq` (see [Keyboard shortcuts](#keyboard-shortcuts)) type
-the route token for you.
+Typed tokens **color as you type** in every capture field — `##j`/`##q`, `#tag`, `!N`, `@`
+all in the app's one accent: what colors is exactly what will process at Enter, and
+nothing else colors (`#tag` in the Journal capture is plain prose there). And `nj` / `nq`
+(see [Keyboard shortcuts](#keyboard-shortcuts)) type the route token for you.
 
 ## Stack
 

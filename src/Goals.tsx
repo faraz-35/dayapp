@@ -228,7 +228,6 @@ export default function Goals({
           kinds={["project"]}
           value={draft}
           onChange={setDraft}
-          projects={projects}
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); submit(); }
             // Empty draft → blur: the Esc ladder's editing → nothing rung

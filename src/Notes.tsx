@@ -346,7 +346,6 @@ export default function Notes({
             rows={3}
             value={draft}
             onChange={setDraft}
-            projects={projects}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
