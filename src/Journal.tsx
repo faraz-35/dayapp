@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { entriesApi, parseEntryCapture, type Entry, type EntryKind } from "./lib";
 import { log } from "./log";
+import TokenField from "./TokenField";
 import { EditInput } from "./components/ItemRow";
 
 // The display order, mirroring list_entries' ORDER BY (journal.rs): newest day
@@ -130,11 +131,14 @@ export default function Journal({
 
       {/* The bus's home capture: plain lines land as today's entries. The
           input itself is the affordance — no placeholder, the section
-          language. */}
+          language. Only the ##q route colors here: past it (and everywhere
+          else) this line is verbatim prose — nothing else processes, so
+          nothing else colors. */}
       <div className="capture">
-        <input
+        <TokenField
+          kinds={["entry"]}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={setDraft}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -149,7 +153,6 @@ export default function Journal({
               else e.currentTarget.blur();
             }
           }}
-          spellCheck={false}
         />
       </div>
 

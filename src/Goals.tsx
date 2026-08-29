@@ -27,6 +27,7 @@ import {
 } from "./lib";
 import { log } from "./log";
 import ProjectMenu from "./ProjectMenu";
+import TokenField from "./TokenField";
 import { EditInput } from "./components/ItemRow";
 
 // Display order: constitution → career → now. A group with no goals renders
@@ -219,11 +220,15 @@ export default function Goals({
       </div>
 
       {/* Always-open capture, line-only like the section inputs — no
-          placeholder, the line is the affordance. */}
+          placeholder, the line is the affordance. #tag tokens color while
+          you type (TokenField); the leading horizon word is prose, not a
+          sigil token, and stays plain. */}
       <div className="capture">
-        <input
+        <TokenField
+          kinds={["project"]}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={setDraft}
+          projects={projects}
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); submit(); }
             // Empty draft → blur: the Esc ladder's editing → nothing rung
@@ -233,7 +238,6 @@ export default function Goals({
               else e.currentTarget.blur();
             }
           }}
-          spellCheck={false}
         />
       </div>
 

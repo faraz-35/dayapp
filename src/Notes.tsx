@@ -42,6 +42,7 @@ import { notesApi, type Note } from "./notesApi";
 import { type EntryKind, type HideDuration, type HiddenFilter, entriesApi, parseEntryCapture, parseNoteCapture, projectColor, resolveNoteTag, splitNoteFooter, type Project } from "./lib";
 import { log } from "./log";
 import HideMenu from "./HideMenu";
+import TokenField from "./TokenField";
 import { PriorityBars } from "./components/ItemRow";
 
 // Collapsed-note ids, persisted like the UI zoom — a display preference.
@@ -332,13 +333,20 @@ export default function Notes({
 
       {/* Always-open capture: type + Enter writes a note. No + button.
           Suppressed in hidden-only mode — a fresh note isn't hidden, so it
-          would vanish from the view the moment it's created. */}
+          would vanish from the view the moment it's created. TokenField
+          colors the typed grammar (##j/##q routes, #tag, !N) and carries the
+          nj/nq prefill. */}
       {hiddenFilter !== "only" && (
         <div className="capture">
-          <textarea
-            data-capture="notes"
+          <TokenField
+            kinds={["entry", "project", "priority"]}
+            capture="notes"
+            route
+            multiline
+            rows={3}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
+            projects={projects}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -356,8 +364,6 @@ export default function Notes({
                 else e.currentTarget.blur();
               }
             }}
-            rows={3}
-            spellCheck={false}
           />
         </div>
       )}

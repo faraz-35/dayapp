@@ -1159,6 +1159,7 @@ function DayApp() {
   //
   // The grammar (⌘P → Keyboard Shortcuts is the reference card):
   //   nn / nt / nd / nb   focus the Notes / Today / Daily / Backlog capture
+  //   nj / nq             the notes capture, pre-routed (##j / ##q swapped in)
   //   t1-9 / d1-9         focus a Today / Daily row
   //   b11-49              focus a Backlog row (tier 4 = unprioritized)
   //   n1-9 / g1-9         focus a note / goal
@@ -1218,6 +1219,8 @@ function DayApp() {
     const n = Number(a);
     if (p === "n") {
       if (a === "n") focusCapture("notes");
+      else if (a === "j") focusCapture("notes", "##j");
+      else if (a === "q") focusCapture("notes", "##q");
       else if (a === "t") focusCapture("today");
       else if (a === "d") focusCapture("daily");
       else if (a === "b") focusCapture("backlog");

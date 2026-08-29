@@ -9,6 +9,7 @@ import { Fragment, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { type HideDuration, type Item, type Project, type Section } from "../lib";
+import TokenField from "../TokenField";
 import ItemRow, { ItemDetailsBody, PriorityBars } from "./ItemRow";
 
 export default function SectionView({
@@ -67,12 +68,15 @@ export default function SectionView({
 
       {/* Always-open capture at the top of the section: type + Enter to add.
           No button, no click-to-reveal — the input itself is the affordance.
-          data-capture is the focus grammar's target (`nt` / `nd` / `nb`). */}
+          data-capture is the focus grammar's target (`nt` / `nd` / `nb`);
+          TokenField colors the typed tokens (#tag, !N, @) while you type. */}
       <div className="capture">
-        <input
-          data-capture={section}
+        <TokenField
+          kinds={["project", "priority", "agent"]}
+          capture={section}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={setDraft}
+          projects={projects}
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); submit(); }
             // Empty draft → blur: the Esc ladder's editing → nothing rung
@@ -82,7 +86,6 @@ export default function SectionView({
               else e.currentTarget.blur();
             }
           }}
-          spellCheck={false}
         />
       </div>
 

@@ -189,7 +189,10 @@ cannot collide with the `#tag` project token (a lone `#` never starts a tag word
 
 - `kind` ∈ `journal` (`##j`) | `quote` (`##q`). Parsed by `parseEntryCapture` in `lib.ts`
   (leading position only — mid-line `##j` is prose; a bare token with no text is a no-op),
-  routed in `Notes.tsx`'s `handleCapture` ahead of `parseNoteCapture`.
+  routed in `Notes.tsx`'s `handleCapture` ahead of `parseNoteCapture`. The grammar's
+  `nj`/`nq` addresses focus the notes capture with the route token pre-swapped-in
+  (`focusNav.focusCapture` dispatches `ROUTE_EVENT`; `TokenField` rewrites the value) —
+  typing the address IS typing the token.
 - `##j` → a **journal entry**: one line of reflection stamped with its day, rendered by the
   **Journal view** (its own page — see UI/UX). The action log stays the journal of *what was
   done*; this table is the journal of *what was thought*.
@@ -502,6 +505,7 @@ dayapp/
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
+│   ├── TokenField.tsx              ← capture input with live token coloring (transparent text + mirror div; scanTokens is the one matcher)
 │   ├── CommandPalette.tsx          ← ⌘P modal: filter + keyboard nav
 │   ├── KeyboardHelp.tsx            ← ⌘P keyboard reference card (the focus grammar, documented)
 │   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
@@ -680,6 +684,21 @@ window; below 455px of width a media query hides the masthead.
 
 ### Interaction patterns (existing — match these for new features)
 
+**Token coloring in capture fields (`TokenField.tsx`):** every capture input colors the
+typed-token grammar live — `##j`/`##q` routes in the accent, `#tag` in its resolved
+project's hue (an unknown name hashes its own, provisional), `!N` in `--tok-priority`
+(amber), `@` in `--tok-agent` (cyan). Mechanism: the field's real text is transparent
+and a mirror div underneath (`.token-mirror` — the note find-bar's technique) renders
+the same text with colored spans; scroll positions sync because the field scrolls its
+content while the mirror clips. The spans come from `scanTokens` in `lib.ts` — the ONE
+matcher the capture parsers also strip through — so coloring can never drift from
+processing: a line the surface wouldn't parse (an `@` in the notes bar, a `#tag` in the
+Journal capture — plain prose there) stays uncolored, and past a leading route token
+nothing colors either (the routed line is verbatim content). Horizon words in the Goals
+capture are prose, not sigil tokens — they stay plain. Inline *edit* inputs and note
+*bodies* are deliberately not colored: the ask was the capture inputs, and the note
+body's mirror is already committed to find-highlighting.
+
 **Item rows:**
 - Resting: the checkbox circle + text, plus any right-aligned metadata (agent robot badge,
   priority signal bars, `⏱` cumulative time, project label, reminder chip). Rows with no
@@ -751,6 +770,7 @@ its digit share the one real onClick handler).
 | Keys | Action |
 |---|---|
 | `nn` / `nt` / `nd` / `nb` | focus the Notes / Today / Daily / Backlog capture input |
+| `nj` / `nq` | the notes capture, pre-routed — the leading `##j ` / `##q ` token is swapped in for you |
 | `t1`–`9` / `d1`–`9` | focus a Today / Daily row (visible rows, filter-aware) |
 | `b11`–`49` | focus a Backlog row — tier digit first (4 = unprioritized), then row |
 | `n1`–`9` / `g1`–`9` | focus a note / goal (DOM order = visual order) |

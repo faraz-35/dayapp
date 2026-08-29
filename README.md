@@ -104,6 +104,12 @@ The `##` prefix is reserved so it can't collide with the `#tag` project token. E
 have no priority/project/hide axes — just text and its day — and like notes they're
 content, never logged to `actions` and never exported to the phone.
 
+Typed tokens **color as you type** in every capture field: routes (`##j`/`##q`) in the
+accent, `#tag` in its project's hue, `!N` in amber, `@` in cyan — what colors is exactly
+what will process at Enter, and nothing else colors (`#tag` in the Journal capture is
+plain prose there). And `nj` / `nq` (see [Keyboard shortcuts](#keyboard-shortcuts)) type
+the route token for you.
+
 ## Stack
 
 - **Tauri 2** (Rust backend + native macOS window)
@@ -178,6 +184,7 @@ dayapp/
 │   ├── HideMenu.tsx         ← shared ◐ hide-duration popover
 │   ├── ProjectMenu.tsx      ← # assign/clear/create project popover
 │   ├── ReminderMenu.tsx     ← ◷ reminder-date popover
+│   ├── TokenField.tsx       ← capture input with live token coloring (the mirror trick)
 │   ├── CommandPalette.tsx   ← ⌘P command palette modal
 │   ├── KeyboardHelp.tsx     ← the keyboard reference card (⌘P → Keyboard Shortcuts)
 │   ├── UpdateOverlay.tsx    ← self-update progress modal
@@ -220,6 +227,7 @@ Shortcuts** shows the reference card in-app.
 | Keys | Action |
 |---|---|
 | `nn` / `nt` / `nd` / `nb` | focus the Notes / Today / Daily / Backlog capture input |
+| `nj` / `nq` | the Notes capture with the route typed for you (`##j ` / `##q `) — journal line or quote, no token typing |
 | `t1`–`t9` / `d1`–`d9` | focus a Today / Daily row |
 | `b11`–`b49` | focus a Backlog row — first digit is the tier (4 = unprioritized), second the row |
 | `n1`–`n9` / `g1`–`g9` | focus a note / goal |

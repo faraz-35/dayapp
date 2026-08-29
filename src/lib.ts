@@ -497,24 +497,64 @@ export function parseItemTags(
   return { ...project, priority: stripped.priority, agent: noAgent.agent };
 }
 
-/** Extract & strip the delegation tokens: a standalone `@` (assign to the AI
- *  agent) or `@0` (clear the assignment), both at word boundaries. `@1` also
- *  assigns, mirroring the `!N` shape. Like the priority parser, a bare token
- *  that would empty the row keeps the text intact so the input is never lost —
- *  the assignment still applies. */
-function parseAgentToken(text: string): { text: string; agent: boolean | null } {
-  const re = /(?:^|\s)@([01]?)(?=\s|$)/g;
-  const spans: { start: number; end: number; on: boolean }[] = [];
+// ---- Token scanner ------------------------------------------------------------
+//
+// One matcher for every typed token (`##j`/`##q` routes, `#tag` projects,
+// `!N` priority, `@` agent), shared by the capture parsers below and the
+// capture fields' syntax coloring (TokenField.tsx). Single source on purpose:
+// what colors as a token while you type is exactly what processes at Enter —
+// the two can never drift apart.
+
+export type TokenKind = "entry" | "project" | "priority" | "agent";
+
+/** A matched token. `start`/`end` span the sigil through the token's last
+ *  char (the word-boundary space before it stays plain text); `value` is the
+ *  captured payload — the route letter, project name, digit, or "" for a
+ *  bare `@`. */
+export interface TokenSpan {
+  kind: TokenKind;
+  start: number;
+  end: number;
+  value: string;
+}
+
+// A sigil token: the sigil at a word boundary (start of text or after one
+// whitespace char — so "foo#bar" and "wow!!" stay literal), then its payload.
+const PROJECT_RE = /(?:^|\s)#([\w-]+)/g;
+const PRIORITY_RE = /(?:^|\s)!([0-3])(?=\s|$)/g;
+const AGENT_RE = /(?:^|\s)@([01]?)(?=\s|$)/g;
+// The notes-bus route: a leading ##j/##q only (lookahead, so the token itself
+// is exactly the three chars and the text after it starts at a boundary).
+const ENTRY_RE = /^##([jq])(?=\s|$)/;
+// The notes' project-clear twin of !0 — stripped ahead of parseProjectTag so a
+// project literally named "0" can never resolve.
+const NOTE_CLEAR_RE = /(?:^|\s)#0(?=\s|$)/g;
+
+interface SigilSpan {
+  start: number;
+  end: number;
+  value: string;
+}
+
+// Every match of a sigil regex, spans covering just the token. `^` only
+// matches at index 0, so any other match began with its one boundary space.
+function matchSigil(text: string, re: RegExp): SigilSpan[] {
+  const out: SigilSpan[] = [];
+  re.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
-    spans.push({
-      start: m.index,
+    out.push({
+      start: m.index + (m.index === 0 ? 0 : 1),
       end: m.index + m[0].length,
-      on: m[1] !== "0",
+      value: m[1] ?? "",
     });
   }
-  if (spans.length === 0) return { text, agent: null };
-  const agent = spans[spans.length - 1].on;
+  return out;
+}
+
+/** Slice every span out and normalise whitespace. The empty-result guard (the
+ *  "input is never lost" rule) belongs to callers. */
+function stripSpans(text: string, spans: SigilSpan[]): string {
   let out = "";
   let pos = 0;
   for (const s of spans) {
@@ -522,8 +562,43 @@ function parseAgentToken(text: string): { text: string; agent: boolean | null } 
     pos = s.end;
   }
   out += text.slice(pos);
-  const normalized = out.replace(/\s+/g, " ").trim();
-  return { text: normalized || text.trim(), agent };
+  return out.replace(/\s+/g, " ").trim();
+}
+
+/** Every token in the line, for the capture fields' syntax coloring. `kinds`
+ *  picks the surface's grammar — the section captures carry `@`, the notes
+ *  bar doesn't, only the two bus surfaces (notes + journal captures) route
+ *  entries. A routed line is the one exception with a grammar of its own:
+ *  past a leading ##j/##q everything is verbatim content — no other token
+ *  processes there, so none colors there either. */
+export function scanTokens(text: string, kinds: readonly TokenKind[]): TokenSpan[] {
+  if (kinds.includes("entry")) {
+    const m = text.match(ENTRY_RE);
+    if (m) return [{ kind: "entry", start: 0, end: m[0].length, value: m[1] }];
+  }
+  const out: TokenSpan[] = [];
+  const sigils: Array<[TokenKind, RegExp]> = [
+    ["project", PROJECT_RE],
+    ["priority", PRIORITY_RE],
+    ["agent", AGENT_RE],
+  ];
+  for (const [kind, re] of sigils) {
+    if (!kinds.includes(kind)) continue;
+    for (const s of matchSigil(text, re)) out.push({ kind, ...s });
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/** Extract & strip the delegation tokens: a standalone `@` (assign to the AI
+ *  agent) or `@0` (clear the assignment), both at word boundaries. `@1` also
+ *  assigns, mirroring the `!N` shape. Like the priority parser, a bare token
+ *  that would empty the row keeps the text intact so the input is never lost —
+ *  the assignment still applies. */
+function parseAgentToken(text: string): { text: string; agent: boolean | null } {
+  const spans = matchSigil(text, AGENT_RE);
+  if (spans.length === 0) return { text, agent: null };
+  const stripped = stripSpans(text, spans);
+  return { text: stripped || text.trim(), agent: spans[spans.length - 1].value !== "0" };
 }
 
 /** Extract & strip `!0..3` tokens (word-boundary `!` + digit, so "wow!!" and
@@ -531,27 +606,13 @@ function parseAgentToken(text: string): { text: string; agent: boolean | null } 
  *  clear. Like stripTag, a bare token that would empty the row keeps the text
  *  intact so the input is never lost — the priority still applies. */
 function parsePriorityTag(text: string): { text: string; priority: 0 | 1 | 2 | 3 | null } {
-  const re = /(?:^|\s)!([0-3])(?=\s|$)/g;
-  const spans: { start: number; end: number; level: 0 | 1 | 2 | 3 }[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    spans.push({
-      start: m.index,
-      end: m.index + m[0].length,
-      level: Number(m[1]) as 0 | 1 | 2 | 3,
-    });
-  }
+  const spans = matchSigil(text, PRIORITY_RE);
   if (spans.length === 0) return { text, priority: null };
-  const priority = spans[spans.length - 1].level;
-  let out = "";
-  let pos = 0;
-  for (const s of spans) {
-    out += text.slice(pos, s.start);
-    pos = s.end;
-  }
-  out += text.slice(pos);
-  const normalized = out.replace(/\s+/g, " ").trim();
-  return { text: normalized || text.trim(), priority };
+  const stripped = stripSpans(text, spans);
+  return {
+    text: stripped || text.trim(),
+    priority: Number(spans[spans.length - 1].value) as 0 | 1 | 2 | 3,
+  };
 }
 
 /**
@@ -583,27 +644,20 @@ export function parseProjectTag(
 ): { text: string; projectId: string | null; createProjectName?: string } {
   // A tag is `#` at a word boundary (start or after whitespace) followed by
   // word chars / hyphens — so "foo#bar" mid-word is not treated as a tag.
-  const tagRe = /(?:^|\s)#([\w-]+)/g;
-  const tags: { index: number; fullLen: number; name: string }[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = tagRe.exec(text)) !== null) {
-    tags.push({ index: m.index, fullLen: m[0].length, name: m[1] });
-  }
+  const tags = matchSigil(text, PROJECT_RE);
 
   // 1) Existing project: first resolvable tag wins. Strip it from the text.
   for (const t of tags) {
-    const project = resolveProjectByName(t.name, projects);
-    if (project) return stripTag(text, t.index, t.fullLen, project.id);
+    const project = resolveProjectByName(t.value, projects);
+    if (project) return stripTag(text, t, project.id);
   }
 
   // 2) No existing match: create a project from the last tag, but only when it
   //    sits at the very end of the text (nothing but whitespace after it).
   if (tags.length > 0) {
     const last = tags[tags.length - 1];
-    const end = last.index + last.fullLen;
-    if (text.slice(end).trim() === "") {
-      const cleaned = stripTag(text, last.index, last.fullLen, null);
-      return { ...cleaned, createProjectName: last.name };
+    if (text.slice(last.end).trim() === "") {
+      return { ...stripTag(text, last, null), createProjectName: last.value };
     }
   }
 
@@ -615,18 +669,17 @@ export function parseProjectTag(
  *  in that case the tag is kept visible so the input is never lost. */
 function stripTag(
   text: string,
-  index: number,
-  fullLen: number,
+  span: SigilSpan,
   projectId: string | null,
 ): { text: string; projectId: string | null } {
-  const cleaned = text.slice(0, index) + text.slice(index + fullLen);
+  const cleaned = text.slice(0, span.start) + text.slice(span.end);
   const normalized = cleaned.replace(/\s+/g, " ").trim();
   return { text: normalized || text.trim(), projectId };
 }
 
 /** Exact (case-insensitive) name match wins; otherwise a unique prefix match.
  *  No match, or an ambiguous prefix (≥2 projects), resolves to null. */
-function resolveProjectByName(tag: string, projects: Project[]): Project | null {
+export function resolveProjectByName(tag: string, projects: Project[]): Project | null {
   const lower = tag.toLowerCase();
   const exact = projects.find((p) => p.name.toLowerCase() === lower);
   if (exact) return exact;
@@ -702,21 +755,9 @@ export function parseNoteCapture(
 }
 
 function stripNoteClearTags(text: string): string {
-  const re = /(?:^|\s)#0(?=\s|$)/g;
-  const spans: { start: number; end: number }[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    spans.push({ start: m.index, end: m.index + m[0].length });
-  }
+  const spans = matchSigil(text, NOTE_CLEAR_RE);
   if (spans.length === 0) return text;
-  let out = "";
-  let pos = 0;
-  for (const s of spans) {
-    out += text.slice(pos, s.start);
-    pos = s.end;
-  }
-  out += text.slice(pos);
-  return out.replace(/\s+/g, " ").trim() || text.trim();
+  return stripSpans(text, spans) || text.trim();
 }
 
 /** Resolve a footer/capture `#tag` for notes: the item-tag semantics as a
@@ -746,7 +787,7 @@ export function resolveNoteTag(
  *  `text` may be empty (a bare token), which the caller treats as a no-op
  *  rather than creating an empty entry. */
 export function parseEntryCapture(text: string): { kind: EntryKind; text: string } | null {
-  const m = text.match(/^##([jq])(?:\s+|$)/);
+  const m = text.match(ENTRY_RE);
   if (!m) return null;
   return { kind: m[1] === "j" ? "journal" : "quote", text: text.slice(m[0].length).trim() };
 }

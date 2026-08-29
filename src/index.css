@@ -11,6 +11,11 @@
   --accent: #7b8cff;
   --done: #3a3f48;
   --danger: #e5484d;
+  /* Typed-token tints (capture-field syntax coloring): each token family its
+     own color so the eye reads WHAT a token will do before Enter. Routes
+     (##j/##q) use the accent itself; #tag takes its project's hue at runtime. */
+  --tok-priority: #e2a45c;
+  --tok-agent: #62b6c4;
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif;
   font-size: 13px;
   color-scheme: dark;
@@ -415,6 +420,55 @@ button {
   overflow-x: hidden;
   overflow-y: auto;
 }
+/* The notes draft's scrollbar is an overlay affair: hiding it keeps the
+   textarea's content width (and so its wrap points) identical to the token
+   mirror's under it — scrolling still works via caret and wheel. */
+.notes .capture textarea::-webkit-scrollbar { display: none; }
+
+/* ---- Token coloring in capture fields (TokenField) --------------------- */
+/* The field's real text renders transparent; a mirror div underneath paints
+   the same text with the typed tokens (##j/##q, #tag, !N, @) in their colors
+   — the note find-bar's mirror technique applied to the capture surfaces.
+   Both layers sit inside .capture, so they share its font rules; the mirror
+   re-states the input's own metrics so each colored token lands exactly
+   under its glyphs. caret stays visible through caret-color; selection is a
+   translucent accent so the mirrored glyphs read through it. */
+
+.token-field {
+  position: relative;
+  display: block;
+}
+.token-field > :is(input, textarea) {
+  position: relative;
+  z-index: 1;
+  color: transparent;
+  caret-color: var(--text);
+}
+.token-field > :is(input, textarea)::selection {
+  background: rgba(123, 140, 255, 0.3);
+}
+.token-mirror {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre;
+}
+/* Multiline (the notes capture): wrap exactly like the textarea does, so
+   token colors stay on their glyphs across soft line breaks. */
+.token-field.multiline .token-mirror {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tok-entry { color: var(--accent); }
+.tok-priority { color: var(--tok-priority); }
+.tok-agent { color: var(--tok-agent); }
+/* .tok-project colors inline (its project hue) — see TokenField.tsx. */
 
 .empty {
   padding: 6px 10px;

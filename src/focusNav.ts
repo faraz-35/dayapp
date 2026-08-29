@@ -17,12 +17,19 @@ export function clickKbButton(scope: Element | null, n: number): boolean {
   return true;
 }
 
-// Focus a capture input by address (`nn` notes, `nt`/`nd`/`nb` the sections).
-// false when the surface is toggled off — its input isn't in the DOM.
-export function focusCapture(which: "notes" | "today" | "daily" | "backlog"): boolean {
+// The notes-bus route prefill: `nj`/`nq` focus the notes capture with the
+// leading ##j/##q token already swapped in. focusCapture dispatches this event
+// on the field; TokenField (with `route` set) hears it and rewrites the value.
+export const ROUTE_EVENT = "dayapp-route";
+
+// Focus a capture input by address (`nn` notes, `nt`/`nd`/`nb` the sections;
+// `nj`/`nq` pass a route token for the notes bar). false when the surface is
+// toggled off — its input isn't in the DOM.
+export function focusCapture(which: "notes" | "today" | "daily" | "backlog", route?: string): boolean {
   const el = document.querySelector(`[data-capture="${which}"]`);
   if (!(el instanceof HTMLElement)) return false;
   el.focus();
+  if (route) el.dispatchEvent(new CustomEvent<string>(ROUTE_EVENT, { detail: route }));
   return true;
 }
 
