@@ -521,7 +521,7 @@ dayapp/
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
-│   ├── TokenField.tsx              ← capture/edit field with live token coloring (transparent text + mirror div; scanTokens is the one matcher)
+│   ├── TokenField.tsx              ← capture/edit field with live token coloring + display forms (##q → quote, !N → bars; transparent text + mirror div + own caret/selection overlay; scanTokens is the one matcher)
 │   ├── CommandPalette.tsx          ← ⌘P modal: filter + keyboard nav
 │   ├── KeyboardHelp.tsx            ← ⌘P keyboard reference card (the focus grammar, documented)
 │   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
@@ -530,7 +530,8 @@ dayapp/
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← the ONE task capture (##t/##d/##b routing) + DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + sortable items + dropzone; Backlog tier dividers)
-│       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput + shared PriorityBars/ItemDetailsBody
+│       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput + ItemDetailsBody
+│       ├── PriorityBars.tsx        ← the tier signal bars (rows, tier dividers, analytics legend, the token display)
 │       ├── AnalyticsView.tsx       ← the analytics page: stats + heatmap + splits + day ledger over dashboard.rs (no raw log)
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
 └── src-tauri/
@@ -721,6 +722,21 @@ coloring past it; inline tokens in a note body never color
 (they never process there). Horizon words in the Goals surfaces are prose, not sigil
 tokens — they stay plain. Journal entry EDITS stay plain too (entries store
 verbatim); the details body has no grammar at all.
+
+**Token display forms (2026-08-29):** a recognized token doesn't just tint — it
+converts to what it means in the mirror: `##j`→journal, `##q`→quote, `##t`→today,
+`##d`→daily, `##b`→backlog, any `@`-token→agent, and `!0..3`→the priority bars
+markup (`!0` the empty track); `#tag` stays verbatim (arbitrary names — nothing to
+convert). `tokenDisplay` in `lib.ts` owns the vocabulary beside the matcher, so a
+token converts exactly when its surface colors it. Because the word is wider than
+the sigil, TokenField's fields hide the native caret/selection (they track the RAW
+value and would drift off the visible words) and draw their own over the
+SUBSTITUTED layout — Range rects over the mirror's own text nodes, wrap- and
+scroll-exact (`.tok-caret`/`.tok-sel-rect`; the real↔display index map rides the
+same one-pass mirror model). The value is never rewritten — display only; parsers
+still strip the raw tokens. The note body's mirror keeps its native caret (no
+overlay there), so its footer bars render width-fitted to the raw `!N`
+(`baseTextWidth`) and nothing drifts.
 
 **Item rows:**
 - Resting: the checkbox circle + text, plus any right-aligned metadata (agent robot badge,

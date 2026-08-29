@@ -599,6 +599,43 @@ export function scanTokens(text: string, kinds: readonly TokenKind[]): TokenSpan
   return out.sort((a, b) => a.start - b.start);
 }
 
+/** The display form a token renders as while it colors (TokenField's mirror):
+ *  the sigil converts to what it means — ##j→journal, ##q→quote, ##t→today,
+ *  ##d→daily, ##b→backlog, any @-token→agent, and !0..3→the priority bars
+ *  (PriorityBars markup; !0 the empty track). Null = renders verbatim —
+ *  `#tag` carries an arbitrary name, nothing to convert. The EMPTY string is
+ *  the bars' case: the symbol is pure CSS markup occupying no text, which
+ *  keeps the mirror's text metrics honest (the caret overlay's index math
+ *  treats the token as zero display characters, and the caret jumps the
+ *  symbol in one step). Same single source as the coloring: a token converts
+ *  exactly when its surface parses it. */
+export function tokenDisplay(span: { kind: TokenKind; value: string }): string | null {
+  switch (span.kind) {
+    case "entry":
+      return span.value === "j" ? "journal" : "quote";
+    case "section":
+      return span.value === "t" ? "today" : span.value === "d" ? "daily" : "backlog";
+    case "priority":
+      return "";
+    case "agent":
+      return "agent";
+    default:
+      return null;
+  }
+}
+
+/** The advance width of `text` in the app's base 13px text style, measured
+ *  through a throwaway canvas. Used where a substituted token must occupy its
+ *  raw sigil's exact width because the surface keeps its NATIVE caret (the
+ *  note body's bars) — a display-only field draws its own caret and needs no
+ *  such matching. */
+export function baseTextWidth(text: string): number {
+  const ctx = document.createElement("canvas").getContext("2d");
+  if (!ctx) return 0;
+  ctx.font = '13px -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif';
+  return ctx.measureText(text).width;
+}
+
 /** Extract & strip the delegation tokens: a standalone `@` (assign to the AI
  *  agent) or `@0` (clear the assignment), both at word boundaries. `@1` also
  *  assigns, mirroring the `!N` shape. Like the priority parser, a bare token

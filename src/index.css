@@ -460,10 +460,14 @@ button {
   position: relative;
   z-index: 1;
   color: transparent;
-  caret-color: var(--text);
+  /* The native caret and selection track the RAW value, but the mirror
+     renders the SUBSTITUTED tokens (##q → quote, !2 → bars) — wider than the
+     sigils, so the native pair would drift off the visible words. TokenField
+     draws its own over the display layout; both of these stay transparent. */
+  caret-color: transparent;
 }
 .token-field > :is(input, textarea)::selection {
-  background: rgba(123, 140, 255, 0.3);
+  background: transparent;
 }
 .token-mirror {
   position: absolute;
@@ -486,6 +490,31 @@ button {
 /* Every token family in the one accent — a token reads as "this processes",
    and only the real content stays plain text. */
 .token-mirror .tok { color: var(--accent); }
+/* TokenField's own caret + selection, drawn over the mirror's substituted
+   layout (the native pair tracks the raw value — see the field rules above).
+   Both position at the mirror's content origin and move with transform into
+   place; living inside the scrolling mirror, they ride its scroll sync for
+   free. The caret is the hairline the field used to show; the selection the
+   same translucent accent, one rect per wrapped line. */
+.tok-caret {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1.5px;
+  background: var(--text);
+  animation: tok-blink 1.1s step-end infinite;
+}
+@keyframes tok-blink {
+  50% { opacity: 0; }
+}
+.tok-sel { position: absolute; top: 0; left: 0; }
+.tok-sel-rect {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: rgba(123, 140, 255, 0.3);
+  border-radius: 1px;
+}
 
 .empty {
   padding: 6px 10px;
@@ -1164,6 +1193,11 @@ button {
 }
 .note-mirror mark.note-find-cur { background: rgba(123, 140, 255, 0.55); }
 .note-mirror .tok { color: var(--accent); }
+/* The note body keeps its NATIVE caret (no overlay to redraw it), so a
+   substituted footer token must occupy its raw sigil's exact advance or the
+   caret would drift off the visible line: the bars sit in an inline-block
+   width-matched to the raw "!N" by baseTextWidth. */
+.note-mirror .tok-fitted { display: inline-block; }
 
 .note-delete {
   width: 18px;

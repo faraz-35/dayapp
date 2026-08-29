@@ -18,7 +18,7 @@
 // src-tauri/src/dashboard.rs; per-task time is layered in from sessions.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PriorityBars } from "./components/ItemRow";
+import { PriorityBars } from "./components/PriorityBars";
 import {
   formatDuration,
   formatReminder,

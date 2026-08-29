@@ -10,7 +10,8 @@ import { Fragment } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { type HideDuration, type Item, type Project, type Section } from "../lib";
-import ItemRow, { ItemDetailsBody, PriorityBars } from "./ItemRow";
+import ItemRow, { ItemDetailsBody } from "./ItemRow";
+import { PriorityBars } from "./PriorityBars";
 
 export default function SectionView({
   section, label, hint, items, projects, selectedId, editingId, detailsOpenId,

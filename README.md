@@ -113,7 +113,10 @@ in Today. The item tokens (`#tag`, `!1..3`, `@`) compose after the route
 
 Typed tokens **color as you type** — in every capture field and while editing: task and
 goal edits, and a note's pending footer line (blank line + tokens-only last line), all in
-the app's one accent. What colors is exactly what will process at Enter/blur, and nothing
+the app's one accent. They also **read as what they mean**: the sigil converts to its
+display form while you type — `##j` becomes *journal*, `##q` *quote*, `##t`/`##d`/`##b`
+*today/daily/backlog*, `@` *agent*, and `!1..3` the priority bars — while `#tag` stays
+verbatim. What colors is exactly what will process at Enter/blur, and nothing
 else colors (`#tag` in the Journal capture is plain prose there; inline tokens in a note
 body never process, so they never color). And `nj` / `nq` / `nt` / `nd` / `nb`
 (see [Keyboard shortcuts](#keyboard-shortcuts)) type the route token for you.
@@ -196,7 +199,7 @@ dayapp/
 │   ├── HideMenu.tsx         ← shared ◐ hide-duration popover
 │   ├── ProjectMenu.tsx      ← # assign/clear/create project popover
 │   ├── ReminderMenu.tsx     ← ◷ reminder-date popover
-│   ├── TokenField.tsx       ← capture/edit input with live token coloring (the mirror trick)
+│   ├── TokenField.tsx       ← capture/edit input with live token coloring + display forms (the mirror trick, own caret overlay)
 │   ├── CommandPalette.tsx   ← ⌘P command palette modal
 │   ├── KeyboardHelp.tsx     ← the keyboard reference card (⌘P → Keyboard Shortcuts)
 │   ├── UpdateOverlay.tsx    ← self-update progress modal

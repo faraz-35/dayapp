@@ -39,11 +39,11 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { notesApi, type Note } from "./notesApi";
-import { type EntryKind, type HideDuration, type HiddenFilter, entriesApi, parseEntryCapture, parseNoteCapture, projectColor, resolveNoteTag, scanNoteFooterTokens, splitNoteFooter, type Project } from "./lib";
+import { type EntryKind, type HideDuration, type HiddenFilter, baseTextWidth, entriesApi, parseEntryCapture, parseNoteCapture, projectColor, resolveNoteTag, scanNoteFooterTokens, splitNoteFooter, type Project } from "./lib";
 import { log } from "./log";
 import HideMenu from "./HideMenu";
 import TokenField from "./TokenField";
-import { PriorityBars } from "./components/ItemRow";
+import { PriorityBars } from "./components/PriorityBars";
 
 // Collapsed-note ids, persisted like the UI zoom — a display preference.
 // localStorage only: collapse is UI state, not content, so the notes table
@@ -613,9 +613,21 @@ function NoteInput({
       const e = pts[i + 1];
       if (e <= s) continue;
       const text = val.slice(s, e);
-      const inToken = tokens.some((t) => t.start <= s && e <= t.end);
+      const tok = tokens.find((t) => t.start <= s && e <= t.end);
       const mi = finds.findIndex(([ms, me]) => ms <= s && e <= me);
-      const inner = inToken ? <span className="tok">{text}</span> : text;
+      // A priority token renders as the bars it applies — width-fitted to the
+      // raw word (baseTextWidth), because this mirror keeps the native caret
+      // and the substitution must not change the line's metrics. #tag has no
+      // display form and colors verbatim.
+      const inner = tok ? (
+        tok.kind === "priority" ? (
+          <span key={i} className="tok tok-fitted" style={{ width: baseTextWidth(text) }}>
+            <PriorityBars priority={tok.value === "!0" ? null : (Number(tok.value.slice(1)) as 1 | 2 | 3)} />
+          </span>
+        ) : (
+          <span key={i} className="tok">{text}</span>
+        )
+      ) : text;
       parts.push(
         mi === -1
           ? inner
