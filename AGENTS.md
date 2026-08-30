@@ -752,15 +752,22 @@ overlay there), so its footer bars render width-fitted to the raw `!N`
 (`baseTextWidth`) and nothing drifts.
 
 **Item rows:**
-- Resting: the checkbox circle + text, plus right-aligned metadata. The three identity
-  axes — priority signal bars, agent robot badge, project label — render as FIXED COLUMNS
-  (priority → agent → project, right-anchored): a row lacking an axis renders its empty
-  slot, and Backlog rows (which never carry bars) keep priority's empty slot so the
-  columns hold across the section seam. The project column clips every name to 6 letters
-  + an ellipsis (`clipProject` in ItemRow — the tooltip carries the full name; only the
-  task-row column clips, the ⌘F picker / analytics / collapsed-note label / CLI show
-  full names) (2026-08-30). The transient facts (`⏱` cumulative time, reminder chip, hidden chip)
-  flow left of the columns. Rows with no metadata at all show only checkbox + text.
+- Resting: the checkbox circle + text, plus right-aligned metadata flush against the row's
+  right edge. The three identity axes — priority signal bars, agent robot badge, project
+  label — render as FIXED COLUMNS (priority → agent → project): a row lacking an axis
+  renders its empty slot, and Backlog rows (which never carry bars) keep priority's empty
+  slot so the columns hold across the section seam. The project column clips every name
+  by letter count (`clipProject` in ItemRow — 10 letters at rest, 6 tucked beside the
+  buttons; the tooltip carries the full name; only the task-row column clips, the ⌘F
+  picker / analytics / collapsed-note label / CLI show full names) (2026-08-30). The
+  action cluster is an ABSOLUTE corner overlay (`.item-actions`, the Notes `.note-actions`
+  pattern — `pointer-events` gated to its reveal, so invisible buttons never eat clicks):
+  at rest it holds no flow space and the metadata owns the corner; on hover/focus the
+  buttons fade in and the row's flow content (text + metadata) slides left of them via a
+  transitioning `padding-right` (the cluster's own width; never while editing; always on
+  the timing row, whose ⏸ + live elapsed never hide). The transient facts (`⏱` cumulative
+  time, reminder chip, hidden chip) flow left of the columns and fade on hover. Rows with
+  no metadata at all show only checkbox + text.
   The robot badge shows in every section (there's no agent grouping).
 - Hover: row bg → `--bg-hover`; grip (⠿) + the slot-1 verb (▶ timer; on Backlog rows ↑ send
   to Today — the deliberate "pull this into my day" action; timing belongs to Today/Daily,

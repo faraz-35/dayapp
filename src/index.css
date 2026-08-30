@@ -312,9 +312,25 @@ button {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
+  /* Anchors the .item-actions corner overlay. */
+  position: relative;
   border-radius: 6px;
-  transition: background 0.08s ease;
+  /* padding-right joins the transition: the flow content slides left of the
+     action overlay on hover/focus (see the clearance rules below). */
+  transition: background 0.08s ease, padding-right 0.1s ease;
   cursor: default;
+}
+/* The corner clearance: at rest the flow content (text + metadata) owns the
+   full row width; on hover/focus the action overlay takes the corner and
+   the content slides left of it by the cluster's own width — 6 buttons ×
+   22px + 5 gaps × 8px, the hidden row's pair (↺ × = 2 × 22px + 8px), always
+   on the timing row (its ⏸ never hides). Never while editing: the overlay
+   is unmounted and the inline editor keeps the full width it had. */
+:is(.item:hover, .item.selected, .item.focused, .item.timing):not(.editing):not(.hidden) {
+  padding-right: calc(8px + 6 * 22px + 5 * 8px);
+}
+:is(.item:hover, .item.selected, .item.focused):not(.editing).hidden {
+  padding-right: calc(8px + 2 * 22px + 1 * 8px);
 }
 .item:hover { background: var(--bg-hover); }
 .item.selected { background: var(--bg-hover); }
@@ -408,6 +424,28 @@ button {
 :is(.item:hover, .item.selected, .item.focused) .item-action { opacity: 1; }
 .item-action:hover { background: var(--bg-elev); color: var(--text); }
 .item-action.danger:hover { color: var(--danger); }
+
+/* The action cluster as an absolute overlay on the row's right corner (the
+   Notes .note-actions pattern): it reserves no flow space, so at rest the
+   metadata block owns the corner and the buttons simply aren't in the way —
+   the flow content slides left via .item's padding when they reveal.
+   pointer-events ride the reveal — at rest the invisible cluster must not
+   eat clicks meant for the row or its metadata; the timing row's ⏸ is
+   always live, so it carries the events unconditionally. (translateY only
+   vertically centers this child; the row itself keeps its no-static-
+   -transform rule.) */
+.item-actions {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 1;
+}
+:is(.item:hover, .item.selected, .item.focused, .item.timing) .item-actions { pointer-events: auto; }
 
 .grip {
   color: var(--text-faint);
@@ -1341,15 +1379,16 @@ button {
 :is(.item:hover, .item.selected, .item.focused) .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { opacity: 0; }
 
 /* The identity columns (ItemRow): priority, then agent, then project, as
-   fixed-width slots right-anchored against the action buttons — an axis a
-   row lacks renders its EMPTY slot instead of collapsing (Backlog rows
-   never carry bars but keep priority's slot, so the columns hold across the
-   section seam), and the project column clips every name to 6 letters +
-   an ellipsis (clipProject in ItemRow — the tooltip carries the full name),
-   so the three axes read as aligned columns down the whole list at a
-   constant, narrow cost. Widths: the bars (3×3px + 2×2px gaps) and the
-   badge glyph are both 13px; the project slot fits the longest clamped
-   string (6 letters + the mark). */
+   fixed-width slots — an axis a row lacks renders its EMPTY slot instead of
+   collapsing (Backlog rows never carry bars but keep priority's slot, so the
+   columns hold across the section seam), and the project column clips every
+   name by letter count (clipProject in ItemRow — the tooltip carries the
+   full name), so the three axes read as aligned columns down the whole
+   list. Two states share one 0.1s motion: at rest the block owns the
+   corner with the roomier 10-letter clip (12ch fits 10 letters + the
+   mark); on hover/focus it tucks left of the action overlay with the
+   6-letter clip. Widths: the bars (3×3px + 2×2px gaps) and the badge glyph
+   are both 13px. */
 .meta-agent, .meta-priority {
   width: 13px;
   display: inline-flex;
@@ -1357,13 +1396,18 @@ button {
   flex-shrink: 0;
 }
 .meta-project {
-  width: 7.5ch;
+  width: 12ch;
   display: flex;
   justify-content: flex-end;
   overflow: hidden;
   flex-shrink: 0;
+  transition: width 0.1s ease;
 }
 .meta-project .project-label { max-width: 100%; }
+.meta-project .clip-hover { display: none; }
+:is(.item:hover, .item.selected, .item.focused) .meta-project { width: 7.5ch; }
+:is(.item:hover, .item.selected, .item.focused) .meta-project .clip-rest { display: none; }
+:is(.item:hover, .item.selected, .item.focused) .meta-project .clip-hover { display: inline; }
 
 /* Priority signal bars — the row's urgency tier, set via !1/!2/!3 tokens in
    the text. Filled count = urgency (P1 = 3 filled … P3 = 1), filled in the one
@@ -1499,6 +1543,10 @@ button {
    .item-action) so the active timer is identifiable at a glance. Sits in the
    action cluster just left of the ⏸ button. */
 .timer-live {
+  /* Right-aligned flow content, the metadata block's sibling — the meta
+     cluster is suppressed while timing, so this is what clears against the
+     action overlay. */
+  margin-left: auto;
   font-size: 12px;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
