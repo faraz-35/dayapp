@@ -1340,12 +1340,15 @@ button {
 .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { transition: opacity 0.08s ease; }
 :is(.item:hover, .item.selected, .item.focused) .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { opacity: 0; }
 
-/* The identity columns (ItemRow): agent, then priority, then project, as
-   fixed-width slots right-anchored against the action buttons — an axis a row
-   lacks renders its EMPTY slot instead of collapsing, and the project slot is
-   the roster's widest name (--project-col, measured in App), so the three
-   axes read as aligned columns down the whole list. Widths: the badge glyph
-   and the bars (3×3px + 2×2px gaps) are both 13px. */
+/* The identity columns (ItemRow): priority, then agent, then project, as
+   fixed-width slots right-anchored against the action buttons — an axis a
+   row lacks renders its EMPTY slot instead of collapsing (Backlog rows
+   never carry bars but keep priority's slot, so the columns hold across the
+   section seam), and the project column clips every name to ~5 letters
+   (5ch, tail-ellipsis — the tooltip carries the full name), so the three
+   axes read as aligned columns down the whole list at a constant, narrow
+   cost. Widths: the bars (3×3px + 2×2px gaps) and the badge glyph are both
+   13px. */
 .meta-agent, .meta-priority {
   width: 13px;
   display: inline-flex;
@@ -1353,7 +1356,7 @@ button {
   flex-shrink: 0;
 }
 .meta-project {
-  width: var(--project-col, 0px);
+  width: 5ch;
   display: flex;
   justify-content: flex-end;
   overflow: hidden;

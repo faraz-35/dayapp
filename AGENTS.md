@@ -753,15 +753,15 @@ overlay there), so its footer bars render width-fitted to the raw `!N`
 
 **Item rows:**
 - Resting: the checkbox circle + text, plus right-aligned metadata. The three identity
-  axes — agent robot badge, priority signal bars, project label — render as FIXED COLUMNS
-  (agent → priority → project, right-anchored): a row lacking an axis renders its empty
-  slot, and the project column is the roster's widest name (`--project-col`, measured in
-  App with the label's font), so the axes align vertically down the list (2026-08-30).
-  The transient facts (`⏱` cumulative time, reminder chip, hidden chip) flow left of the
-  columns. Rows with no metadata at all show only checkbox + text — and
-  Backlog rows never show bars: every tier group there is introduced by a `.tier-divider`
-  hairline labeled with the group's bars, empty track for unmarked (Backlog only — never
-  Today/Daily). The robot badge shows in every section (there's no agent grouping).
+  axes — priority signal bars, agent robot badge, project label — render as FIXED COLUMNS
+  (priority → agent → project, right-anchored): a row lacking an axis renders its empty
+  slot, and Backlog rows (which never carry bars) keep priority's empty slot so the
+  columns hold across the section seam. The project column clips every name to ~5 letters
+  (`5ch`, tail-ellipsis — the tooltip carries the full name; only the task-row column
+  clips, the ⌘F picker / analytics / collapsed-note label / CLI show full names)
+  (2026-08-30). The transient facts (`⏱` cumulative time, reminder chip, hidden chip)
+  flow left of the columns. Rows with no metadata at all show only checkbox + text.
+  The robot badge shows in every section (there's no agent grouping).
 - Hover: row bg → `--bg-hover`; grip (⠿) + the slot-1 verb (▶ timer; on Backlog rows ↑ send
   to Today — the deliberate "pull this into my day" action; timing belongs to Today/Daily,
   where work happens) + project/reminder/hide + delete (×) buttons

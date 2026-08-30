@@ -114,16 +114,18 @@ export default function ItemRow({
         <span className="item-text">{item.text}</span>
       )}
 
-      {/* Right-aligned metadata. Three identity axes — agent, priority,
-          project — render as FIXED COLUMNS (empty slot when a row lacks the
-          axis, the project slot sized to the roster's widest name via
-          --project-col), so the metadata reads as one aligned block down the
-          list. The transient facts (hidden status, tracked time, reminder)
-          flow left of the columns and fade on hover, yielding to the buttons.
-          Robot + priority + project stay visible on hover (the row's
-          identity, wanted while its actions are on screen). Suppressed while
-          timing — the live elapsed then lives in the action cluster
-          instead. */}
+      {/* Right-aligned metadata. Three identity axes — priority, agent,
+          project — render as FIXED COLUMNS: a row lacking an axis renders
+          its empty slot (Backlog rows never carry bars, but keep priority's
+          slot so the columns hold across the section seam), and the project
+          column is a fixed 5-letter clip (5ch, tail-ellipsis — the full
+          name lives in the tooltip), so the metadata reads as one aligned
+          block down the list. The transient facts (hidden status, tracked
+          time, reminder) flow left of the columns and fade on hover,
+          yielding to the buttons. Robot + priority + project stay visible
+          on hover (the row's identity, wanted while its actions are on
+          screen). Suppressed while timing — the live elapsed then lives in
+          the action cluster instead. */}
       {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars || item.assignedToAgent) && (
         <div className="item-meta">
           {item.hidden && (
@@ -144,8 +146,8 @@ export default function ItemRow({
               → {formatReminder(item.remindAt)}
             </span>
           )}
-          <span className="meta-agent">{item.assignedToAgent && <AgentBadge />}</span>
           <span className="meta-priority">{priorityBars}</span>
+          <span className="meta-agent">{item.assignedToAgent && <AgentBadge />}</span>
           <span className="meta-project">
             {project && (
               <span
