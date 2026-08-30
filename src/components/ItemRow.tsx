@@ -73,7 +73,7 @@ export default function ItemRow({
     <div
       ref={setNodeRef}
       data-item-id={item.id}
-      className={`item${done ? " done" : ""}${item.hidden ? " hidden" : ""}${selected ? " selected" : ""}${isDragging ? " dragging" : ""}${isTiming ? " timing" : ""}${editing ? " editing" : ""}`}
+      className={`item${done ? " done" : ""}${item.hidden ? " hidden" : ""}${selected ? " selected" : ""}${isDragging ? " dragging" : ""}`}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       onClick={() => { onSelect(item.id); if (!editing) onStartEdit(); }}
       {...attributes}
@@ -117,15 +117,15 @@ export default function ItemRow({
       {/* Right-aligned metadata. Three identity axes — priority, agent,
           project — render as FIXED COLUMNS: a row lacking an axis renders
           its empty slot (Backlog rows never carry bars, but keep priority's
-          slot so the columns hold across the section seam). The block owns
-          the row's right corner at REST (flush against the edge, the
-          project column clipped at 10 letters); on hover/focus the action
-          overlay takes the corner and the block slides left of it (project
-          back to the 6-letter clip) — the corner belongs to whoever is
-          using it. The transient facts (hidden status, tracked time,
-          reminder) flow left of the columns and fade on hover, yielding to
-          the buttons. Suppressed while timing — the live elapsed then
-          lives in the action cluster instead. */}
+          slot so the columns hold across the section seam), and the project
+          column clips names to 6 letters + an ellipsis (clipProject — the
+          full name lives in the tooltip), so the metadata reads as one
+          aligned block down the list. The transient facts (hidden status,
+          tracked time, reminder) flow left of the columns and fade on
+          hover, yielding to the buttons. Robot + priority + project stay
+          visible on hover (the row's identity, wanted while its actions are
+          on screen). Suppressed while timing — the live elapsed then lives
+          in the action cluster instead. */}
       {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars || item.assignedToAgent) && (
         <div className="item-meta">
           {item.hidden && (
@@ -154,36 +154,20 @@ export default function ItemRow({
                 className="project-label"
                 style={{ color: projectColor(project.id) }}
                 title={`Project: ${project.name}`}
-              >
-                {/* Both clips render; CSS shows the one for the row's state —
-                    the string can't transition, so it swaps inside the same
-                    0.1s the slot and the block slide. */}
-                <span className="clip-rest">{clipProject(project.name, 10)}</span>
-                <span className="clip-hover">{clipProject(project.name, 6)}</span>
-              </span>
+              >{clipProject(project.name)}</span>
             )}
           </span>
         </div>
       )}
 
-      {/* Live elapsed shows only on the running row, always visible (not
-          hover-gated) so the active timer is identifiable at a glance. In
-          flow, right-aligned like the metadata block — the meta cluster is
-          suppressed while timing, so this is the flow content the action
-          overlay clears against. A hidden row only ever shows the stop
-          form — it can't start one. */}
-      {!editing && isTiming && (
-        <span className="timer-live" title="Elapsed">{formatLiveDuration(elapsedSec)}</span>
-      )}
-
-      {/* The action cluster — an ABSOLUTE overlay on the row's right corner
-          (the Notes .note-actions pattern), so it reserves no flow space:
-          at rest the metadata block owns the corner; on hover/focus the
-          buttons fade in over it while the row's flow content slides left
-          (CSS pads .item). pointer-events ride the same reveal — invisible
-          buttons must not eat clicks meant for the row. */}
       {!editing && (
-        <div className="item-actions">
+        <>
+          {/* Live elapsed shows only on the running row, always visible (not
+              hover-gated) so the active timer is identifiable at a glance. A
+              hidden row only ever shows the stop form — it can't start one. */}
+          {isTiming && (
+            <span className="timer-live" title="Elapsed">{formatLiveDuration(elapsedSec)}</span>
+          )}
           {/* Slot 1 — the row's primary verb, in digit order. A timing row
               always shows ⏸: the one always-visible stop control outranks
               everything. Otherwise the Backlog's slot 1 is "send to Today" —
@@ -265,18 +249,17 @@ export default function ItemRow({
               >×</button>
             </>
           )}
-        </div>
+        </>
       )}
     </div>
   );
 }
 
-// The row column's clip: up to `max` letters, then a single ellipsis when
-// the name runs longer — the rest state allows 10, the tucked-beside-buttons
-// hover state 6. CSS clipping can't promise an exact letter count (it cuts
-// at the box edge, wherever that lands), so the string is clamped here; the
-// tooltip and every other surface carry the full name.
-const clipProject = (name: string, max: number) => (name.length > max ? `${name.slice(0, max)}…` : name);
+// The row column's clip: up to 6 letters, then a single ellipsis when the
+// name runs longer. CSS clipping can't promise exactly six letters + one
+// mark (it cuts at the box edge, wherever that lands), so the string is
+// clamped here; the tooltip and every other surface carry the full name.
+const clipProject = (name: string) => (name.length > 6 ? `${name.slice(0, 6)}…` : name);
 
 // The delegation badge: a small monochrome robot marking rows the AI agent can
 // take end to end (the `@` token). Identity metadata like the project label —
