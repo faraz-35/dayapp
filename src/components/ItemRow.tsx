@@ -118,14 +118,14 @@ export default function ItemRow({
           project — render as FIXED COLUMNS: a row lacking an axis renders
           its empty slot (Backlog rows never carry bars, but keep priority's
           slot so the columns hold across the section seam), and the project
-          column is a fixed 5-letter clip (5ch, tail-ellipsis — the full
-          name lives in the tooltip), so the metadata reads as one aligned
-          block down the list. The transient facts (hidden status, tracked
-          time, reminder) flow left of the columns and fade on hover,
-          yielding to the buttons. Robot + priority + project stay visible
-          on hover (the row's identity, wanted while its actions are on
-          screen). Suppressed while timing — the live elapsed then lives in
-          the action cluster instead. */}
+          column clips names to 6 letters + an ellipsis (clipProject — the
+          full name lives in the tooltip), so the metadata reads as one
+          aligned block down the list. The transient facts (hidden status,
+          tracked time, reminder) flow left of the columns and fade on
+          hover, yielding to the buttons. Robot + priority + project stay
+          visible on hover (the row's identity, wanted while its actions are
+          on screen). Suppressed while timing — the live elapsed then lives
+          in the action cluster instead. */}
       {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars || item.assignedToAgent) && (
         <div className="item-meta">
           {item.hidden && (
@@ -154,7 +154,7 @@ export default function ItemRow({
                 className="project-label"
                 style={{ color: projectColor(project.id) }}
                 title={`Project: ${project.name}`}
-              >{project.name}</span>
+              >{clipProject(project.name)}</span>
             )}
           </span>
         </div>
@@ -254,6 +254,12 @@ export default function ItemRow({
     </div>
   );
 }
+
+// The row column's clip: up to 6 letters, then a single ellipsis when the
+// name runs longer. CSS clipping can't promise exactly six letters + one
+// mark (it cuts at the box edge, wherever that lands), so the string is
+// clamped here; the tooltip and every other surface carry the full name.
+const clipProject = (name: string) => (name.length > 6 ? `${name.slice(0, 6)}…` : name);
 
 // The delegation badge: a small monochrome robot marking rows the AI agent can
 // take end to end (the `@` token). Identity metadata like the project label —

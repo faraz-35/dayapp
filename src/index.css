@@ -1344,11 +1344,12 @@ button {
    fixed-width slots right-anchored against the action buttons — an axis a
    row lacks renders its EMPTY slot instead of collapsing (Backlog rows
    never carry bars but keep priority's slot, so the columns hold across the
-   section seam), and the project column clips every name to ~5 letters
-   (5ch, tail-ellipsis — the tooltip carries the full name), so the three
-   axes read as aligned columns down the whole list at a constant, narrow
-   cost. Widths: the bars (3×3px + 2×2px gaps) and the badge glyph are both
-   13px. */
+   section seam), and the project column clips every name to 6 letters +
+   an ellipsis (clipProject in ItemRow — the tooltip carries the full name),
+   so the three axes read as aligned columns down the whole list at a
+   constant, narrow cost. Widths: the bars (3×3px + 2×2px gaps) and the
+   badge glyph are both 13px; the project slot fits the longest clamped
+   string (6 letters + the mark). */
 .meta-agent, .meta-priority {
   width: 13px;
   display: inline-flex;
@@ -1356,7 +1357,7 @@ button {
   flex-shrink: 0;
 }
 .meta-project {
-  width: 5ch;
+  width: 7.5ch;
   display: flex;
   justify-content: flex-end;
   overflow: hidden;

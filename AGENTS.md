@@ -756,10 +756,10 @@ overlay there), so its footer bars render width-fitted to the raw `!N`
   axes — priority signal bars, agent robot badge, project label — render as FIXED COLUMNS
   (priority → agent → project, right-anchored): a row lacking an axis renders its empty
   slot, and Backlog rows (which never carry bars) keep priority's empty slot so the
-  columns hold across the section seam. The project column clips every name to ~5 letters
-  (`5ch`, tail-ellipsis — the tooltip carries the full name; only the task-row column
-  clips, the ⌘F picker / analytics / collapsed-note label / CLI show full names)
-  (2026-08-30). The transient facts (`⏱` cumulative time, reminder chip, hidden chip)
+  columns hold across the section seam. The project column clips every name to 6 letters
+  + an ellipsis (`clipProject` in ItemRow — the tooltip carries the full name; only the
+  task-row column clips, the ⌘F picker / analytics / collapsed-note label / CLI show
+  full names) (2026-08-30). The transient facts (`⏱` cumulative time, reminder chip, hidden chip)
   flow left of the columns. Rows with no metadata at all show only checkbox + text.
   The robot badge shows in every section (there's no agent grouping).
 - Hover: row bg → `--bg-hover`; grip (⠿) + the slot-1 verb (▶ timer; on Backlog rows ↑ send
