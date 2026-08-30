@@ -3,6 +3,7 @@
 :root {
   --bg: #0e0f11;
   --bg-elev: #16181c;
+  --bg-soft: #121417;   /* --bg → --bg-elev midpoint: elevated, one step quieter */
   --bg-hover: #1c1f24;
   --border: #23262d;
   --text: #e6e7ea;
@@ -1089,14 +1090,17 @@ button {
   margin: 4px 0;
   padding: 8px 48px 8px 10px;
   border-radius: 6px;
-  background: var(--bg-elev);
+  background: var(--bg-soft);
   transition: box-shadow 0.1s ease;
 }
-.note:focus-within { box-shadow: 0 0 0 1px var(--accent); }
+/* Being edited reads like a capture line, not a ringed card: the accent is a
+   bottom underline only (inset, so the card's bounds and the textarea's layout
+   never shift — a real border would move the text). */
+.note:focus-within { box-shadow: inset 0 -1px 0 var(--accent); }
 
 /* Keyboard-focused note (the grammar's `n1-9` + digits target) — the same
    resting tint a selected row gets, so every focusable surface reads alike.
-   :focus-within still adds the accent ring while it's being edited. */
+   :focus-within still adds the accent underline while it's being edited. */
 .note.focused { background: var(--bg-hover); }
 
 .note-textarea {
@@ -1244,6 +1248,11 @@ button {
   position: absolute;
   top: 4px;
   right: 4px;
+  /* Above the textarea's z-index: 1 (the mirror flip hoisted it over this
+     cluster, so its transparent pixels ate the clicks on the half of the
+     cluster that overlaps the first text line — buttons visible, unclickable).
+     Level 2 also lifts the ◐ menu over the following notes' textareas. */
+  z-index: 2;
   display: flex;
   flex-direction: row;
   align-items: center;
