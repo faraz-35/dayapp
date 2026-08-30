@@ -55,7 +55,7 @@ export default function SectionView({
 
   return (
     <section className="section" style={{ minHeight: 40 }}>
-      <div className="section-head" title={hint}>
+      <div className="section-head stack-head" title={hint}>
         <span className="section-name">{label}</span>
       </div>
 

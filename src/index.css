@@ -287,6 +287,12 @@ button {
   margin-top: 28px;
   padding: 0 16px 6px;
 }
+/* Today/Daily/Backlog label subsections of the task stack — centered, so
+   they read as a level below the left-aligned surface labels (Tasks, Notes)
+   that carry their own inset edge. */
+.section-head.stack-head {
+  justify-content: center;
+}
 
 .section-dropzone {
   min-height: 8px;
