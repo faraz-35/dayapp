@@ -381,6 +381,18 @@ function DayApp() {
     localStorage.setItem("dayapp-zoom", String(zoom));
   }, [zoom]);
 
+  // The project column's width (ItemRow's .meta-project): the roster's widest
+  // name, measured with the label's own font — so every row's label
+  // right-aligns on one shared edge instead of flowing with its own width.
+  // Clamped to the label's max-width; longer names ellipsize inside the slot.
+  useEffect(() => {
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return;
+    ctx.font = '500 11px -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", sans-serif';
+    const widest = projects.reduce((w, p) => Math.max(w, ctx.measureText(p.name).width), 0);
+    document.documentElement.style.setProperty("--project-col", `${Math.min(140, Math.ceil(widest))}px`);
+  }, [projects]);
+
   useEffect(() => {
     localStorage.setItem("dayapp-goals-visible", goalsVisible ? "1" : "0");
     localStorage.setItem("dayapp-notes-visible", notesVisible ? "1" : "0");

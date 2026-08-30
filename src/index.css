@@ -1340,6 +1340,27 @@ button {
 .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { transition: opacity 0.08s ease; }
 :is(.item:hover, .item.selected, .item.focused) .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { opacity: 0; }
 
+/* The identity columns (ItemRow): agent, then priority, then project, as
+   fixed-width slots right-anchored against the action buttons — an axis a row
+   lacks renders its EMPTY slot instead of collapsing, and the project slot is
+   the roster's widest name (--project-col, measured in App), so the three
+   axes read as aligned columns down the whole list. Widths: the badge glyph
+   and the bars (3×3px + 2×2px gaps) are both 13px. */
+.meta-agent, .meta-priority {
+  width: 13px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.meta-project {
+  width: var(--project-col, 0px);
+  display: flex;
+  justify-content: flex-end;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.meta-project .project-label { max-width: 100%; }
+
 /* Priority signal bars — the row's urgency tier, set via !1/!2/!3 tokens in
    the text. Filled count = urgency (P1 = 3 filled … P3 = 1), filled in the one
    accent, empty slots a faint track. On Today/Daily rows (stays visible on

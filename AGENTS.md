@@ -752,9 +752,13 @@ overlay there), so its footer bars render width-fitted to the raw `!N`
 (`baseTextWidth`) and nothing drifts.
 
 **Item rows:**
-- Resting: the checkbox circle + text, plus any right-aligned metadata (agent robot badge,
-  priority signal bars, `⏱` cumulative time, project label, reminder chip). Rows with no
-  assignment / priority / tracked time / project / reminder show only checkbox + text — and
+- Resting: the checkbox circle + text, plus right-aligned metadata. The three identity
+  axes — agent robot badge, priority signal bars, project label — render as FIXED COLUMNS
+  (agent → priority → project, right-anchored): a row lacking an axis renders its empty
+  slot, and the project column is the roster's widest name (`--project-col`, measured in
+  App with the label's font), so the axes align vertically down the list (2026-08-30).
+  The transient facts (`⏱` cumulative time, reminder chip, hidden chip) flow left of the
+  columns. Rows with no metadata at all show only checkbox + text — and
   Backlog rows never show bars: every tier group there is introduced by a `.tier-divider`
   hairline labeled with the group's bars, empty track for unmarked (Backlog only — never
   Today/Daily). The robot badge shows in every section (there's no agent grouping).

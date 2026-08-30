@@ -114,15 +114,18 @@ export default function ItemRow({
         <span className="item-text">{item.text}</span>
       )}
 
-      {/* Right-aligned metadata (robot + priority + time + project label +
-          reminder). Robot + priority + project stay visible on hover (the
-          row's identity, wanted while its actions are on screen); time /
-          reminder yield to the buttons. Suppressed while timing — the live
-          elapsed then lives in the action cluster instead. */}
+      {/* Right-aligned metadata. Three identity axes — agent, priority,
+          project — render as FIXED COLUMNS (empty slot when a row lacks the
+          axis, the project slot sized to the roster's widest name via
+          --project-col), so the metadata reads as one aligned block down the
+          list. The transient facts (hidden status, tracked time, reminder)
+          flow left of the columns and fade on hover, yielding to the buttons.
+          Robot + priority + project stay visible on hover (the row's
+          identity, wanted while its actions are on screen). Suppressed while
+          timing — the live elapsed then lives in the action cluster
+          instead. */}
       {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars || item.assignedToAgent) && (
         <div className="item-meta">
-          {item.assignedToAgent && <AgentBadge />}
-          {priorityBars}
           {item.hidden && (
             <span
               className="hidden-chip"
@@ -136,18 +139,22 @@ export default function ItemRow({
           {totalSec > 0 && (
             <span className="time-label" title="Time tracked">⏱ {formatDuration(totalSec)}</span>
           )}
-          {project && (
-            <span
-              className="project-label"
-              style={{ color: projectColor(project.id) }}
-              title={`Project: ${project.name}`}
-            >{project.name}</span>
-          )}
           {item.remindAt && (
             <span className="reminder-chip" title={`Reminds on ${item.remindAt}`}>
               → {formatReminder(item.remindAt)}
             </span>
           )}
+          <span className="meta-agent">{item.assignedToAgent && <AgentBadge />}</span>
+          <span className="meta-priority">{priorityBars}</span>
+          <span className="meta-project">
+            {project && (
+              <span
+                className="project-label"
+                style={{ color: projectColor(project.id) }}
+                title={`Project: ${project.name}`}
+              >{project.name}</span>
+            )}
+          </span>
         </div>
       )}
 
