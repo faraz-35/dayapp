@@ -53,7 +53,6 @@ export default function TokenField({
   className,
   multiline = false,
   route = false,
-  rows,
   ref,
 }: {
   /** The surface's grammar — exactly the tokens its Enter handler parses. */
@@ -73,7 +72,6 @@ export default function TokenField({
   multiline?: boolean;
   /** Listen for the grammar's route prefill (nj/nq, nt/nd/nb). */
   route?: boolean;
-  rows?: number;
   /** The field element itself, for focus/caret control by the owning surface
    *  (EditInput's autofocus-at-end). */
   ref?: Ref<FieldElement>;
@@ -84,20 +82,25 @@ export default function TokenField({
   const selRectsRef = useRef<HTMLSpanElement>(null);
   const [focused, setFocused] = useState(false);
 
-  // The multiline capture scrolls vertically past its rows — the mirror
-  // follows, or the colors drift off their glyphs. The single-line field's
-  // horizontal scroll is NOT copied: it is measured over the raw text while
-  // the mirror lays out the substituted one (different widths), so the mirror
-  // tracks the caret instead, inside paint().
-  const syncScroll = () => {
-    const f = fieldRef.current;
-    const m = mirrorRef.current;
-    if (f && m) m.scrollTop = f.scrollTop;
+  // The multiline capture fits its drafted lines — one line at rest, one more
+  // per Shift+Enter, shrinking back on deletes — never scrolling inside a
+  // fixed box. The mirror rides along (inset: 0 on the wrapper this textarea
+  // sizes), so its colors never drift off their glyphs; no scroll-sync needed
+  // anywhere vertical, and the single-line field's horizontal scroll is never
+  // copied either (it is measured over the raw text while the mirror lays out
+  // the substituted one — different widths — so the mirror tracks the caret
+  // instead, inside paint()). Layout effect: sized before first paint, no
+  // default-rows flash.
+  const autosize = () => {
+    const el = fieldRef.current;
+    if (!(el instanceof HTMLTextAreaElement)) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
   };
-  useEffect(() => {
-    requestAnimationFrame(syncScroll);
+  useLayoutEffect(() => {
+    if (multiline) autosize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }, [value, multiline]);
 
   // The route prefill: replace any leading route token with the requested one
   // (`nq` on a ##j draft re-routes the note; `nd` on a ##t draft re-routes the
@@ -360,7 +363,6 @@ export default function TokenField({
     spellCheck: false as const,
     onChange: (e: { target: FieldElement }) => onChange(e.target.value),
     onKeyDown,
-    onScroll: syncScroll,
   };
 
   return (
@@ -371,7 +373,7 @@ export default function TokenField({
         {model.parts}
       </div>
       {multiline ? (
-        <textarea {...shared} ref={attach} rows={rows} onBlur={onBlur} onClick={onClick} />
+        <textarea {...shared} ref={attach} onBlur={onBlur} onClick={onClick} />
       ) : (
         <input {...shared} ref={attach} onBlur={onBlur} onClick={onClick} />
       )}

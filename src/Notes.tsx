@@ -343,7 +343,6 @@ export default function Notes({
             capture="notes"
             route
             multiline
-            rows={3}
             value={draft}
             onChange={setDraft}
             onKeyDown={(e) => {
