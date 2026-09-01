@@ -257,10 +257,11 @@ Shortcuts** shows the reference card in-app.
 | `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row |
 | `1`–`4` (note) | ⌃ expand/collapse · ⬇ download .txt · ◐ hide · × delete |
 | `1`–`3` (goal) | ✓ achieve · # project · × delete |
+| `↑` / `↓` + `Enter` | inside an open popover (# project / ◷ remind / ◐ hide): move the highlight · pick — typing in # creates a new project; one `Esc` closes back onto the focused row |
 | `e` | edit the focused thing (caret at end) |
 | `Enter` | complete the focused task (on a crossed Today row: un-complete) |
 | `j` / `k` | select next / previous task — with nothing focused, they (and `↑`/`↓`) scroll the list |
-| `Esc` | find bar (in a note) → editing → focused → nothing — digits do nothing when nothing is focused |
+| `Esc` | open popover → find bar (in a note) → editing → focused → nothing — digits do nothing when nothing is focused |
 | single-click | a task: select + edit; a note/goal: focus it for the digits |
 | drag handle (⠿) | drag between sections |
 | `⌘P` / `Ctrl+P` | command palette (update, jump to view, …) |

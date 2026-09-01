@@ -1306,6 +1306,16 @@ function DayApp() {
 
       if (typing) return;
 
+      // An open row popover (project / reminder / hide) owns the keyboard:
+      // focus lives inside its menu (usePopoverKeys drives ↑/↓/Enter there),
+      // so this grammar must not act on the row underneath it. One Esc on
+      // that surface closes the menu — each popover's own document listener —
+      // and the row's focus survives, because nothing here runs to clear it.
+      if (popoverOpen()) {
+        pendingAddr.current = "";
+        return;
+      }
+
       // A pending address consumes exactly the next key — the first key of
       // the sequence already cleared focus, so a digit here can never fire a
       // button on the thing that had it.
@@ -1322,19 +1332,16 @@ function DayApp() {
       // With nothing focused — the Esc ladder's bottom rung — they scroll
       // the page instead: a view-only verb, so free mode gains a use
       // without anything being able to happen unseen. Works in every view
-      // (the analytics page has no focusable rows); an open popover owns its keys,
-      // so the page never slides under a menu.
+      // (the analytics page has no focusable rows).
       const down = e.key === "j" || e.key === "ArrowDown";
       const up = e.key === "k" || e.key === "ArrowUp";
       if (down || up) {
         e.preventDefault();
         if (selectedId === null && focusNoteId === null && focusGoalId === null) {
-          if (!popoverOpen()) {
-            document.querySelector(".scroll")?.scrollBy({
-              top: down ? SCROLL_STEP : -SCROLL_STEP,
-              behavior: "smooth",
-            });
-          }
+          document.querySelector(".scroll")?.scrollBy({
+            top: down ? SCROLL_STEP : -SCROLL_STEP,
+            behavior: "smooth",
+          });
         } else {
           setFocusNoteId(null);
           setFocusGoalId(null);
@@ -1361,9 +1368,8 @@ function DayApp() {
       } else if (e.key === "Escape") {
         // Ladder rung focused → nothing. (editing → focused is each edit
         // surface's own Escape — cancel/flush and blur, landing on the thing
-        // still focused here.) An open duration/project/reminder popover
-        // closes itself on this same press; keep the focus under it.
-        if (popoverOpen()) return;
+        // still focused here. An open popover is a higher rung, handled by
+        // the gate above.)
         clearFocus();
       } else if (/^[1-9]$/.test(e.key)) {
         // Fire the focused thing's Nth button (data-kb markers, visual

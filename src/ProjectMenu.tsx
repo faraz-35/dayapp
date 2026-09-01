@@ -7,6 +7,11 @@
 // outside click. All pointer events stopPropagation so opening it never selects
 // a row, starts a drag, or focuses a note textarea.
 //
+// Keyboard (usePopoverKeys): the open menu holds focus — ↑/↓ move the
+// highlight (it starts on the current project), Enter assigns it, and any
+// printable key lands in the create field. One Escape closes back onto the
+// row, which never lost its focus.
+//
 // The list and creation come from the parent (App's projects state): the row's
 // project label renders from that same state, so a project created here must
 // land there immediately — not at the next 60s refresh — or the just-assigned
@@ -15,6 +20,7 @@
 import { useEffect, useRef, useState } from "react";
 import { type Project } from "./lib";
 import { usePopoverFlip } from "./usePopoverFlip";
+import { usePopoverKeys } from "./usePopoverKeys";
 
 export default function ProjectMenu({
   projects, projectId, onAssign, onCreateProject, kb,
@@ -29,9 +35,11 @@ export default function ProjectMenu({
   const [draft, setDraft] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const flip = usePopoverFlip(open, ref, menuRef);
 
-  // Close on outside click or Escape.
+  // Close on outside click or Escape (from anywhere inside — the create
+  // field's keys bubble to this document listener).
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -65,6 +73,20 @@ export default function ProjectMenu({
     }
   };
 
+  // "No project" is row 0; the roster follows. The highlight opens on the
+  // current assignment.
+  const { hi, setHi, onKeyDown } = usePopoverKeys({
+    open,
+    menuRef,
+    count: projects.length + 1,
+    initialIndex: () => (projectId ? projects.findIndex((p) => p.id === projectId) + 1 : 0),
+    onPick: (i) => assign(i === 0 ? null : projects[i - 1].id),
+    onType: (ch) => {
+      setDraft((d) => d + ch);
+      inputRef.current?.focus();
+    },
+  });
+
   return (
     <div className="hide-menu-wrap" ref={ref}>
       <button
@@ -76,18 +98,26 @@ export default function ProjectMenu({
         aria-expanded={open}
       >#</button>
       {open && (
-        <div className={`hide-menu${flip ? " flip" : ""}`} ref={menuRef} onClick={(e) => e.stopPropagation()}>
+        <div
+          className={`hide-menu${flip ? " flip" : ""}`}
+          ref={menuRef}
+          tabIndex={-1}
+          onKeyDown={onKeyDown}
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
-            className="hide-menu-item"
+            className={`hide-menu-item${hi === 0 ? " hi" : ""}`}
+            onMouseEnter={() => setHi(0)}
             onClick={() => assign(null)}
           >
             <span className="hide-menu-label">No project</span>
             <span className="hide-menu-sub">{projectId === null ? "✓" : ""}</span>
           </button>
-          {projects.map((p) => (
+          {projects.map((p, i) => (
             <button
               key={p.id}
-              className="hide-menu-item"
+              className={`hide-menu-item${hi === i + 1 ? " hi" : ""}`}
+              onMouseEnter={() => setHi(i + 1)}
               onClick={() => assign(p.id)}
             >
               <span className="hide-menu-label">{p.name}</span>
@@ -97,14 +127,11 @@ export default function ProjectMenu({
           <div className="hide-menu-divider" />
           <input
             className="menu-input"
+            ref={inputRef}
             value={draft}
-            autoFocus
             placeholder="New project…"
             onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === "Enter") createAndAssign();
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter") createAndAssign(); }}
             onClick={(e) => e.stopPropagation()}
           />
         </div>

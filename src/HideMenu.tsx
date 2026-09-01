@@ -5,10 +5,15 @@
 // menu closes on selection, Escape, or an outside click. All pointer events
 // stopPropagation so opening it never selects a row, starts a drag, or focuses
 // a note textarea.
+//
+// Keyboard (usePopoverKeys): the open menu holds focus — ↑/↓ move the
+// highlight, Enter hides. One Escape closes back onto the row/note, which
+// never lost its focus.
 
 import { useEffect, useRef, useState } from "react";
 import type { HideDuration } from "./lib";
 import { usePopoverFlip } from "./usePopoverFlip";
+import { usePopoverKeys } from "./usePopoverKeys";
 
 const OPTIONS: { id: HideDuration; label: string; sub: string }[] = [
   { id: "forever", label: "Forever", sub: "until unhidden" },
@@ -23,7 +28,7 @@ export default function HideMenu({ onHide, kb }: { onHide: (duration: HideDurati
   const menuRef = useRef<HTMLDivElement>(null);
   const flip = usePopoverFlip(open, ref, menuRef);
 
-  // Close on outside click or Escape.
+  // Close on outside click or Escape (from anywhere inside).
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -40,6 +45,17 @@ export default function HideMenu({ onHide, kb }: { onHide: (duration: HideDurati
     };
   }, [open]);
 
+  const { hi, setHi, onKeyDown } = usePopoverKeys({
+    open,
+    menuRef,
+    count: OPTIONS.length,
+    initialIndex: () => 0,
+    onPick: (i) => {
+      setOpen(false);
+      onHide(OPTIONS[i].id);
+    },
+  });
+
   return (
     <div className="hide-menu-wrap" ref={ref}>
       <button
@@ -51,11 +67,18 @@ export default function HideMenu({ onHide, kb }: { onHide: (duration: HideDurati
         aria-expanded={open}
       >◐</button>
       {open && (
-        <div className={`hide-menu${flip ? " flip" : ""}`} ref={menuRef} onClick={(e) => e.stopPropagation()}>
-          {OPTIONS.map((o) => (
+        <div
+          className={`hide-menu${flip ? " flip" : ""}`}
+          ref={menuRef}
+          tabIndex={-1}
+          onKeyDown={onKeyDown}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {OPTIONS.map((o, i) => (
             <button
               key={o.id}
-              className="hide-menu-item"
+              className={`hide-menu-item${hi === i ? " hi" : ""}`}
+              onMouseEnter={() => setHi(i)}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpen(false);

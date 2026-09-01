@@ -44,6 +44,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
         <Row keys={["1–6"]}>task: ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete</Row>
         <Row keys={["1–4"]}>note: ⌃ expand · ⬇ download .txt · ◐ hide · × delete</Row>
         <Row keys={["1–3"]}>goal: ✓ achieve · # project · × delete</Row>
+        <Row keys={["↑", "↓", "Enter"]}>inside an open popover (# project / ◷ remind / ◐ hide): move · pick — typing in # creates · Esc returns to the row</Row>
         <Row keys={["e"]}>edit it</Row>
         <Row keys={["Enter"]}>complete the focused task</Row>
 

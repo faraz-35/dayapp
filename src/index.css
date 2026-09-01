@@ -1305,7 +1305,10 @@ button {
   text-align: left;
   transition: background 0.08s ease;
 }
-.hide-menu-item:hover { background: var(--bg-hover); }
+/* The open menu holds keyboard focus (usePopoverKeys) — the moving .hi
+   highlight is the indicator; the container itself never rings. */
+.hide-menu:focus { outline: none; }
+.hide-menu-item:hover, .hide-menu-item.hi { background: var(--bg-hover); }
 .hide-menu-label { font-size: 12px; color: var(--text); }
 .hide-menu-sub { font-size: 10px; color: var(--text-faint); }
 /* Inline input + divider used by the project/reminder popovers. */

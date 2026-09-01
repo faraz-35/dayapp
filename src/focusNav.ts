@@ -69,9 +69,10 @@ export function focusGoalEditor(id: string): void {
   if (row instanceof HTMLElement) row.click();
 }
 
-// A duration/project/reminder popover open? It closes itself on Escape — the
-// focus ladder's global Escape must not also clear focus under it (one Esc,
-// one meaning).
+// A duration/project/reminder popover open? While it lasts it holds keyboard
+// focus itself (usePopoverKeys) and the grammar stands down — the menu's own
+// document listener closes it on Escape, one press, with the row still
+// focused underneath.
 export function popoverOpen(): boolean {
   return document.querySelector(".hide-menu") !== null;
 }

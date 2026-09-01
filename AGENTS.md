@@ -808,9 +808,11 @@ whichever it is. Addresses are typed directly; the first key of an address
 clears focus (a digit mid-sequence can never fire a button), the grammar is
 fixed-length (no timeouts), and an address that lands nowhere is a silent
 no-op. Mouse clicks follow the same rule — clicking a row/note/goal focuses it.
-The Esc ladder is `find bar (in a note) → editing → focused → nothing`: each edit surface's own Escape
-cancels/flushes and blurs onto the still-focused thing; a global Escape (with
-no popover open) clears focus entirely, and at that bottom rung digits are
+The Esc ladder is `open popover → find bar (in a note) → editing → focused → nothing`: an open row popover
+(project/reminder/hide) is the top rung — its own document listener closes it,
+one press, with the row still focused underneath; each edit surface's own Escape
+cancels/flushes and blurs onto the still-focused thing; a global Escape clears
+focus entirely, and at that bottom rung digits are
 inert — a stray `1-6` can't do anything unseen. That bottom rung ("free mode")
 is a reading mode: `j`/`k`/`↑`/`↓` scroll the one `.scroll` container (120px,
 smooth — a view-only verb, so it can't act on anything unseen; it works in
@@ -818,7 +820,12 @@ every view, Analytics included, where nothing is ever focused). While a row is
 focused, `j`/`k` walk the rows and clamp at the ends — they never drop focus;
 Esc or a new address is the only way out. The focused thing **shows its hover
 buttons** (focus mirrors hover exactly: same tint, same revealed actions, same
-metadata fades), so the digits' targets are visible on screen. ⌘P → Keyboard
+metadata fades), so the digits' targets are visible on screen. An open popover
+borrows the keyboard from the grammar entirely (`usePopoverKeys`): focus moves
+into the menu on open (like digit `5` focusing the details body), ↑/↓ move a
+highlight, Enter picks, ProjectMenu routes printable keys into its create
+field, and App's handler stands down while `popoverOpen()` — digits/Enter/e
+never act on the row underneath a menu the user is inside. ⌘P → Keyboard
 Shortcuts is the in-app reference card (`KeyboardHelp.tsx`); the DOM side lives
 in `focusNav.ts` (digits dispatch through `data-kb` markers, so a hover button and
 its digit share the one real onClick handler).
@@ -833,12 +840,13 @@ its digit share the one real onClick handler).
 | `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row (hidden rows: `4` = ↺, `6` = ×) |
 | `1`–`4` (note) | ⌃/⌄ expand · ⬇ download .txt · ◐ hide · × delete — ⬇ and × need content (hidden notes: `3` = ↺, `4` = ×) |
 | `1`–`3` (goal) | ✓ achieve · # project · × delete |
+| `↑`/`↓` + `Enter` (popover open) | move the highlight · pick — # project routes typing to its create field; the date input stays native (Tab reaches it) |
 | `j` / `↓` | select next — clamped at the last row; never drops focus |
 | `k` / `↑` | select previous — clamped at the first row |
 | `j`/`k`/`↑`/`↓` (nothing focused) | scroll the page (120px, smooth) — free mode, every view |
 | `Enter` | complete focused task (toggles a crossed Today row back to active) |
 | `e` | edit the focused thing (task input / note textarea / goal row) |
-| `Esc` | find bar (in a note) → editing → focused → nothing |
+| `Esc` | open popover (closes onto the still-focused row) → find bar (in a note) → editing → focused → nothing |
 | single-click | task: select + enter edit mode (caret at end, not full-select); note/goal: focus it |
 | `⌘P` / `Ctrl+P` | command palette (visibility modes, update, jump to view, keyboard help, …) |
 | `⌘F` / `Ctrl+F` | search items — floating modal, ↑/↓ + Enter to jump; a leading `#` flips it to the project filter picker, a leading `@` to the agent/my picker. **While a note's textarea (or its find bar) has focus, ⌘F is note-local instead** — see Notes below |
