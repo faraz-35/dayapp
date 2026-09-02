@@ -9,15 +9,23 @@ daily-action tool whose **timestamped action log** *is* the journal, for free.
   
 
 
-https://github.com/user-attachments/assets/0158f871-5672-44c1-bccb-6fa5355809be
 
 
 
 
-   
 
-  <br><em>Prefer the full tour? <a href="assets/demo-dayapp.mp4">Download the complete 5:42 video</a> — capture, edit, timers,
-  notes, journal, goals, analytics, all of it.</em>
+
+https://github.com/user-attachments/assets/89d471e3-f598-42df-bcbe-d255d29dccf5
+
+
+
+https://github.com/user-attachments/assets/bea579ac-faec-4b56-811f-de2c74b11f32
+
+
+
+https://github.com/user-attachments/assets/95b37036-ecdc-4414-a40d-0abaaff20780
+
+
 </p>
 
 <p align="center">
