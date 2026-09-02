@@ -106,9 +106,10 @@ meta    key, value           — currently holds last_sweep_date
   on Today/Daily rows only; Backlog rows are clean. The Backlog is sorted by it (priority
   first, then manual order — DnD reorders within a tier) and every tier group there is
   introduced by a hairline divider labeled with the group's bars (the unmarked group's
-  label is the empty track; a single-tier Backlog renders undivided — derived purely from
-  the rendered order in `SectionView.tsx`, so filters that drop tiers drop their dividers);
-  Today/Daily stay manual.
+  label is the empty track; an entirely unmarked Backlog renders undivided — a lone
+  marked tier still labels itself, since the dividers are the tier signal there — derived
+  purely from the rendered order in `SectionView.tsx`, so filters that drop tiers drop
+  their dividers); Today/Daily stay manual.
 - `assigned_to_agent` ∈ `0` | `1` — the delegation axis ("who executes"), set via a bare `@`
   token in the capture or edit text (`parseItemTags` in `lib.ts` strips it; composable with
   `#tag`/`!N` in any order; `@0` clears, no token on edit leaves it alone; `@word` stays
@@ -177,7 +178,8 @@ The tag resolves with exactly the items' trailing-`#tag` semantics (`resolveNote
 handleCreateProject — so a tag whose project was deleted recreates it on the next catch;
 `#0` is the durable unlink). Notes
 group by tier exactly like the Backlog (`ORDER BY COALESCE(priority, 99), sort_order` —
-P1 → P3 → unmarked, tier dividers labeled with the bars, single-tier undivided); the
+P1 → P3 → unmarked, tier dividers labeled with the bars; every marked tier labels
+itself even when alone, an entirely unmarked list renders undivided); the
 cards carry no bars and no metadata chrome beyond the collapsed card's project label
 (right-aligned, the row language). Priority/project on notes are housekeeping —
 **not logged** — and stay out of the phone export (mobile is a task mirror).
@@ -945,7 +947,8 @@ into Notes or edit fields isn't hijacked.
   `handleCatchTokens`). No token leaves values alone; `!0`/`#0` clear. There is no
   metadata UI at all: the tier group is the priority signal, the collapsed label the
   project signal. The list **groups by tier like the Backlog** — P1 → P3 → unmarked
-  under tier dividers labeled with the bars, single-tier undivided; the cards carry no
+  under tier dividers labeled with the bars — every marked tier labels itself even when
+  alone, an entirely unmarked list renders undivided; the cards carry no
   bars (the sections are the tier signal). The collapsed card shows the project label
   (right-aligned, the row language; the preview line yields the hover-action cluster
   its corner while revealed). A caught token that moves the tier re-lands the card in

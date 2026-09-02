@@ -400,7 +400,8 @@ content:
   project. Tokens are never stored or displayed; a tokenless edit leaves the
   current values alone, `!0` clears the priority, and `#0` clears the project.
 - Notes **group by priority exactly like the Backlog** — P1 → P3 → unmarked
-  under tier dividers labeled with the group's bars, single-tier lists
+  under tier dividers labeled with the group's bars; every marked tier labels
+  itself even when it's the only one, and an entirely unmarked list renders
   undivided. The cards themselves carry no bars; the sections are the tier
   signal.
 - The collapsed card shows the note's **project label** (right-aligned, the

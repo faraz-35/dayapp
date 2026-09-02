@@ -48,10 +48,11 @@ export default function SectionView({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `dropzone-${section}` });
 
-  // A Backlog whose items all share one tier (including all-unmarked) is a
-  // single group — no dividers, nothing to label.
-  const singleTier =
-    items.length > 0 && items.every((i) => i.priority === items[0].priority);
+  // Dividers label every marked tier group present — including a lone one:
+  // the rows carry no bars here, so a single marked tier must still label
+  // itself or the tier signal vanishes exactly when every row shares it.
+  // Only an entirely UNMARKED Backlog renders undivided.
+  const allUnmarked = items.every((i) => i.priority === null);
 
   return (
     <section className="section" style={{ minHeight: 40 }}>
@@ -72,7 +73,7 @@ export default function SectionView({
           // dividers are inert: not sortable, not droppable.
           const dividerBefore =
             section === "backlog" &&
-            !singleTier &&
+            !allUnmarked &&
             (idx === 0 || items[idx - 1].priority !== item.priority);
           return (
             <Fragment key={item.id}>

@@ -296,10 +296,12 @@ export default function Notes({
     [notes, hiddenPriorities, projectFilter, focusMode],
   );
 
-  // A notes list whose entries all share one tier (including all-unmarked) is
-  // a single group — no dividers, nothing to label.
-  const singleTier =
-    displayNotes.length > 0 && displayNotes.every((n) => n.priority === displayNotes[0].priority);
+  // Dividers label every marked tier group present — including a lone one:
+  // the bars are the only priority signal the cards carry, so a single marked
+  // tier must still label itself or the signal vanishes exactly when every
+  // note shares it. Only an entirely UNMARKED list (the plain default) renders
+  // undivided — an empty track above every note is chrome, not signal.
+  const allUnmarked = displayNotes.every((n) => n.priority === null);
 
   const handleDelete = async (id: string) => {
     setNotes((s) => s.filter((n) => n.id !== id));
@@ -373,7 +375,7 @@ export default function Notes({
           too, and a single-tier list renders undivided. */}
       {displayNotes.map((note, idx) => {
         const dividerBefore =
-          !singleTier && (idx === 0 || displayNotes[idx - 1].priority !== note.priority);
+          !allUnmarked && (idx === 0 || displayNotes[idx - 1].priority !== note.priority);
         return (
           <Fragment key={note.id}>
             {dividerBefore && (
