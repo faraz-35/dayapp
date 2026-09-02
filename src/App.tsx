@@ -742,8 +742,11 @@ function DayApp() {
       label: devlogOn ? "Dev Log: Stop Recording" : "Dev Log: Start Recording",
       hint: "interaction trace — agents & subtitles",
       run: () => {
-        if (devlogActive()) devlogStop().catch((e) => log.warn("devlog stop failed", e));
-        else devlogStart().catch((e) => log.warn("devlog start failed", e));
+        if (devlogActive()) {
+          devlogStop().then(() => setDevlogOn(false)).catch((e) => log.warn("devlog stop failed", e));
+        } else {
+          devlogStart().then(() => setDevlogOn(true)).catch((e) => log.warn("devlog start failed", e));
+        }
       },
     }] : []),
     // Mobile sync belongs to the real db — hide its entries while demo mode is
