@@ -38,7 +38,8 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
         <Row keys={["nt", "nd", "nb"]}>the task capture — ##t / ##d / ##b (Today / Daily / Backlog) typed for you; bare text lands in Today</Row>
         <Row keys={["t1–9", "d1–9"]}>focus a Today / Daily row</Row>
         <Row keys={["b11–49"]}>focus a Backlog row — tier 4 is unprioritized</Row>
-        <Row keys={["n1–9", "g1–9"]}>focus a note / goal</Row>
+        <Row keys={["n11–49"]}>focus a note — tier digit first (4 = unmarked), row within the tier</Row>
+        <Row keys={["g1–9"]}>focus a goal</Row>
 
         <div className="help-section">Act on the focused thing</div>
         <Row keys={["1–6"]}>task: ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete</Row>

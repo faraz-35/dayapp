@@ -1223,8 +1223,17 @@ function DayApp() {
       else if (a === "t") focusCapture("tasks", "##t");
       else if (a === "d") focusCapture("tasks", "##d");
       else if (a === "b") focusCapture("tasks", "##b");
-      else if (n >= 1 && n <= 9) {
-        const id = noteIdAt(n);
+      else if (n >= 1 && n <= 4) {
+        // The Backlog's tier-row scheme over the notes' tier groups: tier
+        // digit (4 = unmarked), then the row within the tier's visible group.
+        const idx = Number(b);
+        if (!(idx >= 1 && idx <= 9)) {
+          // Tier digit in, index still coming — hold the sequence open.
+          pendingAddr.current = seq;
+          return;
+        }
+        const tier = n === 4 ? null : (n as 1 | 2 | 3);
+        const id = noteIdAt(tier, idx);
         if (id) focusNote(id);
       }
     } else if ((p === "t" || p === "d") && n >= 1 && n <= 9) {

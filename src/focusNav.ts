@@ -1,7 +1,8 @@
 // focusNav — the DOM side of the keyboard focus grammar (⌘P → Keyboard
 // Shortcuts documents it end to end). Addresses are typed directly, no mode:
-// `t3` focuses the third Today row, `b21` the first P2 Backlog row, `nn` the
-// notes capture. Once something is focused (a row, a note, or a goal — App
+// `t3` focuses the third Today row, `b21` the first P2 Backlog row, `n21` the
+// first P2 note, `nn` the notes capture. Once something is focused (a row, a
+// note, or a goal — App
 // holds that state), digits fire its buttons through their data-kb markers,
 // so a hover button and its digit share the one real onClick handler. These
 // helpers only find rendered elements and drive them: DOM order is visual
@@ -35,10 +36,26 @@ export function focusCapture(which: "notes" | "tasks", route?: string): boolean 
   return true;
 }
 
-// The nth rendered note/goal by id (1-based; past 9 doesn't address — j/k and
-// ⌘F still reach long lists).
-export function noteIdAt(n: number): string | null {
-  return document.querySelectorAll("[data-note-id]")[n - 1]?.getAttribute("data-note-id") ?? null;
+// The note at `row` (1-based) within the visible tier group `tier` — the
+// Backlog's b<tier><row> addressing over the notes' own tier groups. The
+// section's DOM is the source (Notes owns its list; DOM order = visual order,
+// so every view filter composes for free): the tier dividers mark group
+// boundaries — a divider's bars carry the aria-label "Priority N", the
+// unmarked group's divider carries none, and an entirely unmarked list has no
+// dividers at all (every card is unmarked).
+export function noteIdAt(tier: 1 | 2 | 3 | null, row: number): string | null {
+  const section = document.querySelector("section.notes");
+  if (!section) return null;
+  let current: 1 | 2 | 3 | null = null;
+  for (const el of section.querySelectorAll<HTMLElement>("[data-note-id], .tier-divider")) {
+    if (el.classList.contains("tier-divider")) {
+      const label = el.querySelector("[aria-label]")?.getAttribute("aria-label") ?? "";
+      current = label.endsWith("1") ? 1 : label.endsWith("2") ? 2 : label.endsWith("3") ? 3 : null;
+    } else if (current === tier && --row === 0) {
+      return el.getAttribute("data-note-id");
+    }
+  }
+  return null;
 }
 
 export function goalIdAt(n: number): string | null {

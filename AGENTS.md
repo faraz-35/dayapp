@@ -838,7 +838,8 @@ its digit share the one real onClick handler).
 | `nt` / `nd` / `nb` | the ONE task capture with the destination pre-swapped-in (`##t ` / `##d ` / `##b ` → Today / Daily / Backlog); bare text lands in Today |
 | `t1`–`9` / `d1`–`9` | focus a Today / Daily row (visible rows, filter-aware) |
 | `b11`–`49` | focus a Backlog row — tier digit first (4 = unprioritized), then row |
-| `n1`–`9` / `g1`–`9` | focus a note / goal (DOM order = visual order) |
+| `n11`–`49` | focus a note — tier digit first (4 = unmarked), then row within the tier's visible group (the `b11`–`49` scheme over the notes' tier groups; flat `n1`–`9` retired) |
+| `g1`–`9` | focus a goal (DOM order = visual order) |
 | `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row (hidden rows: `4` = ↺, `6` = ×) |
 | `1`–`4` (note) | ⌃/⌄ expand · ⬇ download .txt · ◐ hide · × delete — ⬇ and × need content (hidden notes: `3` = ↺, `4` = ×) |
 | `1`–`3` (goal) | ✓ achieve · # project · × delete |
@@ -940,7 +941,7 @@ into Notes or edit fields isn't hijacked.
   action clicks stopPropagation so they don't double as the expand click). Collapsed ids
   persist in localStorage (`dayapp-notes-collapsed`), pruned on delete — a display
   preference, like zoom. No dedicated key — the focus grammar reaches it as digit `1`
-  on a focused note (`n1-9` then `1`).
+  on a focused note (`n<tier><row>` then `1`).
 - **Priority + projects via the token grammar** (see "Notes" under Data model):
   inline tokens at capture, or a blank line + tokens-only final line in an existing note,
   caught on blur — stripped from the body, applied to the columns (`flushAndCatch` →

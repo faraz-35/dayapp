@@ -253,7 +253,8 @@ Shortcuts** shows the reference card in-app.
 | `nt` / `nd` / `nb` | the task capture with the destination typed for you (`##t ` / `##d ` / `##b ` → Today / Daily / Backlog); bare text lands in Today |
 | `t1`–`t9` / `d1`–`d9` | focus a Today / Daily row |
 | `b11`–`b49` | focus a Backlog row — first digit is the tier (4 = unprioritized), second the row |
-| `n1`–`n9` / `g1`–`g9` | focus a note / goal |
+| `n11`–`n49` | focus a note — tier digit (4 = unmarked), then row within the tier |
+| `g1`–`g9` | focus a goal |
 | `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row |
 | `1`–`4` (note) | ⌃ expand/collapse · ⬇ download .txt · ◐ hide · × delete |
 | `1`–`3` (goal) | ✓ achieve · # project · × delete |
