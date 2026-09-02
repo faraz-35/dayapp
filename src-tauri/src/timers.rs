@@ -14,7 +14,7 @@
 // All methods hang off the shared `Db` struct and touch only the `sessions`
 // table (plus a LEFT JOIN to items for the live text of the active timer).
 
-use crate::db::{now_iso, Db};
+use crate::db::{now_iso, DAY_START_HOUR, Db};
 use chrono::{NaiveDate, NaiveDateTime};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -319,29 +319,38 @@ fn open_session_target(conn: &rusqlite::Connection) -> anyhow::Result<Option<(St
 
 // Parse a now_iso() timestamp into a local NaiveDateTime. now_iso emits RFC3339
 // with a numeric offset (e.g. 2026-08-11T14:30:00+00:00); we take the first 19
-// chars (the local wall-clock prefix) so day-splitting keys off local calendar
-// days, consistent with how the rest of DayApp keys off local dates (see
-// lib.ts localDateStr). DST edges are ignored, matching that same model.
+// chars (the local wall-clock prefix) so day-splitting keys off local wall
+// time, consistent with how the rest of DayApp keys off local dates (see
+// lib.ts todayStr). DST edges are ignored, matching that same model.
 fn parse_ts(s: &str) -> Option<NaiveDateTime> {
     let prefix = s.get(..19)?;
     NaiveDateTime::parse_from_str(prefix, "%Y-%m-%dT%H:%M:%S").ok()
 }
 
-// Split an interval [start, end) into per-calendar-day (NaiveDate, seconds)
-// contributions. Sessions usually land in one day; this handles the
-// across-midnight case so daily totals are accurate. Uses naive (wall-clock)
-// dates — no DST modeling, matching the rest of the app's date model.
+// Split an interval [start, end) into per-day (NaiveDate, seconds)
+// contributions over the app's 6am→6am days: a session's pre-06:00 minutes
+// belong to the previous logical day (see db::today_iso). Sessions usually
+// land in one day; this handles the across-midnight case so daily totals are
+// accurate. Uses naive (wall-clock) dates — no DST modeling, matching the
+// rest of the app's date model.
 fn session_day_splits(start: NaiveDateTime, end: NaiveDateTime) -> Vec<(NaiveDate, i64)> {
+    use chrono::{Duration, NaiveTime};
+    const DAY_START: NaiveTime = NaiveTime::from_hms_opt(DAY_START_HOUR, 0, 0).unwrap();
     let mut out = Vec::new();
     if end <= start {
         return out;
     }
     let mut cursor = start;
     while cursor < end {
-        let day = cursor.date();
-        let Some(next_day) = day.succ_opt() else { break };
-        let Some(next_midnight) = next_day.and_hms_opt(0, 0, 0) else { break };
-        let seg_end = if end < next_midnight { end } else { next_midnight };
+        let day = (cursor - Duration::hours(DAY_START_HOUR as i64)).date();
+        // The next 06:00 after `cursor`: this calendar morning if we're
+        // before it, else tomorrow morning.
+        let boundary = if cursor.time() < DAY_START {
+            cursor.date().and_time(DAY_START)
+        } else {
+            cursor.date().succ_opt().map_or(end, |d| d.and_time(DAY_START))
+        };
+        let seg_end = if end < boundary { end } else { boundary };
         let secs = (seg_end - cursor).num_seconds().max(0);
         if secs > 0 {
             out.push((day, secs));
@@ -349,7 +358,7 @@ fn session_day_splits(start: NaiveDateTime, end: NaiveDateTime) -> Vec<(NaiveDat
         if seg_end >= end {
             break;
         }
-        cursor = next_midnight;
+        cursor = boundary;
     }
     out
 }

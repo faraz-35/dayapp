@@ -721,10 +721,10 @@ impl Db {
     // ---- Log queries -----------------------------------------------------
 
     /// All actions in reverse-chronological order. This is the "journal".
-    /// `since`/`until` are optional ISO date-prefix bounds (YYYY-MM-DD), compared
-    /// lexicographically against timestamp (YYYY-MM-DDTHH:MM:SS) — so passing the
-    /// *start* day as `since` and the *day after* the target as `until` yields a
-    /// half-open [since, until) day/week/month range. NULL bounds are unbounded.
+    /// `since`/`until` are optional logical-day bounds (YYYY-MM-DD) — a
+    /// half-open [since, until) range over the 6am→6am day, translated here
+    /// to `T06:00:00` wall-clock prefixes and compared lexicographically
+    /// against timestamp. NULL bounds are unbounded.
     pub fn list_actions(
         &self, limit: Option<i64>, since: Option<&str>, until: Option<&str>,
     ) -> anyhow::Result<Vec<Action>> {
@@ -737,8 +737,8 @@ impl Db {
             "SELECT id,item_id,goal_id,item_text,action,from_section,to_section,from_status,to_status,timestamp
              FROM actions WHERE 1=1");
         let mut pv: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-        if let Some(s) = since { sql.push_str(" AND timestamp >= ?"); pv.push(Box::new(s.to_string())); }
-        if let Some(u) = until { sql.push_str(" AND timestamp < ?"); pv.push(Box::new(u.to_string())); }
+        if let Some(s) = since { sql.push_str(" AND timestamp >= ?"); pv.push(Box::new(day_start_prefix(s))); }
+        if let Some(u) = until { sql.push_str(" AND timestamp < ?"); pv.push(Box::new(day_start_prefix(u))); }
         sql.push_str(" ORDER BY id DESC LIMIT ?");
         pv.push(Box::new(limit));
         let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
@@ -780,23 +780,53 @@ fn log_action(
 }
 
 // ---- Time helpers. Local time, ISO strings. No tz complexity in v1. -------
+// The day runs 06:00→06:00: working past midnight is still the previous day,
+// so daily resets, sweeps, and every "today" comparison wait for the morning.
+
+/// The hour the app's day flips. Matches lib.ts todayStr().
+pub const DAY_START_HOUR: u32 = 6;
 
 pub fn now_iso() -> String {
     use chrono::{Local, SecondsFormat};
     Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
+/// The logical today as a NaiveDate: the local date of (now − 6h). Between
+/// midnight and 06:00 this is yesterday.
+pub fn today_naive() -> chrono::NaiveDate {
+    use chrono::{Duration, Local};
+    (Local::now() - Duration::hours(DAY_START_HOUR as i64)).date_naive()
+}
+
 pub fn today_iso() -> String {
-    use chrono::Local;
-    Local::now().format("%Y-%m-%d").to_string()
+    today_naive().format("%Y-%m-%d").to_string()
+}
+
+/// The logical day a now_iso() timestamp belongs to: shift back
+/// DAY_START_HOUR before taking the date, so 02:00 keys to the previous day.
+/// Naive wall-clock — DST edges ignored, like the rest of the date model.
+pub fn day_key_of_ts(ts: &str) -> Option<String> {
+    use chrono::{Duration, NaiveDateTime};
+    let naive = NaiveDateTime::parse_from_str(ts.get(..19)?, "%Y-%m-%dT%H:%M:%S").ok()?;
+    Some((naive - Duration::hours(DAY_START_HOUR as i64))
+        .format("%Y-%m-%d")
+        .to_string())
+}
+
+/// The wall-clock prefix where logical `day` begins — the SQL bound for
+/// [day, …) scans over now_iso() timestamps. Lexicographic against the
+/// RFC3339 form: `2026-09-04T05:00:00+05:00 < "2026-09-04T06:00:00"`, while
+/// a timestamp at exactly 06:00:00 carries an offset suffix and sorts after.
+pub fn day_start_prefix(day: &str) -> String {
+    format!("{day}T{DAY_START_HOUR:02}:00:00")
 }
 
 // Map a hide duration to its expiry date (ISO YYYY-MM-DD), or None for forever.
 // day/week/month land on the start of a future local date — they auto-restore
 // at the day-boundary sweep, consistent with the rest of DayApp's reset model.
 pub fn hidden_until_for(duration: &str) -> Option<String> {
-    use chrono::{Duration, Local, Months};
-    let today = Local::now().date_naive();
+    use chrono::{Duration, Months};
+    let today = today_naive();
     let date = match duration {
         "day" => Some(today + Duration::days(1)),
         "week" => Some(today + Duration::days(7)),

@@ -21,7 +21,7 @@
 // drives every number here (day counts, heatmap, daily-done, splits), so
 // nothing disagrees with anything else.
 
-use crate::db::{today_iso, Db};
+use crate::db::{day_key_of_ts, day_start_prefix, today_iso, Db};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -387,9 +387,10 @@ pub fn next_day(date: &str) -> anyhow::Result<String> {
 }
 
 impl Db {
-    /// The dashboard for a half-open `[since, until)` day range (either bound
-    /// optional; dates compare lexicographically against the local-RFC3339
-    /// timestamps' date prefix — the same convention list_actions uses).
+    /// The dashboard for a half-open `[since, until)` logical-day range
+    /// (either bound optional; bounds translate to `T06:00:00` wall-clock
+    /// prefixes — the same convention list_actions uses — and every action
+    /// keys to its day via `day_key_of_ts`).
     /// `filter` scopes every number to the selected projects/tiers (see the
     /// scope-filter block above).
     pub fn journal_dashboard(
@@ -403,7 +404,7 @@ impl Db {
         let heat_start = (today_d - chrono::Duration::days(HEATMAP_LOOKBACK_DAYS))
             .format("%Y-%m-%d")
             .to_string();
-        let scan_end = until.unwrap_or("9999-12-31").to_string();
+        let scan_end = day_start_prefix(until.unwrap_or("9999-12-31"));
 
         // ---- Effective completions ------------------------------------------
         // day → item → standing, folded twice: the scoped fold drives every
@@ -417,10 +418,14 @@ impl Db {
         let mut done_by_day: BTreeMap<String, BTreeMap<String, Effective>> = BTreeMap::new();
         let mut done_all_by_day: BTreeMap<String, BTreeMap<String, Effective>> = BTreeMap::new();
         {
+            // The scan window: the earlier of the range start and the heatmap
+            // window, as a wall-clock bound ("" = from the beginning, so the
+            // unbounded "all" range still sees full history for its splits).
             let scan_start = match since {
                 Some(s) => s.min(heat_start.as_str()).to_string(),
                 None => String::new(),
             };
+            let scan_lo = if scan_start.is_empty() { scan_start } else { day_start_prefix(&scan_start) };
             let mut stmt = conn.prepare(
                 "SELECT timestamp, item_id, action, from_section, project, priority
                  FROM actions
@@ -428,7 +433,7 @@ impl Db {
                    AND timestamp >= ?1 AND timestamp < ?2
                  ORDER BY id",
             )?;
-            let rows = stmt.query_map(params![scan_start, scan_end], |r| {
+            let rows = stmt.query_map(params![scan_lo, scan_end], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, String>(1)?,
@@ -440,7 +445,7 @@ impl Db {
             })?;
             for row in rows {
                 let (ts, item, action, from_section, project, priority) = row?;
-                let day = ts[..10].to_string();
+                let Some(day) = day_key_of_ts(&ts) else { continue };
                 let slot = done_all_by_day
                     .entry(day.clone())
                     .or_default()
@@ -485,24 +490,25 @@ impl Db {
         // ended without — nothing to derive. Scoped by the snapshot axes.
         let mut fell_by_day: HashMap<String, i64> = HashMap::new();
         {
-            let lo = since.unwrap_or("").to_string();
+            // Counted in Rust: the logical day key shifts the wall-clock date
+            // back past the 6am boundary, which SQL can't express over the
+            // text timestamps.
+            let lo = since.map(day_start_prefix).unwrap_or_default();
             let mut sql = String::from(
-                "SELECT substr(timestamp,1,10), COUNT(*) FROM actions
+                "SELECT timestamp FROM actions
                  WHERE item_id IS NOT NULL AND action = 'fell_to_backlog'
                    AND timestamp >= ? AND timestamp < ?",
             );
             let mut pv: Vec<Box<dyn rusqlite::ToSql>> =
                 vec![Box::new(lo), Box::new(scan_end)];
             scope.push_sql(&mut sql, &mut pv);
-            sql.push_str(" GROUP BY 1");
             let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
             let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt.query_map(refs.as_slice(), |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-            })?;
+            let rows = stmt.query_map(refs.as_slice(), |r| r.get::<_, String>(0))?;
             for row in rows {
-                let (d, n) = row?;
-                fell_by_day.insert(d, n);
+                if let Some(day) = day_key_of_ts(&row?) {
+                    *fell_by_day.entry(day).or_insert(0) += 1;
+                }
             }
         }
 
@@ -522,10 +528,12 @@ impl Db {
         // been logged yet.
         let first_day: Option<String> = conn
             .query_row(
-                "SELECT MIN(substr(timestamp,1,10)) FROM actions WHERE item_id IS NOT NULL",
-                [], |r| r.get(0),
+                "SELECT MIN(timestamp) FROM actions WHERE item_id IS NOT NULL",
+                [], |r| r.get::<_, Option<String>>(0),
             )
-            .optional()?;
+            .optional()?
+            .flatten()
+            .and_then(|ts| day_key_of_ts(&ts));
         let start_d = NaiveDate::parse_from_str(
             since.or(first_day.as_deref()).unwrap_or(&today),
             "%Y-%m-%d",
@@ -546,8 +554,10 @@ impl Db {
         let mut d = start_d;
         while d <= end_d {
             let day = d.format("%Y-%m-%d").to_string();
-            let day_end = format!("{day}T23:59:59");
-            while idx < events.len() && events[idx].ts <= day_end {
+            // The day ends where the next logical day begins — 06:00 the
+            // following wall-clock morning.
+            let day_end = day_start_prefix(&(d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string());
+            while idx < events.len() && events[idx].ts < day_end {
                 apply_life_event(&mut live, &events[idx]);
                 idx += 1;
             }
@@ -681,7 +691,7 @@ impl Db {
                    AND timestamp >= ?1 AND timestamp < ?2
                  ORDER BY id",
             )?;
-            let rows = stmt.query_map(params![date, next], |r| {
+            let rows = stmt.query_map(params![day_start_prefix(date), day_start_prefix(&next)], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, String>(1)?,
@@ -728,7 +738,7 @@ impl Db {
                    AND timestamp >= ? AND timestamp < ?",
             );
             let mut pv: Vec<Box<dyn rusqlite::ToSql>> =
-                vec![Box::new(date.to_string()), Box::new(next)];
+                vec![Box::new(day_start_prefix(date)), Box::new(day_start_prefix(&next))];
             scope.push_sql(&mut sql, &mut pv);
             sql.push_str(" ORDER BY id");
             let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
@@ -745,7 +755,9 @@ impl Db {
         // has no verdict yet.
         let mut daily_missed: Vec<String> = Vec::new();
         if date != today_iso() {
-            let day_end = format!("{date}T23:59:59");
+            // The replay frozen at this day's end — 06:00 the next wall-clock
+            // morning. The live today has no verdict yet.
+            let day_end = day_start_prefix(&next);
             let mut live: HashMap<String, LiveItem> = HashMap::new();
             for ev in &fetch_life_events(&conn)? {
                 if ev.ts > day_end {
@@ -819,9 +831,10 @@ mod tests {
                     &format!("2026-01-{day}T10:00:00"));
             }
             // A today task that never happened on Jan 3 — the sweep's record.
+            // Sweeps run at/after the 6am boundary, so 06:01 belongs to Jan 3.
             act(&conn, "C", "created", None, Some("today"), None, None, "2026-01-02T09:00:00");
             act(&conn, "C", "fell_to_backlog", Some("today"), Some("backlog"), None, None,
-                "2026-01-03T00:01:00");
+                "2026-01-03T06:01:00");
         }
         let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-06"), &ScopeFilter::default()).unwrap();
         let by = by_date(&s);
@@ -933,7 +946,7 @@ mod tests {
             act(&conn, "E", "completed", Some("backlog"), Some("backlog"), None, None, "2026-01-02T14:00:00");
             // C fell at the day boundary.
             act(&conn, "C", "created", None, Some("today"), None, None, "2026-01-01T09:00:00");
-            act(&conn, "C", "fell_to_backlog", Some("today"), Some("backlog"), None, None, "2026-01-02T00:01:00");
+            act(&conn, "C", "fell_to_backlog", Some("today"), Some("backlog"), None, None, "2026-01-02T06:01:00");
         }
         let d = db.day_detail("2026-01-02", &ScopeFilter::default()).unwrap();
         let texts: Vec<&str> = d.done.iter().map(|t| t.text.as_str()).collect();
@@ -946,10 +959,31 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The 6am→6am day: a completion logged at 01:23 the following
+    /// wall-clock morning keys to the previous logical day — in the totals,
+    /// the day rows, and the day ledger alike (its HH:MM still reads 01:23).
+    #[test]
+    fn late_night_completions_belong_to_the_previous_logical_day() {
+        let (db, dir) = tmp_db();
+        {
+            let conn = db.conn.lock().unwrap();
+            act(&conn, "N", "created", None, Some("today"), None, None, "2026-01-01T21:00:00");
+            act(&conn, "N", "completed", Some("today"), Some("today"), None, None, "2026-01-02T01:23:00");
+        }
+        let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-02"), &ScopeFilter::default()).unwrap();
+        assert_eq!(s.totals.done, 1);
+        assert_eq!(s.days.iter().find(|d| d.date == "2026-01-01").map(|d| d.done), Some(1));
+        let d = db.day_detail("2026-01-01", &ScopeFilter::default()).unwrap();
+        assert_eq!(d.done.len(), 1);
+        assert_eq!(d.done[0].time, "01:23");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn streak_tolerates_a_live_today() {
         let (db, dir) = tmp_db();
-        let today = chrono::Local::now().date_naive();
+        // Anchor on the logical today, the same day the dashboard keys off.
+        let today = chrono::NaiveDate::parse_from_str(&today_iso(), "%Y-%m-%d").unwrap();
         let day = |back: i64| (today - chrono::Duration::days(back)).format("%Y-%m-%d").to_string();
         {
             let conn = db.conn.lock().unwrap();
@@ -1021,7 +1055,7 @@ mod tests {
             act(&conn, "T2", "created", None, Some("today"), None, None, "2026-01-01T09:00:00");
             act(&conn, "T2", "completed", Some("today"), Some("today"), None, None, "2026-01-02T10:00:00");
             act(&conn, "T3", "created", None, Some("today"), Some("growth"), None, "2026-01-01T09:00:00");
-            act(&conn, "T3", "fell_to_backlog", Some("today"), Some("backlog"), Some("growth"), None, "2026-01-02T00:01:00");
+            act(&conn, "T3", "fell_to_backlog", Some("today"), Some("backlog"), Some("growth"), None, "2026-01-02T06:01:00");
         }
         let filter = ScopeFilter {
             projects: Some(vec![Some("meridian".into())]),

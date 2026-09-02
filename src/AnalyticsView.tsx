@@ -24,10 +24,11 @@ import {
   formatReminder,
   journalApi,
   localDateStr,
-  localDateStrOffset,
   projectColor,
   projectsApi,
   timersApi,
+  todayOffset,
+  todayStr,
   type DashboardFilter,
   type DashboardStats,
   type DayDetail,
@@ -70,10 +71,11 @@ type Cell = {
 };
 
 /** The current calendar month as a Monday-first grid: `lead` blanks, then
- *  one cell per day (intensity = that day's completions). Trailing blanks
- *  aren't needed — the CSS grid just ends the last row short. */
+ *  one cell per day (intensity = that day's completions). Anchored on the
+ *  app's logical today (6am→6am), so a 1am session fills yesterday's cell.
+ *  Trailing blanks aren't needed — the CSS grid just ends the last row short. */
 function monthCalendar(map: Map<string, number>): (Cell | null)[] {
-  const today = localDateStr();
+  const today = todayStr();
   const t = new Date(today + "T00:00:00");
   const year = t.getFullYear();
   const month = t.getMonth();
@@ -295,13 +297,14 @@ export default function AnalyticsView() {
     });
   };
 
-  // Resolve the half-open [since, until) window from the active range.
-  // `until` is the day *after* the target so a day boundary is inclusive.
+  // Resolve the half-open [since, until) window from the active range, over
+  // the app's logical days (6am→6am). `until` is the day *after* the target
+  // so a day boundary is inclusive.
   const bounds = useMemo(() => {
     switch (range) {
-      case "today": return { since: localDateStr(), until: localDateStrOffset(1) };
-      case "week":  return { since: localDateStrOffset(-6), until: localDateStrOffset(1) };
-      case "month": return { since: localDateStrOffset(-29), until: localDateStrOffset(1) };
+      case "today": return { since: todayStr(), until: todayOffset(1) };
+      case "week":  return { since: todayOffset(-6), until: todayOffset(1) };
+      case "month": return { since: todayOffset(-29), until: todayOffset(1) };
       case "all":   return { since: undefined, until: undefined };
     }
   }, [range]);
@@ -362,7 +365,7 @@ export default function AnalyticsView() {
 
   const heat = useMemo(() => new Map((dash?.heatmap ?? []).map((h) => [h.date, h.done])), [dash]);
   const cells = useMemo(() => monthCalendar(heat), [heat]);
-  const monthLabel = new Date(localDateStr() + "T00:00:00").toLocaleDateString(undefined, {
+  const monthLabel = new Date(todayStr() + "T00:00:00").toLocaleDateString(undefined, {
     month: "long",
     year: "numeric",
   });
@@ -382,7 +385,7 @@ export default function AnalyticsView() {
       .reverse();
   }, [dash, timeByDay, pickedDay, hasFilter]);
 
-  const today = localDateStr();
+  const today = todayStr();
   const dayCount = dash?.days.length ?? 0;
   const avg =
     dash && dayCount > 1 ? (dash.totals.done / dayCount).toFixed(1) : null;

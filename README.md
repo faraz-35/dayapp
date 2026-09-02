@@ -30,6 +30,8 @@ https://github.com/user-attachments/assets/95b37036-ecdc-4414-a40d-0abaaff20780
 
 Three sections, drag between them. Every create, complete, move, and edit appends to an `actions` log — daily resets, backlog sweeps, reminder promotions, the analytics page, and time totals are all just queries over that log. No cron, no background jobs.
 
+The day runs 6am to 6am. Work past midnight and it's still yesterday: nothing resets, nothing falls to Backlog, and a 1am completion counts for the day you're still in.
+
 ## Analytics
 
 A dashboard built from the log: done / streak / missed stats, a month heatmap, project and priority splits, and a day-by-day ledger that expands to show exactly what happened. Filter by project or priority.

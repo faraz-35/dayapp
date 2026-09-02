@@ -5,7 +5,8 @@
 //
 // Day rollovers render correctly even on a stale export: daily grey-out and
 // done-today retirement are render-time date comparisons (the same trick the
-// desktop uses), computed here against the phone's local "today".
+// desktop uses), computed here against the phone's local "today" — the same
+// 6am→6am day the desktop runs on.
 //
 // The list reuses the desktop row language (.item, .item-check, .priority-bars,
 // .tier-divider, .project-label, .reminder-chip) — read-only, no hover actions,
@@ -13,7 +14,7 @@
 // offline open still shows the list.
 
 import { useEffect, useRef, useState } from "react";
-import { formatDuration, formatReminder, localDateStr, projectColor } from "./lib";
+import { formatDuration, formatReminder, projectColor, todayStr } from "./lib";
 
 interface MobileConfig {
   repo: string;
@@ -296,11 +297,11 @@ function Bars({ priority }: { priority: 1 | 2 | 3 }) {
   );
 }
 
-/** Render-time day rollovers against the phone's local "today" — the same
- *  comparisons the desktop renderer makes, so a stale export still shows the
- *  right thing after midnight. */
+/** Render-time day rollovers against the phone's local "today" (the 6am→6am
+ *  logical day) — the same comparisons the desktop renderer makes, so a
+ *  stale export still shows the right thing after midnight. */
 function rowState(i: ExportItem): "active" | "done" | "gone" {
-  const today = localDateStr();
+  const today = todayStr();
   if (i.section === "daily") {
     return i.lastCompletedDate === today ? "done" : "active";
   }

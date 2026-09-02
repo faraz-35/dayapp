@@ -13,7 +13,7 @@
 // its keys are its own (the hook leaves input-targeted events alone).
 
 import { useEffect, useRef, useState } from "react";
-import { localDateStrOffset } from "./lib";
+import { todayOffset } from "./lib";
 import { trace } from "./devlog";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
@@ -66,7 +66,7 @@ export default function ReminderMenu({
     menuRef,
     count,
     initialIndex: () => 0,
-    onPick: (i) => pick(i < PRESETS.length ? localDateStrOffset(PRESETS[i].days) : null),
+    onPick: (i) => pick(i < PRESETS.length ? todayOffset(PRESETS[i].days) : null),
   });
 
   return (
@@ -96,17 +96,17 @@ export default function ReminderMenu({
               key={p.days}
               className={`hide-menu-item${hi === i ? " hi" : ""}`}
               onMouseEnter={() => setHi(i)}
-              onClick={() => pick(localDateStrOffset(p.days))}
+              onClick={() => pick(todayOffset(p.days))}
             >
               <span className="hide-menu-label">{p.label}</span>
-              <span className="hide-menu-sub">{localDateStrOffset(p.days)}</span>
+              <span className="hide-menu-sub">{todayOffset(p.days)}</span>
             </button>
           ))}
           <div className="hide-menu-divider" />
           <input
             type="date"
             className="menu-input"
-            value={remindAt ?? localDateStrOffset(1)}
+            value={remindAt ?? todayOffset(1)}
             onChange={(e) => pick(e.target.value || null)}
             onClick={(e) => e.stopPropagation()}
             title="Pick a date"

@@ -248,9 +248,11 @@ fn search_agent(db: &Db, mode: &str) -> anyhow::Result<()> {
 /// GUI's pills (default Today); a YYYY-MM-DD is the date jump. Time is a
 /// separate dimension from the action filter pills, so both always print.
 fn journal(db: &Db, range: Option<&str>) -> anyhow::Result<()> {
-    use chrono::{Duration, Local, NaiveDate};
+    use chrono::{Duration, NaiveDate};
     use std::collections::BTreeSet;
-    let today = Local::now().date_naive();
+    // The app's day runs 6am→6am — `today_iso()` is the logical today, so a
+    // late-night session still reads as "today" at 1am.
+    let today = NaiveDate::parse_from_str(&crate::db::today_iso(), "%Y-%m-%d")?;
     let tomorrow = today + Duration::days(1);
     let (since, until): (Option<NaiveDate>, Option<NaiveDate>) = match range {
         None | Some("today") => (Some(today), Some(tomorrow)),
@@ -299,7 +301,9 @@ fn journal(db: &Db, range: Option<&str>) -> anyhow::Result<()> {
     // only tracked time still shows up (same rule as JournalView).
     let mut day_set: BTreeSet<String> = BTreeSet::new();
     for a in &actions {
-        day_set.insert(a.timestamp[..10].to_string());
+        if let Some(day) = crate::db::day_key_of_ts(&a.timestamp) {
+            day_set.insert(day);
+        }
     }
     for t in &times {
         day_set.insert(t.day.clone());

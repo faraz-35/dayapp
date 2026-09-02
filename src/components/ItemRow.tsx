@@ -19,7 +19,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { formatDuration, formatLiveDuration, formatReminder, localDateStr, projectColor, type HideDuration, type Item, type Project, type TokenKind } from "../lib";
+import { formatDuration, formatLiveDuration, formatReminder, projectColor, todayStr, type HideDuration, type Item, type Project, type TokenKind } from "../lib";
 import { clip, trace } from "../devlog";
 import HideMenu from "../HideMenu";
 import ProjectMenu from "../ProjectMenu";
@@ -59,7 +59,7 @@ export default function ItemRow({
     useSortable({ id: item.id });
 
   const doneToday =
-    item.section === "daily" && item.lastCompletedDate === localDateStr();
+    item.section === "daily" && item.lastCompletedDate === todayStr();
   const done = item.status === "done" || doneToday;
   const project = projects.find((p) => p.id === item.projectId) ?? null;
 

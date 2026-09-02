@@ -8,7 +8,7 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, backupApi, demoApi, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type EntryKind, type HideDuration, type Item, type Project, type Section } from "./lib";
+import { api, backupApi, demoApi, formatLiveDuration, hideExpiry, parseItemTags, projectsApi, syncApi, timersApi, todayStr, type ActiveTimer, type EntryKind, type HideDuration, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import { clip, devlogActive, devlogStart, devlogStop, trace } from "./devlog";
 import Notes from "./Notes";
@@ -323,8 +323,9 @@ function DayApp() {
     // Demo mode is session-only, so the backend decides — this catches the
     // first-run tour before the first paint settles.
     demoApi.active().then(setDemoMode).catch((e) => log.warn("demo mode query failed", e));
-    // Re-check the day boundary while the app stays open. If local time crosses
-    // midnight, run the sweep so Today items fall to Backlog without a relaunch.
+    // Re-check the day boundary while the app stays open. The app's day runs
+    // 6am→6am, so when local time crosses 6am the sweep fires and Today items
+    // fall to Backlog without a relaunch.
     // The same tick drains the phone's capture inbox, so a capture made while
     // walking lands within a minute of the Mac app being open — except in demo
     // mode, where the phone's inbox waits (its captures belong to the real db).
@@ -978,7 +979,7 @@ function DayApp() {
       setItems((s) => ({
         ...s,
         daily: s.daily.map((i) =>
-          i.id === id ? { ...i, lastCompletedDate: localDateStr() } : i,
+          i.id === id ? { ...i, lastCompletedDate: todayStr() } : i,
         ),
       }));
     } else if (section === "today") {
@@ -986,7 +987,7 @@ function DayApp() {
       setItems((s) => ({
         ...s,
         today: s.today.map((i) =>
-          i.id === id ? { ...i, status: "done", lastCompletedDate: localDateStr() } : i,
+          i.id === id ? { ...i, status: "done", lastCompletedDate: todayStr() } : i,
         ),
       }));
     } else {

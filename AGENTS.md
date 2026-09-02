@@ -14,10 +14,17 @@ decision in it exists for a reason and must be followed, not relitigated.
 The whole app is built on one insight: **several behaviours that sound like features are
 just queries over timestamped state.** No cron, no background jobs.
 
+**The day runs 6am→6am.** Faraz works past midnight, so "today" is the local date of
+(now − 6h) — one helper on each side (`today_iso()` in `db.rs`, `todayStr()` in `lib.ts`)
+that every comparison goes through. Between midnight and 6am nothing resets, nothing
+promotes, and late-night completions stay in the day they belong to (analytics day keys
+and SQL range bounds shift the same way: `day_key_of_ts` / `day_start_prefix`). Change
+the constant, change the app's day.
+
 | Behaviour | How it actually works |
 |---|---|
-| Daily items reset overnight | `last_completed_date == today` comparison on render. At midnight the comparison just stops being true. |
-| Today items fall to Backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date`). Idempotent. |
+| Daily items reset overnight | `last_completed_date == today` comparison on render. At the 6am boundary the comparison just stops being true. |
+| Today items fall to Backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date` against the logical today). Idempotent. |
 | Completed Today items disappear overnight | The same sweep deletes today rows with `status='done'` dated before today — the completion already lives in `actions`, so no extra log row. `purge_completed_today()` repeats it un-gated on launch for rows a gated-out sweep left behind. |
 | Backlog reminders promote to Today | `promote_due_reminders()` runs on launch (un-gated, idempotent): backlog rows with `remind_at <= today` move to `today`. |
 | "What I did this week" | `SELECT FROM actions WHERE action='completed'`. Every mutation logs itself. The Analytics view summarizes it; `--journal` prints the raw log. |
@@ -93,7 +100,7 @@ meta    key, value           — currently holds last_sweep_date
   always filtering `hidden = 0`; in `include` mode archived rows render inline in
   their sections (dimmed, ◐ expiry chip, ↺/× actions only, not draggable).
   `hidden_until` is NULL
-  (forever) or an ISO date cleared by the midnight sweep. Hide/unhide is **not** logged to
+  (forever) or an ISO date cleared by the 6am-boundary sweep. Hide/unhide is **not** logged to
   `actions` — it's housekeeping, not activity.
 - `project_id` — optional assignment to a `projects` row (housekeeping; **not** logged). Shown
   as a color-coded label on the far right of each item row (deterministic hue per project id).
@@ -422,7 +429,7 @@ the running timer — there is no separate "active timer" state anywhere. ▶ op
 session first (single-timer invariant, enforced in `start_timer`). Like Notes/Projects,
 sessions are **measurement (content)**, not item-state transitions, so they are **never**
 logged to `actions` — the Analytics view surfaces time as a separate dimension via
-`session_time_by_day`, which splits sessions across midnight so daily totals are accurate.
+`session_time_by_day`, which splits sessions at the 6am boundary so daily totals are accurate.
 
 - `item_text` is snapshotted at write time (like `actions.item_text`), so the per-task
   breakdown survives edits and deletions. Sessions deliberately carry **no

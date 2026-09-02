@@ -14,7 +14,7 @@
 // bars — single-click edits inline (the shared EditInput), hover reveals ×.
 
 import { useEffect, useMemo, useState } from "react";
-import { entriesApi, parseEntryCapture, type Entry, type EntryKind } from "./lib";
+import { entriesApi, parseEntryCapture, todayStr, type Entry, type EntryKind } from "./lib";
 import { log } from "./log";
 import { clip, trace } from "./devlog";
 import TokenField from "./TokenField";
@@ -74,7 +74,7 @@ export default function Journal({
     return out;
   }, [entries]);
 
-  const today = new Date().toLocaleDateString("en-CA"); // local ISO date
+  const today = todayStr(); // the app's day (6am→6am)
 
   // The capture line is the bus with a default: plain text becomes a journal
   // entry (this view's context), a leading ##q still routes to quotes.
