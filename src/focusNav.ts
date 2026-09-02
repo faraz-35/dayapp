@@ -62,13 +62,17 @@ export function goalIdAt(n: number): string | null {
   return document.querySelectorAll("[data-goal-id]")[n - 1]?.getAttribute("data-goal-id") ?? null;
 }
 
-// The `e` verb on a focused note. A collapsed card expands through its own
-// click handler (which drops the caret at the end of the textarea); an open
-// one takes the caret directly.
+// The `e` verb on a focused note — the one expand-that-edits. A collapsed
+// card expands through its own click handler, a reading action that doesn't
+// take the caret, and its textarea only exists after that expand's commit —
+// so the verb TAGS the card and the component's expand effect (which runs
+// with the textarea mounted) takes the caret at the end. An open one takes
+// it directly.
 export function focusNoteEditor(id: string): void {
   const card = document.querySelector(`[data-note-id="${id}"]`);
   if (!(card instanceof HTMLElement)) return;
   if (card.classList.contains("collapsed")) {
+    card.dataset.editExpand = "1";
     card.click();
     return;
   }

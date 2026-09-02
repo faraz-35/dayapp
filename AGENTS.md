@@ -936,8 +936,10 @@ into Notes or edit fields isn't hijacked.
 - Each note card collapses **in place**: the ⌃ button in its hover actions folds it to
   one line (its first non-empty **prose** line — a pending token line never previews),
   ellipsized — same card, just shorter, no layout
-  swap. The collapsed card is one big click target: expanding focuses its textarea with
-  the caret at end, so collapsed → editing is one click. Its hover actions remain (⌄ ⬇ ◐ ×;
+  swap. The collapsed card is one big click target: clicking it expands in place, a
+  **reading action** — the keyboard stays alone (a focused note keeps its focus and the
+  digits keep acting on it); editing is one more click into the text or `e`, which
+  expands and then takes the caret. Its hover actions remain (⌄ ⬇ ◐ ×;
   action clicks stopPropagation so they don't double as the expand click). Collapsed ids
   persist in localStorage (`dayapp-notes-collapsed`), pruned on delete — a display
   preference, like zoom. No dedicated key — the focus grammar reaches it as digit `1`

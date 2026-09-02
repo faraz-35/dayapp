@@ -26,8 +26,10 @@
 // Each note card can be collapsed to a single line — its first non-empty
 // prose line (the footer never previews). The card shrinks in place (same
 // look, just shorter; no layout swap), and the collapsed card is one big
-// click target: expanding focuses its textarea with the caret at the end, so
-// collapsed → editing is one click. Which notes are collapsed persists in
+// click target: clicking it expands in place, a READING action — the keyboard
+// stays alone (a focused note keeps its focus, digits keep acting on it);
+// editing is one more click into the text or `e`, which expands and then
+// takes the caret. Which notes are collapsed persists in
 // localStorage; no dedicated key — the focus grammar reaches it as digit 1 on
 // a focused note.
 //
@@ -549,18 +551,27 @@ function NoteInput({
     el.style.height = `${Math.max(el.scrollHeight, 28)}px`;
   };
 
-  // Expanding puts the caret at the end of the textarea — the collapsed card
-  // is a one-click path back to editing. The textarea (re)mounts with the
-  // expand (it's swapped for the preview div while collapsed), and the []
-  // mount effect below ran at the note's original mount, not the textarea's —
-  // so size it here or it opens at the browser default ~2 rows until the
-  // first keystroke. Skipped on mount itself.
+  // Expanding is a READING action: autosize the textarea so the card unfolds
+  // at full height, but leave the keyboard alone — the caret doesn't move in,
+  // and a focused note keeps its focus so the digits keep acting on it
+  // (editing is one more click into the text, or `e`, which expands and then
+  // takes the caret). The textarea (re)mounts with the expand (it's swapped
+  // for the preview div while collapsed), and the [] mount effect below ran
+  // at the note's original mount, not the textarea's — so size it here or it
+  // opens at the browser default ~2 rows until the first keystroke. Skipped
+  // on mount itself.
   const wasCollapsed = useRef(collapsed);
   useEffect(() => {
     if (wasCollapsed.current && !collapsed) {
       autosize();
-      ref.current?.focus();
-      ref.current?.setSelectionRange(val.length, val.length);
+      // `e` tags the card before expanding it (focusNoteEditor) — honor the
+      // tag here, where the textarea is guaranteed mounted: caret at end.
+      const card = ref.current?.closest<HTMLElement>("[data-note-id]");
+      if (card?.dataset.editExpand === "1") {
+        delete card.dataset.editExpand;
+        ref.current?.focus();
+        ref.current?.setSelectionRange(val.length, val.length);
+      }
     }
     wasCollapsed.current = collapsed;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -643,7 +654,8 @@ function NoteInput({
     <div
       className={`note${collapsed ? " collapsed" : ""}${hovered ? " hovered" : ""}${focused ? " focused" : ""}${note.hidden ? " hidden" : ""}${findOpen && !collapsed ? " finding" : ""}`}
       data-note-id={note.id}
-      // The collapsed card is one big click target: expand + caret at end.
+      // The collapsed card is one big click target: expand only — a reading
+      // action, never an edit.
       onClick={collapsed ? onToggleCollapse : undefined}
       title={collapsed ? "Expand note" : undefined}
     >
