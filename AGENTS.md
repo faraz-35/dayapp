@@ -818,8 +818,10 @@ overlay there), so its footer bars render width-fitted to the raw `!N`
   it is stopped first (the session is kept).
 - Done (backlog): status flips, row removed from active view, completion logged. A running
   timer on it is stopped first (the session is kept).
-- Done-today (daily): stays in place, greyed + line-through, checkbox filled accent. Resets
-  automatically when `last_completed_date != today`.
+- Done-today (daily): stays in place, greyed + line-through, checkbox filled accent. Enter
+  or a checkbox click un-completes it (clears `last_completed_date`, logged as
+  `uncompleted`) — the same mistaken-check inverse as Today. Resets automatically when
+  `last_completed_date != today`.
 - Edit: double-click text, or hover ✎, or select + `e`. Inline `<input>`, commits on
   Enter/blur, cancels on Escape.
 - Details: the spec under the title — a full-width, full-strength writing surface
@@ -884,7 +886,7 @@ its digit share the one real onClick handler).
 | `j` / `↓` | select next — clamped at the last row; never drops focus |
 | `k` / `↑` | select previous — clamped at the first row |
 | `j`/`k`/`↑`/`↓` (nothing focused) | scroll the page (120px, smooth) — free mode, every view |
-| `Enter` | complete focused task (toggles a crossed Today row back to active) |
+| `Enter` | complete focused task (toggles a crossed Today row or a done Daily back to active) |
 | `e` | edit the focused thing (task input / note textarea / goal row) |
 | `Esc` | open popover (closes onto the still-focused row) → find bar (in a note) → editing → focused → nothing |
 | single-click | task: select + enter edit mode (caret at end, not full-select); note/goal: focus it |

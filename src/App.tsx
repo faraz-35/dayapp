@@ -957,13 +957,19 @@ function DayApp() {
   };
 
   const handleComplete = async (id: string, section: Section) => {
-    // A crossed Today row toggles back off — Enter or a checkbox click
-    // un-completes it. (Daily has no inverse: its completion is just
-    // "done for today".)
-    if (section === "today" && items.today.find((i) => i.id === id)?.status === "done") {
+    // A crossed Today row or a done Daily toggles back off — Enter or a
+    // checkbox click un-completes it. A mistaken check needs the same
+    // inverse on both; the backend clears today's completion record either
+    // way and logs `uncompleted`.
+    const item = items[section].find((i) => i.id === id);
+    const doneToday =
+      section === "today"
+        ? item?.status === "done"
+        : section === "daily" && item?.lastCompletedDate === todayStr();
+    if (doneToday) {
       setItems((s) => ({
         ...s,
-        today: s.today.map((i) =>
+        [section]: s[section].map((i) =>
           i.id === id ? { ...i, status: "active", lastCompletedDate: null } : i,
         ),
       }));
@@ -1449,7 +1455,12 @@ function DayApp() {
         // vanish it (done + hidden, invisible in every mode). Unhide first.
         if (item && !item.hidden) {
           e.preventDefault();
-          trace(item.status === "done" ? "uncomplete" : "complete", { via: "enter", text: clip(item.text), section: item.section });
+          // A done Daily carries status "active" — its done-state is today's
+          // completion record, same test handleComplete toggles on.
+          const unchecking =
+            item.status === "done" ||
+            (item.section === "daily" && item.lastCompletedDate === todayStr());
+          trace(unchecking ? "uncomplete" : "complete", { via: "enter", text: clip(item.text), section: item.section });
           handleComplete(item.id, item.section);
         }
       } else if (e.key === "e") {
