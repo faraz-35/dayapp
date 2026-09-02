@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { entriesApi, parseEntryCapture, type Entry, type EntryKind } from "./lib";
 import { log } from "./log";
+import { clip, trace } from "./devlog";
 import TokenField from "./TokenField";
 import { EditInput } from "./components/ItemRow";
 
@@ -80,6 +81,7 @@ export default function Journal({
   const handleCapture = (raw: string) => {
     const route = parseEntryCapture(raw) ?? { kind: "journal" as EntryKind, text: raw };
     if (!route.text) return;
+    trace("capture.entry", { kind: route.kind, text: clip(route.text), via: "journal" });
     entriesApi
       .add(route.kind, route.text)
       .then((e) => {
@@ -100,12 +102,22 @@ export default function Journal({
   };
 
   const handleDelete = (entry: Entry) => {
+    trace("entry.delete", { text: clip(entry.text) });
     setEntries((s) => s.filter((e) => e.id !== entry.id));
     entriesApi.delete(entry.id).catch((e) => log.error("entry delete failed", e));
   };
 
   const renderRow = (entry: Entry) => (
-    <div className="journal-row" key={entry.id} onClick={() => setEditingId(entry.id)}>
+    <div
+      className="journal-row"
+      key={entry.id}
+      onClick={() => {
+        if (editingId !== entry.id) {
+          trace("edit.start", { via: "click", subject: "entry" });
+          setEditingId(entry.id);
+        }
+      }}
+    >
       {editingId === entry.id ? (
         <EditInput initial={entry.text} onCommit={(text) => handleCommit(entry, text)} />
       ) : (

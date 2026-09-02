@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { syncApi } from "./lib";
 import { log } from "./log";
+import { trace } from "./devlog";
 
 export default function MobileSyncSettings({ open, onClose }: {
   open: boolean;
@@ -40,6 +41,7 @@ export default function MobileSyncSettings({ open, onClose }: {
   if (!open) return null;
 
   const save = async () => {
+    trace("sync.save", { repo: repo.trim() });
     setBusy(true);
     setResult(null);
     try {

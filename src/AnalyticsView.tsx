@@ -36,6 +36,7 @@ import {
   type TierCount,
 } from "./lib";
 import { log } from "./log";
+import { trace } from "./devlog";
 
 type Range = "today" | "week" | "month" | "all";
 
@@ -229,6 +230,7 @@ export default function AnalyticsView() {
       e.stopPropagation();
       setProjHi(0);
       setProjMenu(true);
+      trace("analytics.picker", { via: "key" });
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -269,11 +271,13 @@ export default function AnalyticsView() {
   );
   const hasFilter = selProjects.size > 0 || selTiers.size > 0;
   const clearFilter = () => {
+    trace("analytics.filter.clear");
     setSelProjects(new Set());
     setSelTiers(new Set());
   };
 
   const toggleProject = (name: string) => {
+    trace("analytics.filter", { project: name === "" ? "none" : name, on: !selProjects.has(name) });
     setSelProjects((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
@@ -282,6 +286,7 @@ export default function AnalyticsView() {
     });
   };
   const toggleTier = (t: number) => {
+    trace("analytics.filter", { tier: t === 0 ? "none" : t, on: !selTiers.has(t) });
     setSelTiers((prev) => {
       const next = new Set(prev);
       if (next.has(t)) next.delete(t);
@@ -336,9 +341,11 @@ export default function AnalyticsView() {
 
   const pickDay = (d: string) => {
     if (d === pickedDay) {
+      trace("analytics.pick", { day: d, on: false });
       setPickedDay(null);
       return;
     }
+    trace("analytics.pick", { day: d, on: true });
     // A day outside the active range's ledger (calendar cell, date field):
     // widen to All so the expanded row has somewhere to render.
     const { since, until } = bounds;
@@ -399,7 +406,11 @@ export default function AnalyticsView() {
           <button
             key={r.id}
             className={`pill${range === r.id ? " active" : ""}`}
-            onClick={() => { setRange(r.id); setPickedDay(null); }}
+            onClick={() => {
+              if (r.id !== range) trace("analytics.range", { range: r.id });
+              setRange(r.id);
+              setPickedDay(null);
+            }}
           >{r.label}</button>
         ))}
         <input
@@ -413,7 +424,10 @@ export default function AnalyticsView() {
           <span className="anf-wrap" ref={projMenuRef}>
             <button
               className={`pill anf-proj${selProjects.size ? " active" : ""}`}
-              onClick={() => setProjMenu((v) => !v)}
+              onClick={() => {
+                if (!projMenu) trace("analytics.picker", { via: "pill" });
+                setProjMenu(!projMenu);
+              }}
               title="Scope the page to projects"
             >{projLabel} ▾</button>
             {projMenu && (

@@ -7,6 +7,7 @@
 // the first match.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { trace } from "./devlog";
 
 export interface Command {
   id: string;
@@ -26,6 +27,15 @@ export default function CommandPalette({
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Open/close land here (not in App's ⌘P handler) so every door to the
+  // palette — key, or any future one — traces identically.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpen.current) trace("palette.open");
+    else if (!open && wasOpen.current) trace("palette.close");
+    wasOpen.current = open;
+  }, [open]);
 
   // Reset to a clean state every time the palette opens.
   useEffect(() => {
@@ -59,6 +69,7 @@ export default function CommandPalette({
   const run = (cmd?: Command) => {
     const c = cmd ?? filtered[active];
     if (!c) return;
+    trace("palette.exec", { command: c.id, label: c.label });
     c.run();
     onClose();
   };

@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { localDateStrOffset } from "./lib";
+import { trace } from "./devlog";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
 
@@ -53,6 +54,7 @@ export default function ReminderMenu({
   }, [open]);
 
   const pick = (v: string | null) => {
+    trace("reminder.set", { remind: v });
     setOpen(false);
     onSet(v);
   };
@@ -72,7 +74,11 @@ export default function ReminderMenu({
       <button
         className="item-action"
         data-kb={kb}
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!open) trace("popover.open", { menu: "reminder" });
+          setOpen(!open);
+        }}
         title="Remind me"
         aria-label="Remind me"
         aria-expanded={open}

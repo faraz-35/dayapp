@@ -23,6 +23,7 @@
 // deletes rows; that contract lives in App's handler + `delete_project`.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { clip, trace } from "../devlog";
 import { projectColor, type Item, type Project, type Section } from "../lib";
 
 export interface SearchHit {
@@ -74,6 +75,16 @@ export default function SearchMenu({
       // Focus on next tick so the input is mounted.
       requestAnimationFrame(() => inputRef.current?.focus());
     }
+  }, [open]);
+
+  // Open/close trace here (not in App's ⌘F handler) — the note-local find
+  // bar steals ⌘F while a note edits, so anything that reached this surface
+  // was the global search.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpen.current) trace("search.open");
+    else if (!open && wasOpen.current) trace("search.close");
+    wasOpen.current = open;
   }, [open]);
 
   // A leading `#` flips the list from item hits to projects; `@` to the
@@ -131,6 +142,7 @@ export default function SearchMenu({
   const jump = (hit?: SearchHit) => {
     const h = hit ?? filtered[active];
     if (!h) return;
+    trace("search.jump", { text: clip(h.item.text, 80), section: h.section });
     onJump(h);
     onClose();
   };
@@ -138,6 +150,7 @@ export default function SearchMenu({
   const selectProject = (project?: Project) => {
     const p = project ?? filteredProjects[active];
     if (!p) return;
+    trace("search.pick.project", { name: p.name });
     onSelectProject(p.id);
     onClose();
   };
@@ -145,6 +158,7 @@ export default function SearchMenu({
   const selectAgent = (mode?: (typeof AGENT_FILTERS)[number]) => {
     const f = mode ?? filteredAgents[active];
     if (!f) return;
+    trace("search.pick.agent", { mode: f.id });
     onSelectAgent(f.id);
     onClose();
   };
@@ -174,8 +188,18 @@ export default function SearchMenu({
     renamingRef.current = null;
     setRenamingId(null);
     setRenameDraft("");
-    if (commit && p && name && name !== p.name) onRenameProject(p.id, name);
+    if (commit && p && name && name !== p.name) {
+      trace("search.rename", { from: p.name, to: name });
+      onRenameProject(p.id, name);
+    }
     requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  // The × delete, reached from the row button or the digit-2 verb — one verb,
+  // one trace.
+  const deleteProject = (p: Project) => {
+    trace("search.delete.project", { name: p.name });
+    onDeleteProject(p.id);
   };
 
   const onKey = (e: React.KeyboardEvent) => {
@@ -202,7 +226,7 @@ export default function SearchMenu({
       const p = filteredProjects[active];
       if (!p) return;
       if (e.key === "1") startRename(p);
-      else onDeleteProject(p.id);
+      else deleteProject(p);
     }
   };
 
@@ -274,7 +298,7 @@ export default function SearchMenu({
                     className="item-action danger"
                     title="Delete project (unassigns its tasks, notes and goals — keeps them)"
                     aria-label="Delete project"
-                    onClick={(e) => { e.stopPropagation(); onDeleteProject(p.id); }}
+                    onClick={(e) => { e.stopPropagation(); deleteProject(p); }}
                   >×</button>
                 </>
               )}

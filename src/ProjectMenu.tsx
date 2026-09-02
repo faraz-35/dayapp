@@ -19,6 +19,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { type Project } from "./lib";
+import { trace } from "./devlog";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
 
@@ -57,6 +58,7 @@ export default function ProjectMenu({
   }, [open]);
 
   const assign = (id: string | null) => {
+    trace("project.assign", { project: id === null ? null : projects.find((p) => p.id === id)?.name });
     setOpen(false);
     setDraft("");
     onAssign(id);
@@ -65,6 +67,7 @@ export default function ProjectMenu({
   const createAndAssign = async () => {
     const name = draft.trim();
     if (!name) return;
+    trace("project.create", { name });
     try {
       const p = await onCreateProject(name);
       assign(p.id);
@@ -92,7 +95,11 @@ export default function ProjectMenu({
       <button
         className="item-action"
         data-kb={kb}
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!open) trace("popover.open", { menu: "project" });
+          setOpen(!open);
+        }}
         title="Set project"
         aria-label="Set project"
         aria-expanded={open}

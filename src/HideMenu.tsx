@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { HideDuration } from "./lib";
+import { trace } from "./devlog";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
 
@@ -61,7 +62,11 @@ export default function HideMenu({ onHide, kb }: { onHide: (duration: HideDurati
       <button
         className="item-action"
         data-kb={kb}
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!open) trace("popover.open", { menu: "hide" });
+          setOpen(!open);
+        }}
         title="Hide"
         aria-label="Hide"
         aria-expanded={open}

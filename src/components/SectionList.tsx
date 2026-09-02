@@ -21,6 +21,7 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { parseTaskCapture, type HideDuration, type Item, type Project, type Section } from "../lib";
+import { clip, trace } from "../devlog";
 import TokenField from "../TokenField";
 import SectionView from "./SectionView";
 
@@ -88,15 +89,21 @@ export default function SectionList({
 
   const onDragStart = (e: DragStartEvent) => {
     const item = findItem(e.active.id as string);
-    if (item) setActiveDrag(item);
+    if (item) {
+      trace("drag.start", { text: clip(item.text), section: item.section });
+      setActiveDrag(item);
+    }
   };
 
   const onDragEnd = (e: DragEndEvent) => {
     setActiveDrag(null);
     const { active, over } = e;
-    if (!over) return;
-    const activeItem = findItem(active.id as string);
-    if (!activeItem) return;
+    const dragged = findItem(active.id as string);
+    if (!over) {
+      if (dragged) trace("drag.cancel", { text: clip(dragged.text), why: "no target" });
+      return;
+    }
+    if (!dragged) return;
 
     // `over.id` is either an item id, or a dropzone id (dropped on empty area).
     const overId = String(over.id);
@@ -114,12 +121,14 @@ export default function SectionList({
     }
 
     // No-op if dropped in place.
-    const currentIdx = items[overSection].findIndex((i) => i.id === activeItem.id);
-    if (overSection === activeItem.section && currentIdx === newIndex) {
+    const currentIdx = items[overSection].findIndex((i) => i.id === dragged.id);
+    if (overSection === dragged.section && currentIdx === newIndex) {
+      trace("drag.cancel", { text: clip(dragged.text), why: "dropped in place" });
       return;
     }
 
-    onMoveItem(activeItem.id, overSection, newIndex);
+    trace("drag.drop", { text: clip(dragged.text), from: dragged.section, to: overSection, index: newIndex });
+    onMoveItem(dragged.id, overSection, newIndex);
   };
 
   const submit = () => {
@@ -128,7 +137,10 @@ export default function SectionList({
     const { section, text } = parseTaskCapture(t);
     // A bare route token with no text is a no-op — no junk row, the entries
     // rule. The stripped text still runs App's item grammar (#tag/!N/@).
-    if (text) onQuickAdd(section, text);
+    if (text) {
+      trace("capture.task", { route: section, text: clip(text) });
+      onQuickAdd(section, text);
+    }
     setDraft("");
   };
 

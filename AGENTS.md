@@ -493,6 +493,35 @@ a detached helper.
   `actions` table — that's the journal. Logging it again is noise. Log only state transitions
   the user can't otherwise see (sweeps, migrations, the update handoff).
 
+**The dev log (demo-mode interaction trace):** a third stream beside the app log and
+`actions`, recording the layer neither knows — the **interaction**: which surface, which
+input, what the palette ran. `actions` holds the fact (a task was completed), the app log
+holds lifecycle; neither holds that it happened via Enter on a focused row vs a checkbox
+click. While recording, every semantic UI interaction appends one JSON line to
+`~/Library/Logs/com.farazshah.dayapp/devlog-<YYYYMMDD>-<HHMMSS>.jsonl` —
+`{"t":12.43,"ts":"…","kind":"capture.task","detail":{"route":"daily","text":"…"}}` where
+`t` is seconds since recording start and `kind` is a dotted family.verb over a closed
+vocabulary (capture / focus / edit / complete / timer / drag / popover / palette / search /
+view / toggle / quote / analytics / demo / …).
+
+- Recording is **demo-scoped**: it auto-arms when demo mode opens (fresh file per entry, so
+  t=0 is the demo's t=0 — the studio pipeline aligns subtitles/cue sheets against it),
+  disarms on exit, and ⌘P → `Dev Log: Start/Stop Recording` toggles it mid-session (the
+  entries exist in demo mode only). Nothing renders the log — the file is the artifact, for
+  agents (`ls -t ~/Library/Logs/com.farazshah.dayapp/devlog-*`) and the studio.
+- **Semantic verbs only.** The screensaver's discipline applies: app-driven churn (the 1s
+  timer tick, the 60s sweep, the masthead rotation) never traces — DOM churn is not
+  attention. Held-key auto-repeat is filtered (free-mode scroll) or deduped (clamped focus
+  steps don't re-trace).
+- Not the rotating app log, not `actions` — a session-scoped debug artifact, safe to
+  delete. The backend (`devlog_append` in lib.rs) is a dumb sink: the frontend
+  (`src/devlog.ts`) owns the event vocabulary, batches every 250ms, and `trace()` while not
+  recording costs one boolean check — call sites trace unconditionally.
+- Text payloads ride `clip()` (160 chars) — the trace is a story, not a store. Notes and
+  details **body** edits don't trace (content housekeeping); the caught footer token line
+  does. Drag-cancel and focus-miss DO trace (a gesture that did nothing is exactly what
+  agent debugging needs to see).
+
 **Reading the update log:** the detached swap helper (`scripts/update.sh --swap-only`) writes
 to `~/Library/Logs/com.farazshah.dayapp/update.log`. That's separate from the Rust app log
 because the app has already exited by the time the helper runs.
@@ -513,6 +542,7 @@ dayapp/
 │   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + goalsApi/parseGoalText + projectColor/formatReminder/formatDuration
 │   ├── notesApi.ts                 ← notes typed API wrapper
 │   ├── log.ts                      ← prefixed console logger (webview side)
+│   ├── devlog.ts                   ← the demo-mode interaction trace: trace()/clip(), recording lifecycle, 250ms JSONL batching
 │   ├── focusNav.ts                 ← the grammar's DOM side: data-kb button dispatch, capture focus, nth note/goal, popover check
 │   ├── main.tsx                    ← React entry
 │   ├── index.css                   ← the dark theme + all component styles
@@ -875,7 +905,9 @@ demo twin (see "Demo mode" under Data model); while active, `Reset Demo Data` re
 it and the three Mobile entries hide (the phone belongs to the real db). The masthead
 reads `Live @ Demo` in every view — the one indicator, calm by design. Everything else
 (sections, grammar, DnD, analytics) runs unchanged on the demo data; that identical-
-ness is what makes it a faithful demo.
+ness is what makes it a faithful demo. The session's interactions record into the
+**dev log** while demo runs — auto-armed, ⌘P → `Dev Log: Start/Stop Recording` to
+toggle, nothing on screen (see "The dev log" under Logging).
 
 **Priority visibility (⌘P):** `Show/Hide Priority 1/2/3 Tasks` are three independent toggles —
 each hides (or shows) just that tier's rows; unmarked rows are never touched and

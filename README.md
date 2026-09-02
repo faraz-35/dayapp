@@ -592,6 +592,12 @@ persist in the demo db across sessions.
   mode as a tour; "Exit Demo Mode" is the on-ramp to your empty real list.
 - The phone mirror is fully gated while demo mode is active — demo tasks never
   reach `tasks.json`, and captures queue until you exit.
+- **Dev log:** while demo mode runs, every interaction — captures, focus
+  changes, edits, drags, palette commands, view switches — is appended with
+  timestamps to `~/Library/Logs/com.farazshah.dayapp/devlog-<date>-<time>.jsonl`
+  (one JSON event per line, `t` = seconds since the demo opened). Nothing
+  appears on screen; it's a trace for agent sessions, debugging, and generating
+  demo-video subtitles. ⌘P → **Dev Log: Start/Stop Recording** toggles it.
 
 The seed lives in `src-tauri/demo.sql` (a founder/builder persona: today,
 daily, backlog with every priority tier, notes, goals in all three horizons,

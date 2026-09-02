@@ -26,6 +26,7 @@
 import { useEffect, useRef, useState } from "react";
 import { entriesApi, type Entry } from "./lib";
 import { log } from "./log";
+import { trace } from "./devlog";
 
 // How long a summoned moment holds the screen before dismissing itself. A
 // default, not a rule — any key or click ends it sooner.
@@ -84,14 +85,17 @@ export default function Quotes({
   // from App's handler either way.
   useEffect(() => {
     if (!open || lingerForever) return;
-    const id = setTimeout(onClose, LINGER_MS);
+    const id = setTimeout(() => {
+      trace("quote.dismiss", { via: "linger" });
+      onClose();
+    }, LINGER_MS);
     return () => clearTimeout(id);
   }, [open, lingerForever, onClose]);
 
   if (!open || current == null) return null;
 
   return (
-    <div className="quote-backdrop" onClick={onClose}>
+    <div className="quote-backdrop" onClick={() => { trace("quote.dismiss", { via: "click" }); onClose(); }}>
       {/* Keyed so every summon remounts the span and fades the quote in —
           the masthead's quiet-ident trick, reused. */}
       <span className="quote-text" key={current}>{current}</span>

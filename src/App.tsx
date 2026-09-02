@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, backupApi, demoApi, formatLiveDuration, hideExpiry, localDateStr, parseItemTags, projectsApi, syncApi, timersApi, type ActiveTimer, type EntryKind, type HideDuration, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
+import { clip, devlogActive, devlogStart, devlogStop, trace } from "./devlog";
 import Notes from "./Notes";
 import Goals from "./Goals";
 import Quotes from "./Quotes";
@@ -210,8 +211,13 @@ function DayApp() {
   // summoning Enter/click dismisses the modal it just opened (born and killed
   // in one event; the "modal never appears" bug).
   const quoteOpenedAt = useRef(0);
+  // Ref mirror for handlers whose closures don't track the state (the meta-key
+  // effect runs once) — a quote-open check at key time, not mount time.
+  const quoteOpenRef = useRef(false);
+  quoteOpenRef.current = quoteOpen;
   const openQuote = useCallback((idle = false) => {
     quoteOpenedAt.current = Date.now();
+    trace("quote.open", { via: idle ? "screensaver" : "palette" });
     setQuoteIdle(idle);
     setQuoteOpen(true);
   }, []);
@@ -264,6 +270,10 @@ function DayApp() {
   // tour, the "demo-mode" event catches toggles/resets. `dataEpoch` bumps on
   // every swap so the self-contained surfaces (Notes, Goals) reload too.
   const [demoMode, setDemoMode] = useState(false);
+  // The demo session's interaction recorder (see devlog.ts): arms when demo
+  // mode opens, disarms on exit, ⌘P-toggleable mid-session. The state only
+  // mirrors the devlog module for the palette label.
+  const [devlogOn, setDevlogOn] = useState(false);
   const [dataEpoch, setDataEpoch] = useState(0);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null);
@@ -277,6 +287,9 @@ function DayApp() {
     const saved = Number(localStorage.getItem("dayapp-zoom"));
     return Number.isFinite(saved) && saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;
   });
+  // Ref mirror for the meta-key effect (runs once) — the zoom it acts on.
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
   // The masthead brand word after "Live @ " — "Faraz" is home. Session-only:
   // a launch always starts at home.
   const [liveAt, setLiveAt] = useState("Faraz");
@@ -363,6 +376,22 @@ function DayApp() {
     })();
     return () => { unlisten?.(); };
   }, [refresh]);
+
+  // The dev log follows demo mode: entering arms a fresh recording (the
+  // first-run tour included — the launch query flips demoMode), exiting
+  // flushes and closes it. demo.enter/exit ride the same transition; a demo
+  // RESET re-fires the event with active=true and no transition happens, so
+  // one recording spans the whole demo session (the reset itself is visible
+  // as the palette run that triggered it).
+  const prevDemo = useRef(false);
+  useEffect(() => {
+    if (demoMode === prevDemo.current) return;
+    prevDemo.current = demoMode;
+    trace(demoMode ? "demo.enter" : "demo.exit");
+    setDevlogOn(demoMode);
+    if (demoMode) devlogStart().catch((e) => log.warn("devlog start failed", e));
+    else devlogStop().catch((e) => log.warn("devlog stop failed", e));
+  }, [demoMode]);
 
   // The active timer persists across app restarts (its open session row is the
   // source of truth), so restore it on mount. The elapsed may be large if the
@@ -705,6 +734,17 @@ function DayApp() {
       run: () => {
         demoApi.reset().catch((e) => log.error("demo reset failed", e));
       },
+    }, {
+      // The interaction recorder (see devlog.ts). Nothing renders it — the
+      // trace lands in a JSONL file in the app log dir for agents and the
+      // studio; this entry is the one enable/disable door.
+      id: "devlog-toggle",
+      label: devlogOn ? "Dev Log: Stop Recording" : "Dev Log: Start Recording",
+      hint: "interaction trace — agents & subtitles",
+      run: () => {
+        if (devlogActive()) devlogStop().catch((e) => log.warn("devlog stop failed", e));
+        else devlogStart().catch((e) => log.warn("devlog start failed", e));
+      },
     }] : []),
     // Mobile sync belongs to the real db — hide its entries while demo mode is
     // active (the backend gates deploy/pull/config hard as well).
@@ -767,7 +807,7 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quoteScreensaver, quoteCount, demoMode]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quoteScreensaver, quoteCount, demoMode, devlogOn]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -780,20 +820,36 @@ function DayApp() {
       if (e.key === "p") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+        if (quoteOpenRef.current) trace("quote.dismiss", { via: "palette" });
         setQuoteOpen(false);
       } else if (e.key === "f") {
         e.preventDefault();
         setSearchOpen(true);
+        if (quoteOpenRef.current) trace("quote.dismiss", { via: "search" });
         setQuoteOpen(false);
       } else if (e.key === "=" || e.key === "+") {
         e.preventDefault();
-        setZoom((z) => clampZoom(z + ZOOM_STEP));
+        const next = clampZoom(zoomRef.current + ZOOM_STEP);
+        if (next !== zoomRef.current) {
+          zoomRef.current = next;
+          setZoom(next);
+          trace("zoom", { level: next });
+        }
       } else if (e.key === "-" || e.key === "_") {
         e.preventDefault();
-        setZoom((z) => clampZoom(z - ZOOM_STEP));
+        const next = clampZoom(zoomRef.current - ZOOM_STEP);
+        if (next !== zoomRef.current) {
+          zoomRef.current = next;
+          setZoom(next);
+          trace("zoom", { level: next });
+        }
       } else if (e.key === "0") {
         e.preventDefault();
-        setZoom(1);
+        if (zoomRef.current !== 1) {
+          zoomRef.current = 1;
+          setZoom(1);
+          trace("zoom", { level: 1 });
+        }
       }
     };
     window.addEventListener("keydown", handler);
@@ -940,6 +996,8 @@ function DayApp() {
   };
 
   const handleDelete = async (id: string, section: Section) => {
+    const item = items[section].find((i) => i.id === id);
+    if (item) trace("delete", { text: clip(item.text), section });
     // Deleting a running item stops its timer first (session history is kept —
     // the item_text snapshot in sessions survives the deletion, like actions).
     if (activeTimer?.itemId === id) {
@@ -986,6 +1044,7 @@ function DayApp() {
   // immediately); otherwise it leaves the list. Time-limited hides
   // auto-restore via the day-boundary sweep.
   const handleHide = async (id: string, section: Section, duration: HideDuration) => {
+    trace("hide", { subject: "task", duration });
     if (showHiddenItems) {
       updateItemField(id, { hidden: true, hiddenUntil: hideExpiry(duration) });
     } else {
@@ -997,6 +1056,7 @@ function DayApp() {
   // Restore a hidden row — it sheds its dimmed state and stays in place
   // (hidden rows only render when Show Hidden Tasks is on).
   const handleUnhide = async (id: string) => {
+    trace("unhide", { subject: "task" });
     updateItemField(id, { hidden: false });
     await api.unhideItem(id);
   };
@@ -1027,14 +1087,16 @@ function DayApp() {
   };
 
   const handleToggleDetails = useCallback((id: string) => {
+    trace("details.toggle", { open: detailsOpenId !== id });
     setDetailsOpenId((cur) => (cur === id ? null : id));
-  }, []);
+  }, [detailsOpenId]);
 
   // Toggle the single active timer on `id`. Starting B auto-stops A (the
   // backend finalizes any open session first). Optimistic: show the timer with
   // ~0 elapsed immediately, then reconcile with the authoritative started_at.
   const handleToggleTimer = useCallback(async (id: string) => {
     if (activeTimer?.itemId === id) {
+      trace("timer.stop", { text: clip(activeTimer.itemText) });
       setActiveTimer(null);
       try { await timersApi.stop(); }
       catch (e) { log.error("timer stop failed", e); }
@@ -1042,6 +1104,7 @@ function DayApp() {
       return;
     }
     const item = [...items.today, ...items.daily, ...items.backlog].find((i) => i.id === id);
+    trace("timer.start", { text: clip(item?.text ?? "") });
     setActiveTimer({ itemId: id, itemText: item?.text ?? "", startedAt: new Date().toISOString() });
     try {
       setActiveTimer(await timersApi.start(id));
@@ -1055,6 +1118,7 @@ function DayApp() {
   // Discard the open session entirely (don't save it) — for the "left it running
   // overnight" case where the elapsed is obviously wrong.
   const handleDiscardTimer = useCallback(async () => {
+    trace("timer.discard");
     setActiveTimer(null);
     try { await timersApi.discard(); }
     catch (e) { log.error("timer discard failed", e); }
@@ -1115,6 +1179,8 @@ function DayApp() {
   // the drag machinery end to end: optimistic append at Today's end, logged
   // `moved`, and any pending reminder cleared by move_item.
   const handlePromote = (id: string) => {
+    const item = [...items.today, ...items.daily, ...items.backlog].find((i) => i.id === id);
+    if (item) trace("promote", { text: clip(item.text) });
     handleMoveItem(id, "today", displayItems.today.length);
   };
 
@@ -1217,12 +1283,12 @@ function DayApp() {
     const [p, a, b] = seq;
     const n = Number(a);
     if (p === "n") {
-      if (a === "n") focusCapture("notes");
-      else if (a === "j") focusCapture("notes", "##j");
-      else if (a === "q") focusCapture("notes", "##q");
-      else if (a === "t") focusCapture("tasks", "##t");
-      else if (a === "d") focusCapture("tasks", "##d");
-      else if (a === "b") focusCapture("tasks", "##b");
+      if (a === "n") { trace("capture.focus", { address: seq, target: "notes" }); focusCapture("notes"); }
+      else if (a === "j") { trace("capture.focus", { address: seq, target: "notes", route: "##j" }); focusCapture("notes", "##j"); }
+      else if (a === "q") { trace("capture.focus", { address: seq, target: "notes", route: "##q" }); focusCapture("notes", "##q"); }
+      else if (a === "t") { trace("capture.focus", { address: seq, target: "tasks", route: "##t" }); focusCapture("tasks", "##t"); }
+      else if (a === "d") { trace("capture.focus", { address: seq, target: "tasks", route: "##d" }); focusCapture("tasks", "##d"); }
+      else if (a === "b") { trace("capture.focus", { address: seq, target: "tasks", route: "##b" }); focusCapture("tasks", "##b"); }
       else if (n >= 1 && n <= 4) {
         // The Backlog's tier-row scheme over the notes' tier groups: tier
         // digit (4 = unmarked), then the row within the tier's visible group.
@@ -1234,14 +1300,17 @@ function DayApp() {
         }
         const tier = n === 4 ? null : (n as 1 | 2 | 3);
         const id = noteIdAt(tier, idx);
-        if (id) focusNote(id);
+        if (id) { focusNote(id); trace("focus.note", { via: "address", address: seq, id }); }
+        else trace("focus.miss", { address: seq });
       }
     } else if ((p === "t" || p === "d") && n >= 1 && n <= 9) {
       const item = renderItems[p === "t" ? "today" : "daily"][n - 1];
-      if (item) focusItem(item.id);
+      if (item) { focusItem(item.id); trace("focus.task", { via: "address", address: seq, id: item.id }); }
+      else trace("focus.miss", { address: seq });
     } else if (p === "g" && n >= 1 && n <= 9) {
       const id = goalIdAt(n);
-      if (id) focusGoal(id);
+      if (id) { focusGoal(id); trace("focus.goal", { via: "address", address: seq, id }); }
+      else trace("focus.miss", { address: seq });
     } else if (p === "b" && n >= 1 && n <= 4) {
       const idx = Number(b);
       if (!(idx >= 1 && idx <= 9)) {
@@ -1251,7 +1320,8 @@ function DayApp() {
       }
       const tier = n === 4 ? null : (n as 1 | 2 | 3);
       const item = renderItems.backlog.filter((i) => (i.priority ?? null) === tier)[idx - 1];
-      if (item) focusItem(item.id);
+      if (item) { focusItem(item.id); trace("focus.task", { via: "address", address: seq, id: item.id }); }
+      else trace("focus.miss", { address: seq });
     }
   };
 
@@ -1265,16 +1335,19 @@ function DayApp() {
       const noteId = el?.closest("[data-note-id]")?.getAttribute("data-note-id");
       if (noteId) {
         setSelectedId(null); setFocusGoalId(null); setFocusNoteId(noteId);
+        trace("focus.note", { via: "click", id: noteId });
         return;
       }
       const goalId = el?.closest("[data-goal-id]")?.getAttribute("data-goal-id");
       if (goalId) {
         setSelectedId(null); setFocusNoteId(null); setFocusGoalId(goalId);
+        trace("focus.goal", { via: "click", id: goalId });
         return;
       }
       const itemId = el?.closest("[data-item-id]")?.getAttribute("data-item-id");
       if (itemId) {
         setFocusNoteId(null); setFocusGoalId(null); setSelectedId(itemId);
+        trace("focus.task", { via: "click", id: itemId });
       }
     };
     window.addEventListener("pointerdown", onDown);
@@ -1347,6 +1420,8 @@ function DayApp() {
       if (down || up) {
         e.preventDefault();
         if (selectedId === null && focusNoteId === null && focusGoalId === null) {
+          // Held keys auto-repeat; one scrolled page isn't N interactions.
+          if (!e.repeat) trace("scroll", { key: e.key });
           document.querySelector(".scroll")?.scrollBy({
             top: down ? SCROLL_STEP : -SCROLL_STEP,
             behavior: "smooth",
@@ -1368,17 +1443,22 @@ function DayApp() {
         const item = allVisible.find((i) => i.id === selectedId);
         // Archived rows aren't actionable — completing one would silently
         // vanish it (done + hidden, invisible in every mode). Unhide first.
-        if (item && !item.hidden) { e.preventDefault(); handleComplete(item.id, item.section); }
+        if (item && !item.hidden) {
+          e.preventDefault();
+          trace(item.status === "done" ? "uncomplete" : "complete", { via: "enter", text: clip(item.text), section: item.section });
+          handleComplete(item.id, item.section);
+        }
       } else if (e.key === "e") {
         // The one edit verb, on whichever thing is focused.
-        if (selectedId) { e.preventDefault(); setEditingId(selectedId); }
-        else if (focusNoteId) { e.preventDefault(); focusNoteEditor(focusNoteId); }
-        else if (focusGoalId) { e.preventDefault(); focusGoalEditor(focusGoalId); }
+        if (selectedId) { e.preventDefault(); trace("edit.start", { via: "e", subject: "task" }); setEditingId(selectedId); }
+        else if (focusNoteId) { e.preventDefault(); trace("edit.start", { via: "e", subject: "note" }); focusNoteEditor(focusNoteId); }
+        else if (focusGoalId) { e.preventDefault(); trace("edit.start", { via: "e", subject: "goal" }); focusGoalEditor(focusGoalId); }
       } else if (e.key === "Escape") {
         // Ladder rung focused → nothing. (editing → focused is each edit
         // surface's own Escape — cancel/flush and blur, landing on the thing
         // still focused here. An open popover is a higher rung, handled by
         // the gate above.)
+        trace("focus.clear");
         clearFocus();
       } else if (/^[1-9]$/.test(e.key)) {
         // Fire the focused thing's Nth button (data-kb markers, visual
@@ -1407,7 +1487,13 @@ function DayApp() {
   const moveSelection = (delta: number) => {
     const idx = allVisible.findIndex((i) => i.id === selectedId);
     const next = idx === -1 ? 0 : Math.min(allVisible.length - 1, Math.max(0, idx + delta));
-    setSelectedId(allVisible[next]?.id ?? null);
+    const id = allVisible[next]?.id ?? null;
+    // Only real moves trace — a held key clamped at the end is one position,
+    // not a stream of no-ops.
+    if (id !== selectedId) {
+      trace("focus.step", { to: id, dir: delta > 0 ? "next" : "prev" });
+      setSelectedId(id);
+    }
   };
 
   // ---- Render ----------------------------------------------------------
@@ -1459,6 +1545,7 @@ function DayApp() {
             className={`icon-btn ${showHiddenItems || showHiddenNotes ? "active" : ""}`}
             onClick={() => {
               const next = !(showHiddenItems || showHiddenNotes);
+              trace("toggle.hidden", { show: next });
               setShowHiddenItems(next);
               setShowHiddenNotes(next);
             }}
@@ -1467,7 +1554,11 @@ function DayApp() {
           >◐</button>
           <button
             className={`icon-btn ${view === "analytics" ? "active" : ""}`}
-            onClick={() => setView(view === "analytics" ? "list" : "analytics")}
+            onClick={() => {
+              const next = view === "analytics" ? "list" : "analytics";
+              trace("view.switch", { view: next });
+              setView(next);
+            }}
             title={view === "analytics" ? "Back to list" : "View analytics"}
             aria-label="Toggle analytics"
           >
@@ -1478,7 +1569,11 @@ function DayApp() {
               button reads ✕ and returns to the list. */}
           <button
             className={`icon-btn ${view === "journal" ? "active" : ""}`}
-            onClick={() => setView(view === "journal" ? "list" : "journal")}
+            onClick={() => {
+              const next = view === "journal" ? "list" : "journal";
+              trace("view.switch", { view: next });
+              setView(next);
+            }}
             title={view === "journal" ? "Back to list" : "View journal"}
             aria-label="Toggle journal"
           >

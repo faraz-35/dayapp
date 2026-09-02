@@ -26,6 +26,7 @@ import {
   type Project,
 } from "./lib";
 import { log } from "./log";
+import { clip, trace } from "./devlog";
 import ProjectMenu from "./ProjectMenu";
 import TokenField from "./TokenField";
 import { EditInput } from "./components/ItemRow";
@@ -68,6 +69,7 @@ export default function Goals({
     if (!raw) return;
     const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects);
     if (!text) return;
+    trace("capture.goal", { horizon: horizon ?? "short", text: clip(text) });
     try {
       // Materialize a trailing unmatched #tag's project first so the create
       // lands with its assignment (items assign after create; goals take
@@ -107,18 +109,21 @@ export default function Goals({
     // The backend rejects timeless goals (a direction, never done) — the UI
     // never offers the checkbox there, this guards the rest.
     if (goal.horizon === "timeless") return;
+    trace("goal.achieve", { text: clip(goal.text), horizon: goal.horizon });
     patchGoal(goal.id, { status: "achieved", achievedAt: new Date().toISOString() });
     try { await goalsApi.achieve(goal.id); }
     catch (e) { log.error("goal achieve failed", e); }
   };
 
   const handleUnachieve = async (goal: Goal) => {
+    trace("goal.unachieve", { text: clip(goal.text) });
     patchGoal(goal.id, { status: "active", achievedAt: null });
     try { await goalsApi.unachieve(goal.id); }
     catch (e) { log.error("goal unachieve failed", e); }
   };
 
   const handleDelete = async (goal: Goal) => {
+    trace("goal.delete", { text: clip(goal.text), horizon: goal.horizon });
     setGoals((g) => g.filter((x) => x.id !== goal.id));
     try { await goalsApi.delete(goal.id); }
     catch (e) { log.error("goal delete failed", e); }

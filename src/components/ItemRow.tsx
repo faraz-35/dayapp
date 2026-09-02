@@ -20,6 +20,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { formatDuration, formatLiveDuration, formatReminder, localDateStr, projectColor, type HideDuration, type Item, type Project, type TokenKind } from "../lib";
+import { clip, trace } from "../devlog";
 import HideMenu from "../HideMenu";
 import ProjectMenu from "../ProjectMenu";
 import ReminderMenu from "../ReminderMenu";
@@ -75,7 +76,13 @@ export default function ItemRow({
       data-item-id={item.id}
       className={`item${done ? " done" : ""}${item.hidden ? " hidden" : ""}${selected ? " selected" : ""}${isDragging ? " dragging" : ""}`}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      onClick={() => { onSelect(item.id); if (!editing) onStartEdit(); }}
+      onClick={() => {
+        onSelect(item.id);
+        if (!editing) {
+          trace("edit.start", { via: "click", subject: "task", text: clip(item.text) });
+          onStartEdit();
+        }
+      }}
       {...attributes}
     >
       {/* The grip keeps its slot on hidden rows (so columns stay aligned) but
@@ -94,6 +101,7 @@ export default function ItemRow({
           // Daily's checked state is inert (completion is per-day); a crossed
           // Today row toggles back off.
           if (done && item.section !== "today") return;
+          trace(done ? "uncomplete" : "complete", { via: "click", text: clip(item.text), section: item.section });
           onComplete();
         }}
         title={item.hidden
@@ -353,15 +361,23 @@ export function EditInput({ initial, onCommit, kinds }: {
     el.setSelectionRange(end, end);
   }, [initial]);
   // Clicks must not fall through to the row's select+edit handler, and the
-  // commit rules are the same whichever field renders.
+  // commit rules are the same whichever field renders. Every commit/cancel
+  // traces here — one site covers task, goal, and journal edits.
   const handlers = {
     onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
-    onBlur: () => onCommit(val),
+    onBlur: () => { trace("edit.commit", { text: clip(val) }); onCommit(val); },
     // The union element keeps one handler assignable to both fields — the
     // plain input and TokenField's input-or-textarea.
     onKeyDown: (e: ReactKeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      if (e.key === "Enter") { e.preventDefault(); onCommit(val); }
-      if (e.key === "Escape") onCommit(initial);
+      if (e.key === "Enter") {
+        e.preventDefault();
+        trace("edit.commit", { text: clip(val) });
+        onCommit(val);
+      }
+      if (e.key === "Escape") {
+        trace("edit.cancel");
+        onCommit(initial);
+      }
     },
   };
   return kinds ? (

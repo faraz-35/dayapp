@@ -43,6 +43,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { notesApi, type Note } from "./notesApi";
 import { type EntryKind, type HideDuration, type HiddenFilter, baseTextWidth, entriesApi, parseEntryCapture, parseNoteCapture, projectColor, resolveNoteTag, scanNoteFooterTokens, splitNoteFooter, type Project } from "./lib";
 import { log } from "./log";
+import { clip, trace } from "./devlog";
 import HideMenu from "./HideMenu";
 import TokenField from "./TokenField";
 import { PriorityBars } from "./components/PriorityBars";
@@ -196,6 +197,7 @@ export default function Notes({
       if (!id) return;
       e.preventDefault();
       e.stopPropagation();
+      trace("find.open");
       setFindId(id);
     };
     window.addEventListener("keydown", onKey, { capture: true });
@@ -214,6 +216,7 @@ export default function Notes({
       return;
     }
     if (!route.text) return;
+    trace("capture.entry", { kind: route.kind, text: clip(route.text) });
     entriesApi
       .add(route.kind, route.text)
       .then(() => onEntryRouted?.(route.kind))
@@ -226,6 +229,7 @@ export default function Notes({
   // its tier group right away via sortNotes — App.handleCreate's shape.
   const handleCreate = async (raw: string) => {
     const { text, projectId, createProjectName, priority } = parseNoteCapture(raw, projects);
+    trace("capture.note", { text: clip(text) });
     const note = await notesApi.create(text);
     const assignId = projectId ?? (createProjectName ? (await onCreateProject(createProjectName)).id : null);
     // !0 ("clear") is a no-op at capture — a fresh note has no priority yet.
@@ -280,6 +284,7 @@ export default function Notes({
   const toggleCollapse = (id: string) => {
     const next = new Set(collapsedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
+    trace(next.has(id) ? "note.expand" : "note.collapse");
     setCollapsedIds(next);
     localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
   };
@@ -306,6 +311,7 @@ export default function Notes({
   const allUnmarked = displayNotes.every((n) => n.priority === null);
 
   const handleDelete = async (id: string) => {
+    trace("note.delete");
     setNotes((s) => s.filter((n) => n.id !== id));
     // Prune the dead id so the persisted collapse set doesn't accumulate.
     if (collapsedIds.has(id)) toggleCollapse(id);
@@ -316,6 +322,7 @@ export default function Notes({
   // flipped to its dimmed hidden state; in Regular mode it leaves the list.
   // Time-limited hides auto-restore at the day boundary.
   const handleHide = async (id: string, duration: HideDuration) => {
+    trace("hide", { subject: "note", duration });
     if (hiddenFilter === "exclude") setNotes((s) => s.filter((n) => n.id !== id));
     else setNotes((s) => s.map((n) => (n.id === id ? { ...n, hidden: true } : n)));
     await notesApi.hide(id, duration);
@@ -324,6 +331,7 @@ export default function Notes({
   // Restore a hidden note. In hidden-only mode it leaves the view (a restored
   // note isn't hidden anymore); in Show All it just sheds its dimmed state.
   const handleUnhide = async (id: string) => {
+    trace("unhide", { subject: "note" });
     if (hiddenFilter === "only") setNotes((s) => s.filter((n) => n.id !== id));
     else setNotes((s) => s.map((n) => (n.id === id ? { ...n, hidden: false } : n)));
     await notesApi.unhide(id);
@@ -398,7 +406,7 @@ export default function Notes({
               onDelete={() => handleDelete(note.id)}
               onHide={(duration) => handleHide(note.id, duration)}
               onUnhide={() => handleUnhide(note.id)}
-              onFindClose={() => setFindId(null)}
+              onFindClose={() => { trace("find.close"); setFindId(null); }}
             />
           </Fragment>
         );
@@ -520,6 +528,11 @@ function NoteInput({
     }
     const s = splitNoteFooter(val);
     if (s.priority !== null || s.tag !== null || s.clearProject) {
+      trace("note.tokens", {
+        ...(s.priority !== null && { priority: s.priority }),
+        ...(s.tag !== null && { tag: s.tag }),
+        ...(s.clearProject && { clearProject: true }),
+      });
       setVal(s.body);
       onUpdate(note.id, s.body);
       onCatchTokens(note.id, { priority: s.priority, tag: s.tag, clearProject: s.clearProject });
@@ -536,6 +549,7 @@ function NoteInput({
   const handleDownload = async () => {
     // Flush any debounced edit first: the file should match what's on screen.
     const full = flushAndCatch();
+    trace("note.export", { name: exportName(full) });
     try {
       await notesApi.saveAs(exportName(full), splitNoteFooter(full).body);
     } catch (e) {
