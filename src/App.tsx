@@ -44,6 +44,9 @@ const clampZoom = (z: number) =>
 // Masthead brand rotation: the "Live @ " words the header steps out to, one
 // picked at random every 2 minutes before returning to "Faraz" (home).
 const MASTHEAD_THEMES = ["growth", "money", "journey", "learn"] as const;
+// Fun Mode's masthead pool — the unwind counterpart to MASTHEAD_THEMES, with
+// "Fun" as home while the lens is on.
+const FUN_MASTHEAD_THEMES = ["experiment", "play", "create"] as const;
 
 // The quote screensaver's threshold: two minutes of focused stillness (no
 // key, click, pointer movement, or scroll) summons the quote modal unprompted.
@@ -183,6 +186,14 @@ function DayApp() {
   // Default View exits it.
   const [focusMode, setFocusMode] = useState(
     () => localStorage.getItem("dayapp-focus-mode") === "1",
+  );
+  // ⌘P "Enter/Exit Fun Mode" — the unwind lens, Focus Mode's inverse: Daily
+  // hidden, and P1/P2 rows drop everywhere (Today keeps only P3/unmarked;
+  // same for the Backlog and the notes), leaving the non-urgent shelf. Same
+  // lens contract — exiting restores the toggles untouched; persisted like
+  // Focus Mode, Show Default View exits it.
+  const [funMode, setFunMode] = useState(
+    () => localStorage.getItem("dayapp-fun-mode") === "1",
   );
   // ⌘P "Show/Hide Agent Tasks" — hide the 🤖-marked rows to focus on the ones
   // that are Faraz's own. Persisted like the other layout toggles; default on
@@ -422,28 +433,34 @@ function DayApp() {
     localStorage.setItem("dayapp-hidden-priorities", JSON.stringify(hiddenPriorities));
     localStorage.setItem("dayapp-hidden-note-priorities", JSON.stringify(hiddenNotePriorities));
     localStorage.setItem("dayapp-focus-mode", focusMode ? "1" : "0");
+    localStorage.setItem("dayapp-fun-mode", funMode ? "1" : "0");
     localStorage.setItem("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
     localStorage.setItem("dayapp-quote-screensaver", quoteScreensaver ? "1" : "0");
     // Retired keys: the single-tier "only" filter era, and the rotating
     // quote line the modal replaced — one-time cleanups.
     localStorage.removeItem("dayapp-priority");
     localStorage.removeItem("dayapp-quotes-visible");
-  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quoteScreensaver]);
+  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, quoteScreensaver]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
-  // runs in every view; the analytics title simply ignores it.
+  // runs in every view; the analytics title simply ignores it. Fun Mode owns
+  // the masthead while it's on — home becomes "Fun" and the pool the fun
+  // words (demo mode still overrides the whole line with "Live @ Demo").
   useEffect(() => {
+    const home = funMode ? "Fun" : "Faraz";
+    const themes = funMode ? FUN_MASTHEAD_THEMES : MASTHEAD_THEMES;
+    setLiveAt(home);
     const id = setInterval(() => {
       setLiveAt((word) => {
-        if (word !== "Faraz") return "Faraz";
-        const pool = MASTHEAD_THEMES.filter((t) => t !== lastTheme.current);
+        if (word !== home) return home;
+        const pool = themes.filter((t) => t !== lastTheme.current);
         const pick = pool[Math.floor(Math.random() * pool.length)];
         lastTheme.current = pick;
         return pick;
       });
     }, 120_000);
     return () => clearInterval(id);
-  }, []);
+  }, [funMode]);
 
   // ---- Quote screensaver --------------------------------------------------
   // SCREENSAVER_IDLE_MS of focused stillness summons the quote modal — the
@@ -484,26 +501,29 @@ function DayApp() {
   // agent-tasks toggle, and/or the ⌘F project/agent filters, if any. Hiding a
   // tier removes just that tier's rows — unmarked rows stay, and each tier is
   // independent. Focus Mode adds its lens here: the Backlog narrows to P1
-  // (Today/Daily stay whole — the day's list is the point of the mode).
+  // (Today/Daily stay whole — the day's list is the point of the mode). Fun
+  // Mode is the inverse lens: Daily empties and P1/P2 drop everywhere —
+  // Today keeps its P3/unmarked rows rather than vanishing.
   // Mutations read the full `items`, and DnD indexes map back to full-list
   // space in handleMoveItem.
   const displayItems = useMemo<Record<Section, Item[]>>(() => {
     if (
       hiddenPriorities.length === 0 && projectFilter === null &&
-      agentTasksVisible && agentFilter === null && !focusMode
+      agentTasksVisible && agentFilter === null && !focusMode && !funMode
     ) return items;
     const matches = (i: Item) =>
       (i.priority === null || !hiddenPriorities.includes(i.priority)) &&
       (projectFilter === null || i.projectId === projectFilter) &&
       (agentTasksVisible || !i.assignedToAgent) &&
       (agentFilter === null || (agentFilter === "agent") === i.assignedToAgent) &&
-      (!focusMode || i.section !== "backlog" || i.priority === 1);
+      (!focusMode || i.section !== "backlog" || i.priority === 1) &&
+      (!funMode || i.priority === null || i.priority === 3);
     return {
       today: items.today.filter(matches),
-      daily: items.daily.filter(matches),
+      daily: funMode ? [] : items.daily.filter(matches),
       backlog: items.backlog.filter(matches),
     };
-  }, [items, hiddenPriorities, projectFilter, agentTasksVisible, agentFilter, focusMode]);
+  }, [items, hiddenPriorities, projectFilter, agentTasksVisible, agentFilter, focusMode, funMode]);
 
   // displayItems narrowed to the visible sections — a toggled-off section's
   // rows aren't rendered, searchable, keyboard-navigable, or totaled (they
@@ -592,8 +612,8 @@ function DayApp() {
       label: "Show Default View",
       hint: "reset every toggle + filter",
       // The universal reset: hidden entries excluded, filters cleared, all
-      // sections + Notes + agent tasks shown, focus mode off — and Goals
-      // hidden (the default working view is the plain task list).
+      // sections + Notes + agent tasks shown, focus + fun mode off — and
+      // Goals hidden (the default working view is the plain task list).
       run: () => {
         setView("list");
         setShowHiddenItems(false);
@@ -601,6 +621,7 @@ function DayApp() {
         setHiddenPriorities([]);
         setHiddenNotePriorities([]);
         setFocusMode(false);
+        setFunMode(false);
         setProjectFilter(null);
         setAgentTasksVisible(true);
         setAgentFilter(null);
@@ -703,6 +724,16 @@ function DayApp() {
       label: focusMode ? "Exit Focus Mode" : "Enter Focus Mode",
       hint: "P1 notes + Today + Daily + P1 Backlog",
       run: () => { setView("list"); setFocusMode((v) => !v); },
+    },
+    {
+      // Fun Mode — the unwind lens, Focus Mode's inverse: Daily hidden and
+      // P1/P2 rows/notes dropped everywhere (Today keeps its P3/unmarked
+      // rows). Same lens contract as Focus Mode — exiting restores the
+      // toggles untouched.
+      id: "toggle-fun",
+      label: funMode ? "Exit Fun Mode" : "Enter Fun Mode",
+      hint: "Daily + P1/P2 hidden",
+      run: () => { setView("list"); setFunMode((v) => !v); },
     },
     {
       id: "toggle-agent-tasks",
@@ -811,7 +842,7 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, agentTasksVisible, quoteScreensaver, quoteCount, demoMode, devlogOn]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, quoteScreensaver, quoteCount, demoMode, devlogOn]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1620,7 +1651,7 @@ function DayApp() {
                 instead of being excluded. Notes group by priority tier like
                 the Backlog (footer tokens `!N`/`#tag` — see Notes.tsx) and
                 narrow under the ⌘F `#` project filter, the ⌘P note-tier
-                toggles, and Focus Mode. */}
+                toggles, and the Focus/Fun Mode lenses. */}
             {notesVisible && (
               <Notes
                 hiddenFilter={showHiddenNotes ? "include" : "exclude"}
@@ -1630,6 +1661,7 @@ function DayApp() {
                 projectFilter={projectFilter}
                 hiddenPriorities={hiddenNotePriorities}
                 focusMode={focusMode}
+                funMode={funMode}
                 onCreateProject={handleCreateProject}
                 onEntryRouted={handleEntryRouted}
               />
@@ -1647,7 +1679,15 @@ function DayApp() {
             )}
             <SectionList
               items={renderItems}
-              visible={sectionsVisible}
+              /* Fun Mode removes Daily entirely — an emptied section must
+                 not leave its header behind (the toggle's semantics,
+                 composed with the lens; sectionsVisible itself is untouched).
+                 Today stays but only shows its P3/unmarked rows (displayItems). */
+              visible={{
+                today: sectionsVisible.today,
+                daily: sectionsVisible.daily && !funMode,
+                backlog: sectionsVisible.backlog,
+              }}
               projects={projects}
               selectedId={selectedId}
               editingId={editingId}

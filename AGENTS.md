@@ -725,7 +725,9 @@ compact in the 480px frame). The brand
 rotates like a station ident — "Faraz" is home, and every 2
 minutes it steps out to a random word from `MASTHEAD_THEMES` in `App.tsx`
 (growth/money/journey/learn, never the same one twice in a row) and back, each swap
-fading in (`title-in`). It is always rendered, even while a timer runs — the timer chip
+fading in (`title-in`). Fun Mode owns the masthead while it's on — home becomes "Fun"
+and the pool becomes `FUN_MASTHEAD_THEMES` (experiment/play/create), the same rotation
+mechanics; Demo Mode still overrides the whole line with "Live @ Demo". It is always rendered, even while a timer runs — the timer chip
 shows only a pulse + elapsed (task name in its tooltip) so the two coexist on the 480px
 window; below 455px of width a media query hides the masthead.
 
@@ -934,6 +936,15 @@ doesn't match the lens (an unmarked note, a non-P1 backlog row) is created but n
 shown — the same rule the ⌘F filters follow; capture with a `!1` token to land inside
 the lens.
 
+**Fun Mode (⌘P):** `Enter/Exit Fun Mode` is Focus Mode's inverse lens — the unwind
+view: Daily hidden, and P1/P2 dropped everywhere — Today keeps only its P3/unmarked
+rows (the section stays, the pressure leaves), the Backlog keeps P3/unmarked, and
+P1/P2 notes hide (Goals stay visible, the lens removes pressure, not direction). Same
+contract as Focus Mode: it composes in the same `displayItems`/Notes pipelines without
+mutating them, persists (`dayapp-fun-mode`), and Show Default View exits it. A capture
+that doesn't match the lens is created but not shown (an unmarked capture lands inside
+it; a `!1`/`!2` token doesn't).
+
 **Project filter (⌘F `#`):** typing a leading `#` in the ⌘F search flips the hit list to the
 projects (color dot + name, narrowed by the text after the `#`); picking one narrows the main
 list to that project — **items and notes alike** — picking the already-active one clears it
@@ -955,7 +966,8 @@ Session-only like the project filter; composes with the tiers and the project fi
 same `displayItems` pipeline.
 
 **Show Default View is the universal reset:** hidden entries excluded, priority tiers
-(tasks + notes), project and agent filters cleared, agent tasks shown, focus mode off,
+(tasks + notes), project and agent filters cleared, agent tasks shown, focus + fun
+mode off,
 all three sections + Notes shown —
 and Goals hidden (the default working view is the plain task list). One command
 always restores it.
@@ -998,7 +1010,8 @@ into Notes or edit fields isn't hijacked.
   its corner while revealed). A caught token that moves the tier re-lands the card in
   its group immediately (`sortNotes` mirrors the SQL ordering — the optimistic list is
   what the next refresh returns). The list narrows under the ⌘P `Priority 1/2/3 Notes`
-  toggles, the ⌘F `#` project filter, and Focus Mode. Slot 1's collapse/expand glyph
+  toggles, the ⌘F `#` project filter, and the Focus/Fun Mode lenses (P1 only /
+  P1+P2 hidden). Slot 1's collapse/expand glyph
   is the shared SVG chevron (flipped, flex-centered) — never unicode ⌃/⌄, which are
   two mismatched glyphs riding the font baseline.
 - **⬇ download (slot 2):** exports the note's body as a `.txt` through the native save

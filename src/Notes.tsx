@@ -20,8 +20,8 @@
 // sections are the tier signal) and no metadata chrome at all beyond the
 // collapsed card's project label (right-aligned, the row language). The parent
 // narrows the list with the ⌘P note-tier toggles, the ⌘F `#` project filter,
-// and Focus Mode (P1 notes only), the same displayItems pipeline the sections
-// use.
+// and the Focus/Fun Mode lenses (P1 notes only / P1+P2 notes hidden), the
+// same displayItems pipeline the sections use.
 //
 // Each note card can be collapsed to a single line — its first non-empty
 // prose line (the footer never previews). The card shrinks in place (same
@@ -67,7 +67,7 @@ const sortNotes = (list: Note[]) =>
   );
 
 export default function Notes({
-  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, focusMode, onCreateProject, onEntryRouted,
+  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, focusMode, funMode, onCreateProject, onEntryRouted,
 }: {
   hiddenFilter: HiddenFilter;
   focusedId?: string | null;
@@ -82,6 +82,9 @@ export default function Notes({
   hiddenPriorities: (1 | 2 | 3)[];
   /** ⌘P → Focus Mode: only P1 notes show (the lens, not a toggle mutation). */
   focusMode: boolean;
+  /** ⌘P → Fun Mode: P1/P2 notes hide (the inverse lens — only non-urgent
+   *  notes show). Same lens contract as focusMode. */
+  funMode: boolean;
   /** App's create-project path (its state is the single source, like Goals) —
    *  a footer/capture `#tag` that matches nothing creates its project through
    *  this, so the label renders immediately. */
@@ -290,17 +293,18 @@ export default function Notes({
   };
 
   // What the user sees: notes narrowed by the ⌘P hidden priority tiers, the ⌘F
-  // project filter, and/or Focus Mode — the same lens pipeline the task
-  // sections use. The render below groups it by tier (P1 → P3 → unmarked).
+  // project filter, and/or the Focus/Fun Mode lenses — the same pipeline the
+  // task sections use. The render below groups it by tier (P1 → P3 → unmarked).
   const displayNotes = useMemo(
     () =>
       notes.filter(
         (n) =>
           (n.priority === null || !hiddenPriorities.includes(n.priority)) &&
           (projectFilter === null || n.projectId === projectFilter) &&
-          (!focusMode || n.priority === 1),
+          (!focusMode || n.priority === 1) &&
+          (!funMode || n.priority === null || n.priority === 3),
       ),
-    [notes, hiddenPriorities, projectFilter, focusMode],
+    [notes, hiddenPriorities, projectFilter, focusMode, funMode],
   );
 
   // Dividers label every marked tier group present — including a lone one:
