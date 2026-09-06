@@ -32,10 +32,31 @@ import { trace } from "./devlog";
 // default, not a rule — any key or click ends it sooner.
 const LINGER_MS = 45_000;
 
+// Fun Mode's pool — app-owned chrome, the masthead's FUN_MASTHEAD_THEMES
+// move one layer down. The lens drops pressure everywhere, so while it's on
+// these stand in for the captured quotes instead of mixing with them: a
+// heavy quote from the real pool would break the register. Turn the lens
+// off and the ##q pool comes back untouched.
+const FUN_QUOTES = [
+  "Slow is fine. Slow is still going.",
+  "Nothing you finish today has to be perfect. It just has to exist.",
+  "You can do anything for five minutes.",
+  "Done badly is still done.",
+  "The list will be here tomorrow. You don't have to be.",
+  "Small steps still leave footprints.",
+  "You are not behind. You are just early for later.",
+  "Rest counts as work. It's the work that makes the rest of it possible.",
+  "Start sloppy. Fix it when it's fun again.",
+  "One thing. Just pick one thing.",
+  "The tab you keep meaning to read will forgive you.",
+  "Today was a day. That's all it had to be.",
+];
+
 export default function Quotes({
   version = 0,
   open = false,
   lingerForever = false,
+  funMode = false,
   onClose,
   onCount,
 }: {
@@ -46,6 +67,8 @@ export default function Quotes({
   /** Screensaver opens never end themselves — the moment lasts until a key
       or click, not a timer. ⌘P summons keep the LINGER_MS self-dismissal. */
   lingerForever?: boolean;
+  /** Fun Mode's lens — while on, picks come from FUN_QUOTES, not the pool. */
+  funMode?: boolean;
   onClose: () => void;
   /** Reports the pool size up so App can hide the ⌘P entries when empty. */
   onCount?: (n: number) => void;
@@ -61,22 +84,27 @@ export default function Quotes({
       .then((all) => {
         const pool = all.filter((e) => e.kind === "quote");
         setQuotes(pool);
-        onCount?.(pool.length);
+        onCount?.(funMode ? Math.max(pool.length, 1) : pool.length);
       })
       .catch((e) => log.error("quotes load failed", e));
-  }, [version, onCount]);
+  }, [version, funMode, onCount]);
 
-  // Summoning picks: a random quote that isn't the last one shown. `quotes`
-  // may still be loading when open lands first — the effect re-runs when it
-  // arrives, so the pick happens either way.
+  // Summoning picks: a random quote that isn't the last one shown. Under
+  // Fun Mode the pool is FUN_QUOTES (never empty); otherwise the captured
+  // ##q entries. `quotes` may still be loading when open lands first — the
+  // effect re-runs when it arrives, so the pick happens either way.
   useEffect(() => {
-    if (!open || quotes.length === 0) return;
-    const pool = quotes.filter((q) => q.text !== lastText.current);
-    const from = pool.length > 0 ? pool : quotes;
+    if (!open) return;
+    const all = funMode
+      ? FUN_QUOTES.map((text) => ({ text }))
+      : quotes;
+    if (all.length === 0) return;
+    const pool = all.filter((q) => q.text !== lastText.current);
+    const from = pool.length > 0 ? pool : all;
     const pick = from[Math.floor(Math.random() * from.length)];
     lastText.current = pick.text;
     setCurrent(pick.text);
-  }, [open, quotes]);
+  }, [open, quotes, funMode]);
 
   // A ⌘P summon ends itself after LINGER_MS — an unattended modal shouldn't
   // hold the screen forever. The screensaver's open is the opposite case: it

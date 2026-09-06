@@ -1751,6 +1751,7 @@ function DayApp() {
         version={quotesVersion}
         open={quoteOpen}
         lingerForever={quoteIdle}
+        funMode={funMode}
         onClose={closeQuote}
         onCount={setQuoteCount}
       />
