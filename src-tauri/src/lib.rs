@@ -123,41 +123,45 @@ async fn list_actions(
     with_db(db, move |db| db.list_actions(limit, since.as_deref(), until.as_deref())).await
 }
 
-// The Journal view's dashboard: done/missed per day, a completion heatmap
-// window, and project/priority splits — pure synthesis over `actions` (see
-// dashboard.rs). `filter` scopes every derivation to the selected
-// projects/tiers (None = unfiltered, the CLI's view). Read-only, like the
-// journal itself.
+// The Journal view's dashboard: the subject's counts per day (Done =
+// effective completions with the miss verdicts, Created = the tasks that
+// entered the list), a heatmap window, and project/priority splits — pure
+// synthesis over `actions` (see dashboard.rs). `filter` scopes every
+// derivation to the selected projects/tiers (None = unfiltered, the CLI's
+// view). Read-only, like the journal itself.
 #[tauri::command]
 async fn journal_dashboard(
     db: State<'_, DbState>, since: Option<String>, until: Option<String>,
-    filter: Option<dashboard::ScopeFilter>,
+    filter: Option<dashboard::ScopeFilter>, subject: dashboard::Subject,
 ) -> Result<DashboardStats, String> {
     let filter = filter.unwrap_or_default();
     with_db(db, move |db| {
-        db.journal_dashboard(since.as_deref(), until.as_deref(), &filter)
+        db.journal_dashboard(since.as_deref(), until.as_deref(), &filter, subject)
     })
     .await
 }
 
-// One day at task level — what the analytics ledger's expanded row renders.
-// The per-task session seconds are layered on here (a separate dimension;
-// day_detail itself never touches `sessions`, and time deliberately doesn't
-// follow the scope filter — see dashboard.rs).
+// One day at task level — what the analytics ledger's expanded row renders,
+// for either subject. The per-task session seconds are layered on here in
+// Done mode (a separate dimension; day_detail itself never touches
+// `sessions`, and time deliberately doesn't follow the scope filter — see
+// dashboard.rs).
 #[tauri::command]
 async fn journal_day_detail(
     db: State<'_, DbState>, date: String,
-    filter: Option<dashboard::ScopeFilter>,
+    filter: Option<dashboard::ScopeFilter>, subject: dashboard::Subject,
 ) -> Result<dashboard::DayDetail, String> {
     let filter = filter.unwrap_or_default();
     with_db(db, move |db| {
-        let mut detail = db.day_detail(&date, &filter)?;
-        let next = dashboard::next_day(&date)?;
-        let times = db.session_time_by_day(Some(date.as_str()), Some(next.as_str()))?;
-        let by_item: std::collections::HashMap<String, i64> =
-            times.into_iter().map(|t| (t.item_id, t.seconds)).collect();
-        for t in &mut detail.done {
-            t.secs = by_item.get(&t.item_id).copied().unwrap_or(0);
+        let mut detail = db.day_detail(&date, &filter, subject)?;
+        if subject == dashboard::Subject::Done {
+            let next = dashboard::next_day(&date)?;
+            let times = db.session_time_by_day(Some(date.as_str()), Some(next.as_str()))?;
+            let by_item: std::collections::HashMap<String, i64> =
+                times.into_iter().map(|t| (t.item_id, t.seconds)).collect();
+            for t in &mut detail.tasks {
+                t.secs = by_item.get(&t.item_id).copied().unwrap_or(0);
+            }
         }
         Ok(detail)
     })

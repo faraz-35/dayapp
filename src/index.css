@@ -940,6 +940,15 @@ button {
 }
 .pill:hover { color: var(--text); background: var(--bg-hover); }
 .pill.active { color: var(--accent); }
+/* The subject toggle (Done | Created): the same pill language, set off from
+   the range pills by a hairline. */
+.subj {
+  display: inline-flex;
+  align-items: center;
+  border-right: 1px solid var(--border);
+  padding-right: 6px;
+  margin-right: 8px;
+}
 /* The date jump is a native date input. Stripped to a faint, borderless label
    that picks up the accent when it's the active source. */
 .date-jump {

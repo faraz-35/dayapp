@@ -1131,6 +1131,15 @@ into Notes or edit fields isn't hijacked.
   textual home is the CLI (`--journal`); the GUI shows aggregates only. The masthead
   reads `Analytics`; the default range is **Week** (Today/Week/Month/All pills + the
   date jump).
+- **Subject toggle (the toolbar's left end, session-only like the range)**: `Done |
+  Created` — what every card counts. Done is the effective completion set with the
+  miss verdicts; Created is the tasks that entered the list (one `created` action
+  each, nothing to fold — no uncomplete inverse exists). Same shapes, same scope
+  filter (creations snapshot their axes at birth like every action); the done-only
+  stats (streak, both misses) stay zero and their cards hide in created mode, the
+  ledger surfaces creations only (time is done-flavored and isn't fetched), and the
+  expanded day lists the creations with a `+` mark. The dashboard fields are neutral
+  (`count`/`tasks`) for exactly this reason. The CLI's `--journal` stays Done-only.
 - **Axis scope filters (the toolbar's right end, session-only like the range)**: a `#`
   project picker (multi-select popover, color dots, "No project" as a value) and four
   tier chips (the PriorityBars glyphs, empty track = unmarked) + Clear. OR within an

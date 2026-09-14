@@ -267,10 +267,10 @@ fn journal(db: &Db, range: Option<&str>) -> anyhow::Result<()> {
     };
     let iso = |d: Option<NaiveDate>| d.map(|x| x.format("%Y-%m-%d").to_string());
     let dash =
-        db.journal_dashboard(iso(since).as_deref(), iso(until).as_deref(), &Default::default())?;
+        db.journal_dashboard(iso(since).as_deref(), iso(until).as_deref(), &Default::default(), crate::dashboard::Subject::Done)?;
     println!(
         "done {} · daily missed {} · today missed {}",
-        dash.totals.done, dash.totals.daily_missed, dash.totals.today_missed
+        dash.totals.count, dash.totals.daily_missed, dash.totals.today_missed
     );
     if !dash.projects.is_empty() {
         let parts: Vec<String> = dash
@@ -318,8 +318,8 @@ fn journal(db: &Db, range: Option<&str>) -> anyhow::Result<()> {
         let total: i64 = day_times.iter().map(|t| t.seconds).sum();
         let mut header = day.clone();
         if let Some(d) = dash.days.iter().find(|d| d.date == *day) {
-            if d.done > 0 {
-                header += &format!(" · {} done", d.done);
+            if d.count > 0 {
+                header += &format!(" · {} done", d.count);
             }
             let missed = d.daily_missed + d.today_missed;
             if missed > 0 {

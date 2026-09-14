@@ -20,6 +20,12 @@
 // uncheck followed by re-completing counts once, not twice. The same set
 // drives every number here (day counts, heatmap, daily-done, splits), so
 // nothing disagrees with anything else.
+//
+// Two subjects share every shape: Done (the set above, with the miss
+// verdicts) and Created — the tasks that entered the list, one `created`
+// action each, nothing to fold. The GUI's toggle swaps what every surface
+// counts; under Created the done-only verdicts (streak, both misses) stay
+// zero and the frontend hides their cards.
 
 use crate::db::{day_key_of_ts, day_start_prefix, today_iso, Db};
 use rusqlite::{params, OptionalExtension};
@@ -134,23 +140,35 @@ fn push_axis_pred<T: rusqlite::ToSql + Clone + Eq + std::hash::Hash + 'static>(
     }
 }
 
-/// One day's row across the requested range — the day headers' done/missed.
+/// What the dashboard counts. Done is the effective completion set with the
+/// miss verdicts; Created is the tasks that entered the list. The toggle is
+/// display-only — same shapes, same scope filter (creations snapshot their
+/// axes at birth like every action).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Subject {
+    Done,
+    Created,
+}
+
+/// One day's row across the requested range — the subject's count, plus the
+/// done-only miss verdicts (zero under Created).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DayStat {
     pub date: String,
-    pub done: i64,
+    pub count: i64,
     pub daily_missed: i64,
     pub today_missed: i64,
 }
 
-/// A nonzero per-day completion count inside the heatmap window; the frontend
+/// A nonzero per-day count inside the heatmap window; the frontend
 /// builds the ~6-month grid from these (absent day = 0).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HeatDay {
     pub date: String,
-    pub done: i64,
+    pub count: i64,
 }
 
 /// One project's slice of the range's completions. `name: None` is the "no
@@ -176,12 +194,13 @@ pub struct TierCount {
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Totals {
-    pub done: i64,
+    pub count: i64,
     pub daily_missed: i64,
     pub today_missed: i64,
     /// Consecutive days with ≥1 effective completion, counting back from
     /// today. A live today with nothing yet doesn't break it (the day isn't
-    /// over); 0 when yesterday had nothing.
+    /// over); 0 when yesterday had nothing. Done-only — always 0 under
+    /// Created.
     pub streak: i64,
 }
 
@@ -195,14 +214,15 @@ pub struct DashboardStats {
     pub totals: Totals,
 }
 
-/// One task completed on the day, as the ledger's expanded detail renders it.
-/// `secs` starts at 0 here; the command wrapper layers the day's session time
-/// per item on top (sessions are a separate dimension).
+/// One task in a day's expanded detail — the subject's row (a completion
+/// under Done, a creation under Created). `secs` starts at 0 here; the
+/// command wrapper layers the day's session time per item on top in Done
+/// mode (sessions are a separate dimension).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DoneTaskDetail {
+pub struct TaskDetail {
     pub item_id: String,
-    /// HH:MM of the effective (last) completion.
+    /// HH:MM of the event (the effective completion, or the creation).
     pub time: String,
     pub text: String,
     pub project: Option<String>,
@@ -219,13 +239,14 @@ pub struct FellTaskDetail {
 }
 
 /// A single day at task level — what clicking a day on the analytics page
-/// expands to. Same semantics as the aggregates: effective completions, the
-/// daily-miss replay, fell_to_backlog.
+/// expands to: the subject's rows (`tasks` — effective completions under
+/// Done, creations under Created), plus the done-only fell/missed lists
+/// (empty under Created).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DayDetail {
     pub date: String,
-    pub done: Vec<DoneTaskDetail>,
+    pub tasks: Vec<TaskDetail>,
     pub fell: Vec<FellTaskDetail>,
     /// Texts of habits the day ended without (empty for the live today).
     pub daily_missed: Vec<String>,
@@ -382,14 +403,98 @@ pub fn next_day(date: &str) -> anyhow::Result<String> {
     Ok((d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string())
 }
 
+/// The range's day span: honor `since` exactly when given; unbounded starts
+/// at the log's first item action. The last day is min(until − 1, today) —
+/// `until` is exclusive and the future hasn't been logged yet.
+fn day_span(
+    conn: &rusqlite::Connection, since: Option<&str>, until: Option<&str>, today_d: chrono::NaiveDate,
+) -> anyhow::Result<(chrono::NaiveDate, chrono::NaiveDate)> {
+    use chrono::NaiveDate;
+    let first_day: Option<String> = conn
+        .query_row(
+            "SELECT MIN(timestamp) FROM actions WHERE item_id IS NOT NULL",
+            [], |r| r.get::<_, Option<String>>(0),
+        )
+        .optional()?
+        .flatten()
+        .and_then(|ts| day_key_of_ts(&ts));
+    let start = NaiveDate::parse_from_str(
+        since.or(first_day.as_deref()).unwrap_or(&today_iso()),
+        "%Y-%m-%d",
+    )?;
+    let end = match until {
+        Some(u) => NaiveDate::parse_from_str(u, "%Y-%m-%d")?.pred_opt().unwrap_or(today_d).min(today_d),
+        None => today_d,
+    };
+    Ok((start, end))
+}
+
+/// The heatmap window: the nonzero per-day counts inside `[heat_start, today]`.
+fn heat_days(per_day: &BTreeMap<String, i64>, heat_start: &str, today: &str) -> Vec<HeatDay> {
+    per_day
+        .range(heat_start.to_string()..=today.to_string())
+        .filter(|(_, &count)| count > 0)
+        .map(|(date, &count)| HeatDay { date: date.clone(), count })
+        .collect()
+}
+
+/// The projects split assembly: zero-fill from the current roster so the
+/// split shows the whole roster (neglected ones read as 0), sort by count
+/// desc, and a trailing "none" bucket when unprojected work exists.
+fn finish_projects(
+    conn: &rusqlite::Connection, mut proj_counts: HashMap<Option<String>, i64>,
+) -> anyhow::Result<Vec<ProjectCount>> {
+    let mut stmt = conn.prepare("SELECT name FROM projects")?;
+    let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+    for row in rows {
+        if let Ok(name) = row {
+            proj_counts.entry(Some(name)).or_insert(0);
+        }
+    }
+    let none_count = proj_counts.get(&None).copied().unwrap_or(0);
+    let mut projects: Vec<ProjectCount> = proj_counts
+        .into_iter()
+        .filter_map(|(name, count)| name.map(|n| ProjectCount { name: Some(n), count }))
+        .collect();
+    projects.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
+    if none_count > 0 {
+        projects.push(ProjectCount { name: None, count: none_count });
+    }
+    Ok(projects)
+}
+
+/// The priority split assembly: always four rows, P1 → P3 → unmarked.
+fn finish_priorities(tier_counts: HashMap<Option<i64>, i64>) -> Vec<TierCount> {
+    let tier = |t: Option<i64>| tier_counts.get(&t).copied().unwrap_or(0);
+    vec![
+        TierCount { tier: Some(1), count: tier(Some(1)) },
+        TierCount { tier: Some(2), count: tier(Some(2)) },
+        TierCount { tier: Some(3), count: tier(Some(3)) },
+        TierCount { tier: None, count: tier(None) },
+    ]
+}
+
 impl Db {
-    /// The dashboard for a half-open `[since, until)` logical-day range
-    /// (either bound optional; bounds translate to `T06:00:00` wall-clock
-    /// prefixes — the same convention list_actions uses — and every action
-    /// keys to its day via `day_key_of_ts`).
-    /// `filter` scopes every number to the selected projects/tiers (see the
-    /// scope-filter block above).
+    /// The dashboard for a subject — Done (effective completions, with the
+    /// miss verdicts) or Created (the tasks that entered the list).
+    /// `since`/`until` are a half-open logical-day range (either bound
+    /// optional; bounds translate to `T06:00:00` wall-clock prefixes — the
+    /// same convention list_actions uses — and every action keys to its day
+    /// via `day_key_of_ts`). `filter` scopes every number to the selected
+    /// projects/tiers (see the scope-filter block above).
     pub fn journal_dashboard(
+        &self, since: Option<&str>, until: Option<&str>, filter: &ScopeFilter, subject: Subject,
+    ) -> anyhow::Result<DashboardStats> {
+        match subject {
+            Subject::Done => self.done_dashboard(since, until, filter),
+            Subject::Created => self.created_dashboard(since, until, filter),
+        }
+    }
+
+    /// The Done dashboard: the effective-completion fold drives every number
+    /// (day counts, heatmap, streak, splits); the two miss replays ride the
+    /// same walk.
+    fn done_dashboard(
         &self, since: Option<&str>, until: Option<&str>, filter: &ScopeFilter,
     ) -> anyhow::Result<DashboardStats> {
         use chrono::NaiveDate;
@@ -517,29 +622,14 @@ impl Db {
             fetch_item_axes(&conn)?
         };
 
-        // The range's day span: honor `since` exactly when given; unbounded
-        // starts at the log's first item action. The last day is
-        // min(until − 1, today) — `until` is exclusive and the future hasn't
-        // been logged yet.
-        let first_day: Option<String> = conn
-            .query_row(
-                "SELECT MIN(timestamp) FROM actions WHERE item_id IS NOT NULL",
-                [], |r| r.get::<_, Option<String>>(0),
-            )
-            .optional()?
-            .flatten()
-            .and_then(|ts| day_key_of_ts(&ts));
-        let start_d = NaiveDate::parse_from_str(
-            since.or(first_day.as_deref()).unwrap_or(&today),
-            "%Y-%m-%d",
-        )?;
-        let end_d = match until {
-            Some(u) => NaiveDate::parse_from_str(u, "%Y-%m-%d")?
-                .pred_opt()
-                .unwrap_or(today_d)
-                .min(today_d),
-            None => today_d,
-        };
+        let (start_d, end_d) = day_span(&conn, since, until, today_d)?;
+
+        // The subject's per-day counts — the day rows, the streak, and the
+        // heatmap all read these.
+        let per_day: BTreeMap<String, i64> = done_by_day
+            .iter()
+            .map(|(day, m)| (day.clone(), m.values().filter(|e| e.done).count() as i64))
+            .collect();
 
         let mut days: Vec<DayStat> = Vec::new();
         let mut totals = Totals::default();
@@ -557,8 +647,7 @@ impl Db {
                 idx += 1;
             }
 
-            let done_map = done_by_day.get(&day);
-            let done = done_map.map_or(0, |m| m.values().filter(|e| e.done).count()) as i64;
+            let count = per_day.get(&day).copied().unwrap_or(0);
 
             // The current day's habits aren't "missed" — the day is still
             // live; misses are a day-end verdict.
@@ -575,10 +664,10 @@ impl Db {
             }
             let today_missed = fell_by_day.get(&day).copied().unwrap_or(0);
 
-            totals.done += done;
+            totals.count += count;
             totals.daily_missed += daily_missed;
             totals.today_missed += today_missed;
-            days.push(DayStat { date: day, done, daily_missed, today_missed });
+            days.push(DayStat { date: day, count, daily_missed, today_missed });
             d += chrono::Duration::days(1);
         }
 
@@ -588,7 +677,7 @@ impl Db {
         // least the heatmap's ~7 months, which bounds any realistic streak.
         let has_done = |d: NaiveDate| -> bool {
             let day = d.format("%Y-%m-%d").to_string();
-            done_by_day.get(&day).map_or(false, |m| m.values().any(|e| e.done))
+            per_day.get(&day).map_or(false, |&c| c > 0)
         };
         {
             let mut d = today_d;
@@ -602,14 +691,7 @@ impl Db {
         }
 
         // ---- Heatmap window ----------------------------------------------------
-        let heatmap: Vec<HeatDay> = done_by_day
-            .range(heat_start..=today)
-            .filter(|(_, m)| m.values().any(|e| e.done))
-            .map(|(day, m)| HeatDay {
-                date: day.clone(),
-                done: m.values().filter(|e| e.done).count() as i64,
-            })
-            .collect();
+        let heatmap = heat_days(&per_day, &heat_start, &today);
 
         // ---- Project / priority splits (range days only) -----------------------
         let range_start = start_d.format("%Y-%m-%d").to_string();
@@ -628,44 +710,103 @@ impl Db {
                 *tier_counts.entry(e.priority).or_insert(0) += 1;
             }
         }
-        // Zero-fill from the current projects so the split shows the whole
-        // roster, not just the ones that scored.
-        {
-            let mut stmt = conn.prepare("SELECT name FROM projects")?;
-            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
-            for row in rows {
-                if let Ok(name) = row {
-                    proj_counts.entry(Some(name)).or_insert(0);
-                }
-            }
-        }
-        let none_count = proj_counts.get(&None).copied().unwrap_or(0);
-        let mut projects: Vec<ProjectCount> = proj_counts
-            .into_iter()
-            .filter_map(|(name, count)| name.map(|n| ProjectCount { name: Some(n), count }))
-            .collect();
-        projects.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
-        if none_count > 0 {
-            projects.push(ProjectCount { name: None, count: none_count });
-        }
-
-        let tier = |t: Option<i64>| tier_counts.get(&t).copied().unwrap_or(0);
-        let priorities = vec![
-            TierCount { tier: Some(1), count: tier(Some(1)) },
-            TierCount { tier: Some(2), count: tier(Some(2)) },
-            TierCount { tier: Some(3), count: tier(Some(3)) },
-            TierCount { tier: None, count: tier(None) },
-        ];
+        let projects = finish_projects(&conn, proj_counts)?;
+        let priorities = finish_priorities(tier_counts);
 
         Ok(DashboardStats { days, heatmap, projects, priorities, totals })
     }
 
-    /// One day at task level — what the ledger's expanded row renders. The
-    /// same semantics as the aggregates (effective completions, the
-    /// daily-miss replay, fell_to_backlog); `filter` scopes it exactly like
-    /// journal_dashboard. `secs` is layered on by the command wrapper from
+    /// The Created dashboard: one pass over `created` actions — each row is
+    /// a task that entered the list, carrying its axes at birth. No
+    /// effective-set folding (a creation is never undone), no replay, no
+    /// streak: the done-only verdicts stay zero and the frontend hides their
+    /// cards. Day keys follow the same 6am boundary, so a 1am capture
+    /// belongs to yesterday.
+    fn created_dashboard(
+        &self, since: Option<&str>, until: Option<&str>, filter: &ScopeFilter,
+    ) -> anyhow::Result<DashboardStats> {
+        use chrono::NaiveDate;
+        let scope = filter.scope();
+        let conn = self.conn.lock().unwrap();
+        let today = today_iso();
+        let today_d = NaiveDate::parse_from_str(&today, "%Y-%m-%d")?;
+        let heat_start = (today_d - chrono::Duration::days(HEATMAP_LOOKBACK_DAYS))
+            .format("%Y-%m-%d")
+            .to_string();
+        let scan_end = day_start_prefix(until.unwrap_or("9999-12-31"));
+        let (start_d, end_d) = day_span(&conn, since, until, today_d)?;
+        let range_start = start_d.format("%Y-%m-%d").to_string();
+        let range_end = end_d.format("%Y-%m-%d").to_string();
+
+        // Counted in Rust for the same reason as every day-keyed fold — the
+        // logical day shifts the wall-clock date back past 6am, which SQL
+        // can't express over the text timestamps.
+        let mut per_day: BTreeMap<String, i64> = BTreeMap::new();
+        let mut proj_counts: HashMap<Option<String>, i64> = HashMap::new();
+        let mut tier_counts: HashMap<Option<i64>, i64> = HashMap::new();
+        {
+            let mut sql = String::from(
+                "SELECT timestamp, project, priority FROM actions
+                 WHERE item_id IS NOT NULL AND action = 'created'
+                   AND timestamp >= ? AND timestamp < ?",
+            );
+            let mut pv: Vec<Box<dyn rusqlite::ToSql>> =
+                vec![Box::new(since.map(day_start_prefix).unwrap_or_default()), Box::new(scan_end)];
+            scope.push_sql(&mut sql, &mut pv);
+            let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
+            let mut stmt = conn.prepare(&sql)?;
+            let rows = stmt.query_map(refs.as_slice(), |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<i64>>(2)?,
+                ))
+            })?;
+            for row in rows {
+                let (ts, project, priority) = row?;
+                let Some(day) = day_key_of_ts(&ts) else { continue };
+                *per_day.entry(day.clone()).or_insert(0) += 1;
+                if day.as_str() >= range_start.as_str() && day.as_str() <= range_end.as_str() {
+                    *proj_counts.entry(project).or_insert(0) += 1;
+                    *tier_counts.entry(priority).or_insert(0) += 1;
+                }
+            }
+        }
+
+        let mut days: Vec<DayStat> = Vec::new();
+        let mut totals = Totals::default();
+        let mut d = start_d;
+        while d <= end_d {
+            let day = d.format("%Y-%m-%d").to_string();
+            let count = per_day.get(&day).copied().unwrap_or(0);
+            totals.count += count;
+            days.push(DayStat { date: day, count, daily_missed: 0, today_missed: 0 });
+            d += chrono::Duration::days(1);
+        }
+
+        let heatmap = heat_days(&per_day, &heat_start, &today);
+        let projects = finish_projects(&conn, proj_counts)?;
+        let priorities = finish_priorities(tier_counts);
+        Ok(DashboardStats { days, heatmap, projects, priorities, totals })
+    }
+
+    /// One day at task level — what the ledger's expanded row renders, for
+    /// either subject. `filter` scopes it exactly like journal_dashboard.
+    /// `secs` is layered on by the command wrapper in Done mode from
     /// `session_time_by_day` (unscoped — time doesn't follow the filter).
-    pub fn day_detail(&self, date: &str, filter: &ScopeFilter) -> anyhow::Result<DayDetail> {
+    pub fn day_detail(
+        &self, date: &str, filter: &ScopeFilter, subject: Subject,
+    ) -> anyhow::Result<DayDetail> {
+        match subject {
+            Subject::Done => self.done_day_detail(date, filter),
+            Subject::Created => self.created_day_detail(date, filter),
+        }
+    }
+
+    /// The Done lens: the effective completions (per item, only the day's
+    /// LAST completed/uncompleted event counts), the fell_to_backlog rows,
+    /// and the miss replay frozen at this day's end.
+    fn done_day_detail(&self, date: &str, filter: &ScopeFilter) -> anyhow::Result<DayDetail> {
         let scope = filter.scope();
         let conn = self.conn.lock().unwrap();
         let next = next_day(date)?;
@@ -676,7 +817,7 @@ impl Db {
         // Folded in id order; survivors sorted by their last completion time.
         // `slots` is the scoped fold (what renders); `done_sections` is the
         // unscoped fold (the miss replay's done-check — see journal_dashboard).
-        let mut slots: HashMap<String, DoneTaskDetail> = HashMap::new();
+        let mut slots: HashMap<String, TaskDetail> = HashMap::new();
         let mut done_sections: HashMap<String, Option<String>> = HashMap::new();
         {
             let mut stmt = conn.prepare(
@@ -704,7 +845,7 @@ impl Db {
                     if scope.allows(&project, &priority) {
                         slots.insert(
                             item.clone(),
-                            DoneTaskDetail {
+                            TaskDetail {
                                 item_id: item.clone(),
                                 time: ts[11..16].to_string(),
                                 text,
@@ -720,8 +861,8 @@ impl Db {
                 }
             }
         }
-        let mut done: Vec<DoneTaskDetail> = slots.into_values().collect();
-        done.sort_by(|a, b| a.time.cmp(&b.time)); // zero-padded HH:MM sorts chronologically
+        let mut tasks: Vec<TaskDetail> = slots.into_values().collect();
+        tasks.sort_by(|a, b| a.time.cmp(&b.time)); // zero-padded HH:MM sorts chronologically
 
         // The sweep's record of today tasks the day ended without, scoped by
         // the snapshot axes like everything else.
@@ -772,7 +913,41 @@ impl Db {
                 .collect();
             daily_missed = daily_missed_texts(&live, &done_daily, &axes, &scope);        }
 
-        Ok(DayDetail { date: date.to_string(), done, fell, daily_missed })
+        Ok(DayDetail { date: date.to_string(), tasks, fell, daily_missed })
+    }
+
+    /// The Created lens: the tasks that entered the list that day, as their
+    /// birth-time snapshots. No fold — a creation is never undone. `fell`/
+    /// `daily_missed` are done-only and stay empty.
+    fn created_day_detail(&self, date: &str, filter: &ScopeFilter) -> anyhow::Result<DayDetail> {
+        let scope = filter.scope();
+        let conn = self.conn.lock().unwrap();
+        let next = next_day(date)?;
+        let mut sql = String::from(
+            "SELECT item_id, item_text, substr(timestamp,12,5), project, priority FROM actions
+             WHERE item_id IS NOT NULL AND action = 'created'
+               AND timestamp >= ? AND timestamp < ?",
+        );
+        let mut pv: Vec<Box<dyn rusqlite::ToSql>> =
+            vec![Box::new(day_start_prefix(date)), Box::new(day_start_prefix(&next))];
+        scope.push_sql(&mut sql, &mut pv);
+        sql.push_str(" ORDER BY id");
+        let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let mut tasks: Vec<TaskDetail> = stmt
+            .query_map(refs.as_slice(), |r| {
+                Ok(TaskDetail {
+                    item_id: r.get(0)?,
+                    text: r.get(1)?,
+                    time: r.get(2)?,
+                    project: r.get(3)?,
+                    priority: r.get(4)?,
+                    secs: 0,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        tasks.sort_by(|a, b| a.time.cmp(&b.time));
+        Ok(DayDetail { date: date.to_string(), tasks, fell: Vec::new(), daily_missed: Vec::new() })
     }
 }
 
@@ -829,16 +1004,16 @@ mod tests {
             act(&conn, "C", "fell_to_backlog", Some("today"), Some("backlog"), None, None,
                 "2026-01-03T06:01:00");
         }
-        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-06"), &ScopeFilter::default()).unwrap();
+        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-06"), &ScopeFilter::default(), Subject::Done).unwrap();
         let by = by_date(&s);
-        assert_eq!(by["2026-01-02"].done, 2);
+        assert_eq!(by["2026-01-02"].count, 2);
         assert_eq!(by["2026-01-02"].daily_missed, 0);
-        assert_eq!(by["2026-01-03"].done, 1);
+        assert_eq!(by["2026-01-03"].count, 1);
         assert_eq!(by["2026-01-03"].daily_missed, 1); // B skipped
         assert_eq!(by["2026-01-03"].today_missed, 1); // C fell
         assert_eq!(by["2026-01-04"].daily_missed, 0);
         assert_eq!(by["2026-01-05"].daily_missed, 1);
-        assert_eq!(s.totals.done, 6);
+        assert_eq!(s.totals.count, 6);
         assert_eq!(s.totals.daily_missed, 2);
         assert_eq!(s.totals.today_missed, 1);
         let _ = std::fs::remove_dir_all(&dir);
@@ -868,8 +1043,8 @@ mod tests {
             act(&conn, "F", "uncompleted", Some("today"), Some("today"), None, None,
                 "2026-01-02T15:00:00");
         }
-        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &ScopeFilter::default()).unwrap();
-        assert_eq!(s.days[0].done, 2); // D once + E; F's completion was undone
+        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &ScopeFilter::default(), Subject::Done).unwrap();
+        assert_eq!(s.days[0].count, 2); // D once + E; F's completion was undone
         // Splits read the snapshot columns of the effective completions only
         // (F's undone completion contributes nothing, and no live projects
         // exist to zero-fill).
@@ -941,11 +1116,11 @@ mod tests {
             act(&conn, "C", "created", None, Some("today"), None, None, "2026-01-01T09:00:00");
             act(&conn, "C", "fell_to_backlog", Some("today"), Some("backlog"), None, None, "2026-01-02T06:01:00");
         }
-        let d = db.day_detail("2026-01-02", &ScopeFilter::default()).unwrap();
-        let texts: Vec<&str> = d.done.iter().map(|t| t.text.as_str()).collect();
+        let d = db.day_detail("2026-01-02", &ScopeFilter::default(), Subject::Done).unwrap();
+        let texts: Vec<&str> = d.tasks.iter().map(|t| t.text.as_str()).collect();
         assert_eq!(texts, ["A", "D", "E"]); // chronological, D once, F gone
-        assert_eq!(d.done[1].time, "11:30"); // the final completion's time
-        assert_eq!(d.done[1].project.as_deref(), Some("meridian"));
+        assert_eq!(d.tasks[1].time, "11:30"); // the final completion's time
+        assert_eq!(d.tasks[1].project.as_deref(), Some("meridian"));
         let fell: Vec<&str> = d.fell.iter().map(|f| f.text.as_str()).collect();
         assert_eq!(fell, ["C"]);
         assert_eq!(d.daily_missed, ["B"]);
@@ -963,12 +1138,12 @@ mod tests {
             act(&conn, "N", "created", None, Some("today"), None, None, "2026-01-01T21:00:00");
             act(&conn, "N", "completed", Some("today"), Some("today"), None, None, "2026-01-02T01:23:00");
         }
-        let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-02"), &ScopeFilter::default()).unwrap();
-        assert_eq!(s.totals.done, 1);
-        assert_eq!(s.days.iter().find(|d| d.date == "2026-01-01").map(|d| d.done), Some(1));
-        let d = db.day_detail("2026-01-01", &ScopeFilter::default()).unwrap();
-        assert_eq!(d.done.len(), 1);
-        assert_eq!(d.done[0].time, "01:23");
+        let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-02"), &ScopeFilter::default(), Subject::Done).unwrap();
+        assert_eq!(s.totals.count, 1);
+        assert_eq!(s.days.iter().find(|d| d.date == "2026-01-01").map(|d| d.count), Some(1));
+        let d = db.day_detail("2026-01-01", &ScopeFilter::default(), Subject::Done).unwrap();
+        assert_eq!(d.tasks.len(), 1);
+        assert_eq!(d.tasks[0].time, "01:23");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -986,14 +1161,14 @@ mod tests {
                     &format!("{}T09:00:00", day(back)));
             }
         }
-        let s = db.journal_dashboard(None, None, &ScopeFilter::default()).unwrap();
+        let s = db.journal_dashboard(None, None, &ScopeFilter::default(), Subject::Done).unwrap();
         assert_eq!(s.totals.streak, 3, "an empty live today must not break the streak");
         {
             let conn = db.conn.lock().unwrap();
             act(&conn, "S", "completed", Some("today"), Some("today"), None, None,
                 &format!("{}T10:00:00", day(0)));
         }
-        let s = db.journal_dashboard(None, None, &ScopeFilter::default()).unwrap();
+        let s = db.journal_dashboard(None, None, &ScopeFilter::default(), Subject::Done).unwrap();
         assert_eq!(s.totals.streak, 4);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1030,20 +1205,20 @@ mod tests {
             )
             .unwrap();
         }
-        let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-06"), &ScopeFilter::default()).unwrap();
+        let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-06"), &ScopeFilter::default(), Subject::Done).unwrap();
         // Jan 1–2: B is alive, not paused, not done → missed (A is done).
         assert_eq!(s.days[0].daily_missed, 1);
         assert_eq!(s.days[1].daily_missed, 1);
-        assert_eq!(s.days[1].done, 1);
+        assert_eq!(s.days[1].count, 1);
         // Jan 3–4: B is paused — outside the population, never missed.
         assert_eq!(s.days[2].daily_missed, 0);
         assert_eq!(s.days[3].daily_missed, 0);
         // Jan 5: the unpause lands mid-day — B is expected again and missed.
         assert_eq!(s.days[4].daily_missed, 1);
         // The single-day detail shares the replay: Jan 4 (paused) vs Jan 2.
-        let d4 = db.day_detail("2026-01-04", &ScopeFilter::default()).unwrap();
+        let d4 = db.day_detail("2026-01-04", &ScopeFilter::default(), Subject::Done).unwrap();
         assert!(d4.daily_missed.is_empty());
-        let d2 = db.day_detail("2026-01-02", &ScopeFilter::default()).unwrap();
+        let d2 = db.day_detail("2026-01-02", &ScopeFilter::default(), Subject::Done).unwrap();
         assert_eq!(d2.daily_missed, vec!["habit b".to_string()]);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1076,11 +1251,11 @@ mod tests {
             projects: Some(vec![Some("meridian".into())]),
             priorities: None,
         };
-        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter).unwrap();
-        assert_eq!(s.days[0].done, 2); // H1 + T1; T2 is unattributed
+        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter, Subject::Done).unwrap();
+        assert_eq!(s.days[0].count, 2); // H1 + T1; T2 is unattributed
         assert_eq!(s.days[0].daily_missed, 0); // H2 is outside the filter
         assert_eq!(s.days[0].today_missed, 0); // T3 fell, but it's growth
-        assert_eq!(s.totals.done, 2);
+        assert_eq!(s.totals.count, 2);
         // Splits derive over the scoped set only.
         let names: Vec<(Option<&str>, i64)> =
             s.projects.iter().map(|p| (p.name.as_deref(), p.count)).collect();
@@ -1095,8 +1270,8 @@ mod tests {
             projects: None,
             priorities: Some(vec![Some(1)]),
         };
-        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter).unwrap();
-        assert_eq!(s.days[0].done, 1);
+        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter, Subject::Done).unwrap();
+        assert_eq!(s.days[0].count, 1);
         assert_eq!(s.days[0].daily_missed, 0);
         assert_eq!(s.days[0].today_missed, 0);
 
@@ -1105,9 +1280,9 @@ mod tests {
             projects: Some(vec![None]),
             priorities: None,
         };
-        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter).unwrap();
-        assert_eq!(s.days[0].done, 1); // T2 only
-        assert_eq!(s.totals.done, 1);
+        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter, Subject::Done).unwrap();
+        assert_eq!(s.days[0].count, 1); // T2 only
+        assert_eq!(s.totals.count, 1);
 
         // Day detail follows the same scope: done list filtered, fell filtered,
         // missed habits filtered.
@@ -1115,8 +1290,8 @@ mod tests {
             projects: Some(vec![Some("meridian".into())]),
             priorities: None,
         };
-        let d = db.day_detail("2026-01-02", &filter).unwrap();
-        let texts: Vec<&str> = d.done.iter().map(|t| t.text.as_str()).collect();
+        let d = db.day_detail("2026-01-02", &filter, Subject::Done).unwrap();
+        let texts: Vec<&str> = d.tasks.iter().map(|t| t.text.as_str()).collect();
         assert_eq!(texts.len(), 2); // H1 + T1 (T2 excluded)
         assert!(d.fell.is_empty()); // T3 is growth
         assert!(d.daily_missed.is_empty()); // H2 is growth
@@ -1149,13 +1324,57 @@ mod tests {
             projects: None,
             priorities: Some(vec![Some(2)]),
         };
-        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter).unwrap();
+        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter, Subject::Done).unwrap();
         // H is in the population (current priority 2) and was completed —
         // the unscoped done-check sees it. 0 missed, not 1.
         assert_eq!(s.days[0].daily_missed, 0);
         // Its completion still credits the unmarked tier (snapshot), so the
         // scoped done count is 0 — completion axes are deletion-proof history.
-        assert_eq!(s.days[0].done, 0);
+        assert_eq!(s.days[0].count, 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The Created subject: each `created` action is one count (a completion
+    /// of the same task adds nothing), scoped by the birth-time snapshots;
+    /// the done-only verdicts stay zero; the day detail lists the creations.
+    #[test]
+    fn created_subject_counts_creations_scoped_by_birth_axes() {
+        let (db, dir) = tmp_db();
+        {
+            let conn = db.conn.lock().unwrap();
+            // One creation on Jan 1, three on Jan 2, one completion on Jan 3.
+            act(&conn, "A", "created", None, Some("today"), Some("meridian"), Some(1), "2026-01-01T09:00:00");
+            act(&conn, "B", "created", None, Some("today"), Some("meridian"), None, "2026-01-02T09:00:00");
+            act(&conn, "C", "created", None, Some("backlog"), None, None, "2026-01-02T10:00:00");
+            act(&conn, "D", "created", None, Some("today"), Some("growth"), None, "2026-01-02T11:00:00");
+            act(&conn, "B", "completed", Some("today"), Some("today"), Some("meridian"), None, "2026-01-03T09:00:00");
+        }
+        let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-04"), &ScopeFilter::default(), Subject::Created).unwrap();
+        assert_eq!(s.totals.count, 4);
+        assert_eq!(s.days.iter().find(|d| d.date == "2026-01-01").map(|d| d.count), Some(1));
+        assert_eq!(s.days.iter().find(|d| d.date == "2026-01-02").map(|d| d.count), Some(3));
+        assert_eq!(s.totals.streak, 0);
+        assert_eq!(s.totals.daily_missed, 0);
+        assert_eq!(s.totals.today_missed, 0);
+        // Splits read the birth-time snapshots.
+        let names: Vec<(Option<&str>, i64)> =
+            s.projects.iter().map(|p| (p.name.as_deref(), p.count)).collect();
+        assert_eq!(names, [(Some("meridian"), 2), (Some("growth"), 1), (None, 1)]);
+
+        // Scope: meridian only — A and B's births, not C/D.
+        let filter = ScopeFilter { projects: Some(vec![Some("meridian".into())]), priorities: None };
+        let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-04"), &filter, Subject::Created).unwrap();
+        assert_eq!(s.totals.count, 2);
+
+        // The day detail lists the creations; the Done lens still counts
+        // the completion.
+        let d = db.day_detail("2026-01-02", &ScopeFilter::default(), Subject::Created).unwrap();
+        let texts: Vec<&str> = d.tasks.iter().map(|t| t.text.as_str()).collect();
+        assert_eq!(texts, ["B", "C", "D"]); // chronological
+        assert_eq!(d.tasks[0].time, "09:00");
+        assert!(d.fell.is_empty() && d.daily_missed.is_empty());
+        let d = db.day_detail("2026-01-03", &ScopeFilter::default(), Subject::Done).unwrap();
+        assert_eq!(d.tasks.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

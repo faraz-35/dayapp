@@ -1,11 +1,15 @@
 // AnalyticsView — the analytics page (top-right ≡): a dashboard of elevated
 // cards synthesized over the append-only `actions` log, never the log itself.
-// A hero stats card, the current month as a calendar heatmap (intensity =
-// completions; click a day to open it), the distribution cards (project bars
-// + a segmented priority bar), and the day ledger whose rows expand to that
-// day's tasks (done with times, what fell, missed habits — the raw action
-// log's textual home remains the CLI's --journal). Clicking a calendar cell,
-// a ledger row, or the date field picks a day; click it again to clear.
+// A toggle at the left of the filter bar picks the subject — done (effective
+// completions, with the miss verdicts) or created (the tasks that entered
+// the list); every card follows it, and the done-only stats (streak, both
+// misses) hide in created mode. A hero stats card, the current month as a
+// calendar heatmap (intensity = the subject's per-day count; click a day to
+// open it), the distribution cards (project bars + a segmented priority
+// bar), and the day ledger whose rows expand to that day's tasks (done with
+// times, what fell, missed habits — the raw action log's textual home
+// remains the CLI's --journal). Clicking a calendar cell, a ledger row, or
+// the date field picks a day; click it again to clear.
 // The filter bar also carries the axis scope filters — a `#` project picker
 // (multi-select popover) and priority tier chips — which every derivation
 // follows via the backend's write-time snapshots (see dashboard.rs); a split
@@ -31,6 +35,7 @@ import {
   todayStr,
   type DashboardFilter,
   type DashboardStats,
+  type DashboardSubject,
   type DayDetail,
   type DayTaskTime,
   type Project,
@@ -65,15 +70,16 @@ const TIER_BG: Record<string, string> = {
 type Cell = {
   date: string;
   day: number;
-  done: number;
+  count: number;
   future: boolean;
   isToday: boolean;
 };
 
 /** The current calendar month as a Monday-first grid: `lead` blanks, then
- *  one cell per day (intensity = that day's completions). Anchored on the
- *  app's logical today (6am→6am), so a 1am session fills yesterday's cell.
- *  Trailing blanks aren't needed — the CSS grid just ends the last row short. */
+ *  one cell per day (intensity = that day's count of the active subject).
+ *  Anchored on the app's logical today (6am→6am), so a 1am session fills
+ *  yesterday's cell. Trailing blanks aren't needed — the CSS grid just ends
+ *  the last row short. */
 function monthCalendar(map: Map<string, number>): (Cell | null)[] {
   const today = todayStr();
   const t = new Date(today + "T00:00:00");
@@ -88,7 +94,7 @@ function monthCalendar(map: Map<string, number>): (Cell | null)[] {
     cells.push({
       date,
       day: d,
-      done: map.get(date) ?? 0,
+      count: map.get(date) ?? 0,
       future: date > today,
       isToday: date === today,
     });
@@ -189,6 +195,10 @@ export default function AnalyticsView() {
   const [times, setTimes] = useState<DayTaskTime[]>([]);
   const [detail, setDetail] = useState<DayDetail | null>(null);
   const [range, setRange] = useState<Range>("week");
+  // What the page counts — the toggle at the left of the filter bar. The
+  // picked day survives a switch: the same day re-expands through the other
+  // lens.
+  const [subject, setSubject] = useState<DashboardSubject>("done");
   // The day whose ledger row is expanded (and whose calendar cell is ringed).
   // Picking never re-scopes the stats — the range pills own that.
   const [pickedDay, setPickedDay] = useState<string | null>(null);
@@ -310,21 +320,27 @@ export default function AnalyticsView() {
   }, [range]);
 
   useEffect(() => {
-    journalApi.dashboard({ since: bounds.since, until: bounds.until, filter })
+    journalApi.dashboard({ since: bounds.since, until: bounds.until, filter, subject })
       .then(setDash)
       .catch((e) => log.warn("dashboard load failed", e));
-    timersApi.sessionTimeByDay({ since: bounds.since, until: bounds.until })
-      .then(setTimes)
-      .catch((e) => log.warn("session time load failed", e));
-  }, [bounds, filter]);
+    // Tracked time is a done-flavored dimension (work, not intake) — not
+    // fetched in created mode.
+    if (subject === "done") {
+      timersApi.sessionTimeByDay({ since: bounds.since, until: bounds.until })
+        .then(setTimes)
+        .catch((e) => log.warn("session time load failed", e));
+    } else {
+      setTimes([]);
+    }
+  }, [bounds, filter, subject]);
 
   useEffect(() => {
     setDetail(null);
     if (!pickedDay) return;
-    journalApi.dayDetail(pickedDay, filter)
+    journalApi.dayDetail(pickedDay, subject, filter)
       .then(setDetail)
       .catch((e) => log.warn("day detail load failed", e));
-  }, [pickedDay, filter]);
+  }, [pickedDay, filter, subject]);
 
   // Bring the expanded row into view once its data has landed.
   useEffect(() => {
@@ -363,7 +379,7 @@ export default function AnalyticsView() {
     { id: "all", label: "All" },
   ];
 
-  const heat = useMemo(() => new Map((dash?.heatmap ?? []).map((h) => [h.date, h.done])), [dash]);
+  const heat = useMemo(() => new Map((dash?.heatmap ?? []).map((h) => [h.date, h.count])), [dash]);
   const cells = useMemo(() => monthCalendar(heat), [heat]);
   const monthLabel = new Date(todayStr() + "T00:00:00").toLocaleDateString(undefined, {
     month: "long",
@@ -376,19 +392,23 @@ export default function AnalyticsView() {
   // listed even when empty, so its expansion has a row), newest first. Time
   // doesn't follow the scope filter, so while filtered it neither surfaces a
   // day nor shows as the day's total — only the per-task time inside an
-  // expanded day (which rides the filtered task rows) renders.
+  // expanded day (which rides the filtered task rows) renders. Created mode
+  // surfaces creations only: time and the miss verdicts are done-flavored.
   const ledger = useMemo(() => {
     if (!dash) return [];
     return dash.days
-      .filter((d) => d.date === pickedDay || d.done > 0 || d.dailyMissed + d.todayMissed > 0 ||
-        (!hasFilter && (timeByDay.get(d.date) ?? 0) > 0))
+      .filter((d) => d.date === pickedDay || d.count > 0 ||
+        (subject === "done" && (d.dailyMissed + d.todayMissed > 0 ||
+          (!hasFilter && (timeByDay.get(d.date) ?? 0) > 0))))
       .reverse();
-  }, [dash, timeByDay, pickedDay, hasFilter]);
+  }, [dash, timeByDay, pickedDay, hasFilter, subject]);
 
   const today = todayStr();
   const dayCount = dash?.days.length ?? 0;
   const avg =
-    dash && dayCount > 1 ? (dash.totals.done / dayCount).toFixed(1) : null;
+    dash && dayCount > 1 ? (dash.totals.count / dayCount).toFixed(1) : null;
+  // The subject's noun, for every label the page renders.
+  const noun = subject === "created" ? "created" : "done";
 
   // The `#` pill's label: the state of the project selection in pill language.
   const projLabel = (() => {
@@ -405,6 +425,22 @@ export default function AnalyticsView() {
           filters: the `#` project picker (multi-select popover) and the tier
           chips — every derivation follows them (see the module comment). */}
       <div className="filter-bar">
+        {/* The subject toggle: what the page counts. Every card follows it;
+            the done-only stats hide in created mode (the backend returns
+            them zero — see dashboard.rs). */}
+        <span className="subj" role="group" aria-label="What the page counts">
+          {(["done", "created"] as const).map((s) => (
+            <button
+              key={s}
+              className={`pill${subject === s ? " active" : ""}`}
+              onClick={() => {
+                if (s !== subject) trace("analytics.subject", { subject: s });
+                setSubject(s);
+              }}
+              title={s === "done" ? "Count what you completed" : "Count what you created"}
+            >{s === "done" ? "Done" : "Created"}</button>
+          ))}
+        </span>
         {ranges.map((r) => (
           <button
             key={r.id}
@@ -479,11 +515,15 @@ export default function AnalyticsView() {
         {dash && (
           <>
             <section className="an-card an-hero">
-              <Stat value={dash.totals.done} label="Done" accent />
+              <Stat value={dash.totals.count} label={noun === "created" ? "Created" : "Done"} accent />
               {avg != null && <Stat value={avg} label="Avg / day" />}
-              <Stat value={dash.totals.streak} label="Day streak" />
-              <Stat value={dash.totals.dailyMissed} label="Daily missed" />
-              <Stat value={dash.totals.todayMissed} label="Today missed" />
+              {subject === "done" && (
+                <>
+                  <Stat value={dash.totals.streak} label="Day streak" />
+                  <Stat value={dash.totals.dailyMissed} label="Daily missed" />
+                  <Stat value={dash.totals.todayMissed} label="Today missed" />
+                </>
+              )}
             </section>
 
             <div className="an-row3">
@@ -518,7 +558,7 @@ export default function AnalyticsView() {
                           key={c.date}
                           className={[
                             "cal-cell",
-                            level(c.done) > 0 ? `l${level(c.done)}` : "",
+                            level(c.count) > 0 ? `l${level(c.count)}` : "",
                             c.future ? "future" : "",
                             c.isToday ? "today" : "",
                             pickedDay === c.date ? "picked" : "",
@@ -526,11 +566,11 @@ export default function AnalyticsView() {
                             .filter(Boolean)
                             .join(" ")}
                           disabled={c.future}
-                          title={`${formatReminder(c.date)}${c.done ? ` · ${c.done} done` : ""}`}
+                          title={`${formatReminder(c.date)}${c.count ? ` · ${c.count} ${noun}` : ""}`}
                           onClick={() => pickDay(c.date)}
                         >
                           <span className="n">{c.day}</span>
-                          {c.done > 0 && <span className="c">{c.done}</span>}
+                          {c.count > 0 && <span className="c">{c.count}</span>}
                         </button>
                       ),
                     )}
@@ -593,9 +633,9 @@ export default function AnalyticsView() {
                             })}
                       </span>
                       <span className="s">
-                        {d.done > 0 && <span className="done">{d.done} done</span>}
-                        {missed > 0 && <span>{missed} missed</span>}
-                        {!hasFilter && secs > 0 && (
+                        {d.count > 0 && <span className="done">{d.count} {noun}</span>}
+                        {subject === "done" && missed > 0 && <span>{missed} missed</span>}
+                        {subject === "done" && !hasFilter && secs > 0 && (
                           <span className="time">{formatDuration(secs)}</span>
                         )}
                         <Chevron open={open} />
@@ -604,12 +644,12 @@ export default function AnalyticsView() {
                     {open && (
                       <div className="an-day-detail">
                         {detail == null && <div className="dd-empty">…</div>}
-                        {detail?.done.map((t) => (
-                          <div key={t.itemId} className="dd-row done">
-                            <span className="dd-mark">✓</span>
+                        {detail?.tasks.map((t) => (
+                          <div key={t.itemId} className={`dd-row ${noun}`}>
+                            <span className="dd-mark">{noun === "created" ? "+" : "✓"}</span>
                             <span className="dd-time">{t.time}</span>
                             <span className="dd-text">{t.text}</span>
-                            {t.secs > 0 && (
+                            {subject === "done" && t.secs > 0 && (
                               <span className="dd-secs">{formatDuration(t.secs)}</span>
                             )}
                           </div>
@@ -630,7 +670,7 @@ export default function AnalyticsView() {
                           </div>
                         ))}
                         {detail != null &&
-                          detail.done.length === 0 &&
+                          detail.tasks.length === 0 &&
                           detail.fell.length === 0 &&
                           detail.dailyMissed.length === 0 && (
                             <div className="dd-empty">Nothing that day.</div>

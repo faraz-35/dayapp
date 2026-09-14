@@ -233,11 +233,11 @@ export const timersApi = {
 
 // ---- Journal dashboard ------------------------------------------------------
 // The Journal view's synthesized summary layer over `actions` (see
-// src-tauri/src/dashboard.rs): per-day done/missed across the range, a
-// completion heatmap window, and project/priority splits of completions.
-// Pure queries over the log — the same spine as everything else. No time
-// stats: sessions stay a dimension the Journal layers in, not dashboard
-// material.
+// src-tauri/src/dashboard.rs): the subject's counts per day across the range
+// (done or created — the page's toggle), a heatmap window, and
+// project/priority splits. Pure queries over the log — the same spine as
+// everything else. No time stats: sessions stay a dimension the Journal
+// layers in, not dashboard material.
 
 /** The analytics page's scope filter: which projects / priority tiers the
  * whole dashboard derives over (stats, heatmap, splits, ledger, day detail).
@@ -254,16 +254,21 @@ export interface DashboardFilter {
 /** The unfiltered scope — what the CLI and pre-filter callers see. */
 export const NO_SCOPE: DashboardFilter = { projects: null, priorities: null };
 
+/** What the analytics page counts: effective completions (done) or the
+ *  tasks that entered the list (created). Session-only, like the range. */
+export type DashboardSubject = "done" | "created";
+
 export interface DayStat {
   date: string; // YYYY-MM-DD
-  done: number;
+  /** The subject's count; the done-only miss fields are 0 in created mode. */
+  count: number;
   dailyMissed: number;
   todayMissed: number;
 }
 
 export interface HeatDay {
   date: string; // YYYY-MM-DD
-  done: number; // nonzero — absent days are 0
+  count: number; // nonzero — absent days are 0
 }
 
 /** One project's slice of the range's completions; `name: null` is the "no
@@ -286,33 +291,35 @@ export interface DashboardStats {
   projects: ProjectCount[];
   priorities: TierCount[];
   totals: {
-    done: number;
+    count: number;
     dailyMissed: number;
     todayMissed: number;
     /** Consecutive days with ≥1 completion, counting back from today; a live
-     *  today with nothing yet doesn't break it. */
+     *  today with nothing yet doesn't break it. Done-only (0 in created mode,
+     *  where the card hides). */
     streak: number;
   };
 }
 
 export const journalApi = {
   dashboard: (
-    opts: { since?: string; until?: string; filter?: DashboardFilter } = {},
+    opts: { since?: string; until?: string; filter?: DashboardFilter; subject: DashboardSubject } ,
   ) =>
     invoke<DashboardStats>("journal_dashboard", {
       since: opts.since ?? null,
       until: opts.until ?? null,
       filter: opts.filter ?? null,
+      subject: opts.subject,
     }),
   /** One day at task level — what the ledger's expanded row renders, scoped
-   * by the same filter as the dashboard. */
-  dayDetail: (date: string, filter: DashboardFilter = NO_SCOPE) =>
-    invoke<DayDetail>("journal_day_detail", { date, filter }),
+   *  by the same filter as the dashboard and lensed to the subject. */
+  dayDetail: (date: string, subject: DashboardSubject, filter: DashboardFilter = NO_SCOPE) =>
+    invoke<DayDetail>("journal_day_detail", { date, filter, subject }),
 };
 
-/** A task completed on the picked day (HH:MM of its effective completion,
- *  plus the day's tracked seconds for it). */
-export interface DoneTaskDetail {
+/** A task in the picked day's expansion — a completion (Done mode, with the
+ *  day's tracked seconds) or a creation (Created mode). */
+export interface TaskDetail {
   itemId: string;
   time: string;
   text: string;
@@ -329,9 +336,12 @@ export interface FellTaskDetail {
 
 export interface DayDetail {
   date: string;
-  done: DoneTaskDetail[];
+  /** The subject's rows (Done lens: effective completions; Created lens:
+   *  tasks created that day). */
+  tasks: TaskDetail[];
   fell: FellTaskDetail[];
-  /** Texts of habits the day ended without (empty for the live today). */
+  /** Texts of habits the day ended without (empty for the live today; empty
+   *  in created mode). */
   dailyMissed: string[];
 }
 
