@@ -1,5 +1,6 @@
 // HideMenu — minimal popover for picking a hide duration. Shared by item rows
-// and notes so both surfaces get the identical affordance.
+// and notes. `verb` carries the surface's word ("Hide", or "Pause" on Daily
+// rows — same mechanism, different name for a recurring habit).
 //
 // A ◐ trigger button opens a small anchored menu with the four durations. The
 // menu closes on selection, Escape, or an outside click. All pointer events
@@ -23,7 +24,7 @@ const OPTIONS: { id: HideDuration; label: string; sub: string }[] = [
   { id: "month", label: "For a month", sub: "until next month" },
 ];
 
-export default function HideMenu({ onHide, kb }: { onHide: (duration: HideDuration) => void; kb?: string }) {
+export default function HideMenu({ onHide, kb, verb = "Hide" }: { onHide: (duration: HideDuration) => void; kb?: string; verb?: "Hide" | "Pause" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -67,8 +68,8 @@ export default function HideMenu({ onHide, kb }: { onHide: (duration: HideDurati
           if (!open) trace("popover.open", { menu: "hide" });
           setOpen(!open);
         }}
-        title="Hide"
-        aria-label="Hide"
+        title={verb}
+        aria-label={verb}
         aria-expanded={open}
       >◐</button>
       {open && (
@@ -91,7 +92,7 @@ export default function HideMenu({ onHide, kb }: { onHide: (duration: HideDurati
               }}
             >
               <span className="hide-menu-label">{o.label}</span>
-              <span className="hide-menu-sub">{o.sub}</span>
+              <span className="hide-menu-sub">{o.id === "forever" && verb === "Pause" ? "until unpaused" : o.sub}</span>
             </button>
           ))}
         </div>

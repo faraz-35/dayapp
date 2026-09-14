@@ -41,10 +41,9 @@ const HEATMAP_LOOKBACK_DAYS: i64 = 380;
 // tracked time does NOT follow the filter (sessions carry no axes — Faraz's
 // call, 2026-08-25, the timer is barely used), and the daily-miss replay keys
 // habits' population off their CURRENT axes (assignments are unlogged —
-// "currently" is the best the log can say, the same call the hidden-item
-// exclusion makes) while their done-check reads the unfiltered completion set,
-// so a habit reassigned mid-history never reads as a phantom miss.
-
+// "currently" is the best the log can say) while their done-check reads the
+// unfiltered completion set, so a habit reassigned mid-history never reads as
+// a phantom miss.
 /// The IPC shape: each axis is None (unfiltered) or a selection of values,
 /// where a None *inside* the selection is the "no project" / "unmarked"
 /// bucket. The empty selection (Some(vec![])) matches nothing.
@@ -247,18 +246,20 @@ struct Effective {
 //
 // Section membership on a past day is reconstructed from the log itself
 // (created/moved/fell/deleted), so habits deleted long ago still count for
-// the days they existed. Currently hidden items are excluded throughout —
-// hide is unlogged, so "currently" is the best the log can say, and an
-// archived habit must not accrue misses forever. Shared by the range replay
-// in journal_dashboard and the single-day day_detail.
+// the days they existed. Pauses fold the same way (paused/unpaused actions —
+// the dated record of a hide): a habit paused on a day was never expected
+// that day, while the days before the pause keep their verdicts. Shared by
+// the range replay in journal_dashboard and the single-day day_detail.
 
-/// An item's standing in the replay: alive + current section, plus the latest
-/// text snapshot (for naming missed habits whose row is long gone) and the
-/// latest axes snapshot (the scope filter's fallback for deleted rows).
+/// An item's standing in the replay: alive + current section, whether the
+/// day being processed falls inside a logged pause, plus the latest text
+/// snapshot (for naming missed habits whose row is long gone) and the latest
+/// axes snapshot (the scope filter's fallback for deleted rows).
 #[derive(Default, Clone)]
 struct LiveItem {
     alive: bool,
     section: Option<String>,
+    paused: bool,
     text: String,
     project: Option<String>,
     priority: Option<i64>,
@@ -279,7 +280,7 @@ fn fetch_life_events(conn: &rusqlite::Connection) -> anyhow::Result<Vec<LifeEv>>
         "SELECT timestamp, item_id, action, to_section, item_text, project, priority
          FROM actions
          WHERE item_id IS NOT NULL
-           AND action IN ('created','moved','fell_to_backlog','deleted')
+           AND action IN ('created','moved','fell_to_backlog','deleted','paused','unpaused')
          ORDER BY timestamp, id",
     )?;
     let rows = stmt.query_map([], |r| {
@@ -300,16 +301,10 @@ fn fetch_life_events(conn: &rusqlite::Connection) -> anyhow::Result<Vec<LifeEv>>
     Ok(out)
 }
 
-fn fetch_hidden(conn: &rusqlite::Connection) -> anyhow::Result<HashSet<String>> {
-    let mut stmt = conn.prepare("SELECT id FROM items WHERE hidden = 1")?;
-    let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
-    Ok(rows.filter_map(|r| r.ok()).collect())
-}
-
 /// Current items' axes (project name + priority), for the daily-miss replay's
 /// population under a scope filter. Assignments are unlogged, so "currently"
-/// is the best the log can say — the same call the hidden exclusion makes.
-/// Deleted habits fall back to their folded life-event snapshots.
+/// is the best the log can say. Deleted habits fall back to their folded
+/// life-event snapshots.
 fn fetch_item_axes(
     conn: &rusqlite::Connection,
 ) -> anyhow::Result<HashMap<String, (Option<String>, Option<i64>)>> {
@@ -346,19 +341,20 @@ fn apply_life_event(live: &mut HashMap<String, LiveItem>, ev: &LifeEv) {
             slot.project = ev.project.clone();
             slot.priority = ev.priority;
         }
+        "paused" => slot.paused = true,
+        "unpaused" => slot.paused = false,
         "deleted" => slot.alive = false,
         _ => {}
     }
 }
 
-/// The day's missed-habit texts: alive daily items (hidden excluded) whose
-/// day ended without a daily completion. Under a scope filter, only habits
-/// whose axes match are in the population — a habit outside the filter is
-/// neither expected nor missed. Axes come from the live row when it still
+/// The day's missed-habit texts: alive daily items not inside a logged pause
+/// whose day ended without a daily completion. Under a scope filter, only
+/// habits whose axes match are in the population — a habit outside the filter
+/// is neither expected nor missed. Axes come from the live row when it still
 /// exists, else the folded life-event snapshot.
 fn daily_missed_texts(
     live: &HashMap<String, LiveItem>,
-    hidden: &HashSet<String>,
     done_daily: &HashSet<String>,
     axes: &HashMap<String, (Option<String>, Option<i64>)>,
     scope: &Scope,
@@ -371,7 +367,7 @@ fn daily_missed_texts(
                 .unwrap_or((it.project.clone(), it.priority));
             it.alive
                 && it.section.as_deref() == Some("daily")
-                && !hidden.contains(*id)
+                && !it.paused
                 && !done_daily.contains(id.as_str())
                 && scope.allows(&project, &priority)
         })
@@ -515,7 +511,6 @@ impl Db {
         // ---- Daily-miss replay ------------------------------------------------
         // The shared helpers above (see their docs for the semantics).
         let events = fetch_life_events(&conn)?;
-        let hidden = fetch_hidden(&conn)?;
         let axes = if scope.is_empty() {
             HashMap::new()
         } else {
@@ -576,7 +571,7 @@ impl Db {
                         .collect()
                 });
                 daily_missed =
-                    daily_missed_texts(&live, &hidden, &done_daily, &axes, &scope).len() as i64;
+                    daily_missed_texts(&live, &done_daily, &axes, &scope).len() as i64;
             }
             let today_missed = fell_by_day.get(&day).copied().unwrap_or(0);
 
@@ -765,7 +760,6 @@ impl Db {
                 }
                 apply_life_event(&mut live, ev);
             }
-            let hidden = fetch_hidden(&conn)?;
             let axes = if scope.is_empty() {
                 HashMap::new()
             } else {
@@ -776,8 +770,7 @@ impl Db {
                 .filter(|(_, sec)| sec.as_deref() == Some("daily"))
                 .map(|(id, _)| id.clone())
                 .collect();
-            daily_missed = daily_missed_texts(&live, &hidden, &done_daily, &axes, &scope);
-        }
+            daily_missed = daily_missed_texts(&live, &done_daily, &axes, &scope);        }
 
         Ok(DayDetail { date: date.to_string(), done, fell, daily_missed })
     }
@@ -1006,30 +999,52 @@ mod tests {
     }
 
     #[test]
-    fn hidden_habits_dont_accrue_misses() {
+    fn pauses_shape_the_miss_replay() {
         let (db, dir) = tmp_db();
         let a = db.create_item("habit a", "daily").unwrap();
         let b = db.create_item("habit b", "daily").unwrap();
+        // B's pause window: Jan 3 → Jan 5. The actions carry real timestamps;
+        // backdate them onto the replay's calendar like the created/completed.
         db.hide_item(&b.id, "forever").unwrap();
-        db.complete_item(&a.id).unwrap();
+        db.unhide_item(&b.id).unwrap();
         {
-            // Backdate: both habits existed from Jan 1, A completed Jan 2.
             let conn = db.conn.lock().unwrap();
             conn.execute(
                 "UPDATE actions SET timestamp = '2026-01-01T09:00:00' WHERE action = 'created'",
                 [],
             )
             .unwrap();
+            // A completes every day Jan 1–5, so B alone drives the miss counts.
+            for d in 1..=5 {
+                act(&conn, &a.id, "completed", Some("daily"), Some("daily"), None, None,
+                    &format!("2026-01-0{d}T10:00:00"));
+            }
             conn.execute(
-                "UPDATE actions SET timestamp = '2026-01-02T10:00:00' WHERE action = 'completed'",
+                "UPDATE actions SET timestamp = '2026-01-03T12:00:00' WHERE action = 'paused'",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE actions SET timestamp = '2026-01-05T12:00:00' WHERE action = 'unpaused'",
                 [],
             )
             .unwrap();
         }
-        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &ScopeFilter::default()).unwrap();
-        // B is hidden → outside the population → 0 missed (1 if it counted).
-        assert_eq!(s.days[0].daily_missed, 0);
-        assert_eq!(s.days[0].done, 1);
+        let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-06"), &ScopeFilter::default()).unwrap();
+        // Jan 1–2: B is alive, not paused, not done → missed (A is done).
+        assert_eq!(s.days[0].daily_missed, 1);
+        assert_eq!(s.days[1].daily_missed, 1);
+        assert_eq!(s.days[1].done, 1);
+        // Jan 3–4: B is paused — outside the population, never missed.
+        assert_eq!(s.days[2].daily_missed, 0);
+        assert_eq!(s.days[3].daily_missed, 0);
+        // Jan 5: the unpause lands mid-day — B is expected again and missed.
+        assert_eq!(s.days[4].daily_missed, 1);
+        // The single-day detail shares the replay: Jan 4 (paused) vs Jan 2.
+        let d4 = db.day_detail("2026-01-04", &ScopeFilter::default()).unwrap();
+        assert!(d4.daily_missed.is_empty());
+        let d2 = db.day_detail("2026-01-02", &ScopeFilter::default()).unwrap();
+        assert_eq!(d2.daily_missed, vec!["habit b".to_string()]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

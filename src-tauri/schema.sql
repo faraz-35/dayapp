@@ -46,8 +46,11 @@ CREATE INDEX IF NOT EXISTS idx_items_status  ON items(status);
 -- v2: goals log here too. Item rows set item_id; goal rows set goal_id — exactly
 -- one of the two (CHECK). Goal rows reuse the section columns for the horizon and
 -- the status columns for active/achieved, so the journal renders both uniformly.
--- DBs created before v2 are rebuilt once in db.rs migrate() (SQLite can't ALTER
--- a CHECK constraint or a NOT NULL).
+-- v3: paused/unpaused — the dated record of an item's hide (the daily-miss
+-- replay folds them to know which days a habit was paused, so paused days
+-- never count as missed while the days before the pause keep their verdicts).
+-- DBs created before a version are rebuilt once in db.rs migrate() (SQLite
+-- can't ALTER a CHECK constraint or a NOT NULL).
 CREATE TABLE IF NOT EXISTS actions (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id      TEXT,                                    -- FK→items.id; NULL on goal rows
@@ -55,7 +58,7 @@ CREATE TABLE IF NOT EXISTS actions (
     item_text    TEXT NOT NULL,                           -- subject text snapshot (item or goal)
     action       TEXT NOT NULL CHECK (action IN
                  ('created','completed','uncompleted','moved',
-                  'edited','deleted','fell_to_backlog',
+                  'edited','deleted','fell_to_backlog','paused','unpaused',
                   'goal_created','goal_achieved','goal_unachieved',
                   'goal_edited','goal_deleted')),
     from_section TEXT, to_section TEXT,

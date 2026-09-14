@@ -105,7 +105,9 @@ export default function ItemRow({
           onComplete();
         }}
         title={item.hidden
-          ? "Hidden — hover for ↺ unhide"
+          ? item.section === "daily"
+            ? "Paused — hover for ↺ unpause"
+            : "Hidden — hover for ↺ unhide"
           : done
             ? item.section === "today" ? "Completed — click to undo" : "Completed for today"
             : "Mark done"}
@@ -140,8 +142,10 @@ export default function ItemRow({
             <span
               className="hidden-chip"
               title={item.hiddenUntil
-                ? `Hidden until ${item.hiddenUntil}`
-                : "Hidden forever — hover for ↺ unhide"}
+                ? `${item.section === "daily" ? "Paused" : "Hidden"} until ${item.hiddenUntil}`
+                : item.section === "daily"
+                  ? "Paused forever — hover for ↺ unpause"
+                  : "Hidden forever — hover for ↺ unhide"}
             >
               ◐ {item.hiddenUntil ? `until ${formatReminder(item.hiddenUntil)}` : "forever"}
             </span>
@@ -215,8 +219,8 @@ export default function ItemRow({
                 className="item-action unhide-btn"
                 data-kb="4"
                 onClick={(e) => { e.stopPropagation(); onUnhide(); }}
-                title="Unhide"
-                aria-label="Unhide"
+                title={item.section === "daily" ? "Unpause" : "Unhide"}
+                aria-label={item.section === "daily" ? "Unpause" : "Unhide"}
               >↺</button>
               <button
                 className="item-action danger"
@@ -236,7 +240,7 @@ export default function ItemRow({
                 onCreateProject={onCreateProject}
               />
               <ReminderMenu kb="3" remindAt={item.remindAt} onSet={onSetReminder} />
-              <HideMenu kb="4" onHide={onHide} />
+              <HideMenu kb="4" onHide={onHide} verb={item.section === "daily" ? "Pause" : "Hide"} />
               <button
                 className={`item-action${detailsOpen ? " active" : ""}`}
                 data-kb="5"

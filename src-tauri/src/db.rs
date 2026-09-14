@@ -228,6 +228,76 @@ impl Db {
             let n = backfill_action_axes(conn)?;
             log::info!("migrate: snapshotted project/priority onto {n} action row(s)");
         }
+        // Actions v3: paused/unpaused — the dated record of an item's hide.
+        // The daily-miss replay folds them instead of reading the hidden flag
+        // (which can't say WHEN a pause started). Runs after the ensure_columns
+        // above so the rebuild copies every current column through. Detected
+        // off the stored CHECK: SQLite can't ALTER it, so the table is rebuilt
+        // once and the whole history copied.
+        let actions_exists = conn
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'actions'",
+                [], |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if actions_exists {
+            let sql: String = conn.query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'actions'",
+                [], |r| r.get(0),
+            )?;
+            if !sql.contains("'paused'") {
+                log::info!("migrate: rebuilding actions table to add pause logging");
+                let now = now_iso();
+                // Keep this definition in lockstep with schema.sql's `actions`.
+                let tx = conn.unchecked_transaction()?;
+                tx.execute_batch("
+                    CREATE TABLE actions_v3 (
+                        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                        item_id      TEXT,
+                        goal_id      TEXT,
+                        item_text    TEXT NOT NULL,
+                        action       TEXT NOT NULL CHECK (action IN
+                                      ('created','completed','uncompleted','moved',
+                                       'edited','deleted','fell_to_backlog','paused','unpaused',
+                                       'goal_created','goal_achieved','goal_unachieved',
+                                       'goal_edited','goal_deleted')),
+                        from_section TEXT, to_section TEXT,
+                        from_status  TEXT, to_status  TEXT,
+                        timestamp    TEXT NOT NULL,
+                        project      TEXT,
+                        priority     INTEGER,
+                        CHECK (item_id IS NOT NULL OR goal_id IS NOT NULL)
+                    );
+                    INSERT INTO actions_v3
+                        (id,item_id,goal_id,item_text,action,from_section,to_section,from_status,to_status,timestamp,project,priority)
+                    SELECT id,item_id,goal_id,item_text,action,from_section,to_section,from_status,to_status,timestamp,project,priority
+                    FROM actions;
+                    DROP TABLE actions;
+                    ALTER TABLE actions_v3 RENAME TO actions;
+                    CREATE INDEX IF NOT EXISTS idx_actions_ts     ON actions(timestamp);
+                    CREATE INDEX IF NOT EXISTS idx_actions_item   ON actions(item_id);
+                    CREATE INDEX IF NOT EXISTS idx_actions_action ON actions(action);
+                    CREATE INDEX IF NOT EXISTS idx_actions_goal   ON actions(goal_id);
+                ")?;
+                // Hides predating pause logging have no start date on record —
+                // stamp a paused action at migration time. Their past days keep
+                // their misses (the population before this point was never
+                // paused), and the missed count stops accruing from here.
+                let n = tx.execute(
+                    "INSERT INTO actions (item_id,item_text,action,to_section,timestamp,project,priority)
+                     SELECT id, text, 'paused', section, ?1,
+                            (SELECT p.name FROM projects p WHERE p.id = items.project_id),
+                            priority
+                     FROM items WHERE hidden = 1",
+                    params![now],
+                )?;
+                tx.commit()?;
+                if n > 0 {
+                    log::info!("migrate: logged paused for {n} hidden item(s)");
+                }
+            }
+        }
         // Consume token lines an earlier footer-storing build left in note
         // bodies (see notes.rs) — idempotent, so this is silent from the
         // second open on.
@@ -464,50 +534,76 @@ impl Db {
         Ok(tx.commit()?)
     }
 
-    // ---- Hide -------------------------------------------------------------
+    // ---- Pause (hide) -----------------------------------------------------
     //
     // Soft-archive: the row stays in `items` so it can be unhidden, but
     // `list()` filters hidden=0. `hidden_until` is NULL for "forever", else an
-    // ISO date at which `unhide_expired_items` (run by the midnight sweep) clears
-    // it. Deliberately not logged to `actions` — hide is housekeeping, not the
-    // meaningful activity the journal records.
+    // ISO date at which `unhide_expired_items` (run by the launch sweep) clears
+    // it. The hidden flag is the display mechanism; `paused`/`unpaused`
+    // actions are its dated record — the daily-miss replay folds them to know
+    // which days a habit was paused, so this IS logged to `actions` (unlike
+    // the other housekeeping writes).
 
-    /// Hide an item. `duration` is one of: forever | day | week | month.
+    /// Hide (pause) an item. `duration` is one of: forever | day | week | month.
     pub fn hide_item(&self, id: &str, duration: &str) -> anyhow::Result<()> {
         let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let hidden_until = hidden_until_for(duration);
-        conn.execute(
+        let tx = conn.unchecked_transaction()?;
+        let (text, section): (String, String) = tx.query_row(
+            "SELECT text, section FROM items WHERE id = ?1", params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)))?;
+        tx.execute(
             "UPDATE items SET hidden = 1, hidden_until = ?1, updated_at = ?2 WHERE id = ?3",
             params![hidden_until, now, id],
         )?;
-        Ok(())
+        log_action(&tx, id, &text, "paused", Some(&section), Some(&section), None, None, &now)?;
+        Ok(tx.commit()?)
     }
 
-    /// Unhide an item — clears both the flag and the expiry.
+    /// Unhide (unpause) an item — clears both the flag and the expiry.
     pub fn unhide_item(&self, id: &str) -> anyhow::Result<()> {
         let conn = self.conn.lock().unwrap();
         let now = now_iso();
-        conn.execute(
+        let tx = conn.unchecked_transaction()?;
+        let (text, section): (String, String) = tx.query_row(
+            "SELECT text, section FROM items WHERE id = ?1", params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)))?;
+        tx.execute(
             "UPDATE items SET hidden = 0, hidden_until = NULL, updated_at = ?1 WHERE id = ?2",
             params![now, id],
         )?;
-        Ok(())
+        log_action(&tx, id, &text, "unpaused", Some(&section), Some(&section), None, None, &now)?;
+        Ok(tx.commit()?)
     }
 
     /// Clear the hidden flag on any item whose time-limited hide has expired.
-    /// Called by the launch + 60s-tick sweep, so hides auto-restore at midnight
-    /// without a cron job. Idempotent. Returns the number of rows restored.
+    /// Called by the launch + 60s-tick sweep, so hides auto-restore at the day
+    /// boundary without a cron job. Each restore logs `unpaused` — the pause
+    /// window's close. Idempotent. Returns the number of rows restored.
     pub fn unhide_expired_items(&self) -> anyhow::Result<usize> {
         let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let today = today_iso();
-        let n = conn.execute(
-            "UPDATE items SET hidden = 0, hidden_until = NULL, updated_at = ?1
-             WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?2",
-            params![now, today],
-        )?;
-        Ok(n)
+        let tx = conn.unchecked_transaction()?;
+        let expiring: Vec<(String, String, String)> = {
+            let mut stmt = tx.prepare(
+                "SELECT id, text, section FROM items
+                 WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?1")?;
+            let rows = stmt.query_map(params![today], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+            })?;
+            rows.filter_map(|r| r.ok()).collect()
+        };
+        for (id, text, section) in &expiring {
+            tx.execute(
+                "UPDATE items SET hidden = 0, hidden_until = NULL, updated_at = ?1 WHERE id = ?2",
+                params![now, id],
+            )?;
+            log_action(&tx, id, text, "unpaused", Some(section), Some(section), None, None, &now)?;
+        }
+        tx.commit()?;
+        Ok(expiring.len())
     }
 
     /// Set (or clear) an item's reminder. `remind_at` is an ISO YYYY-MM-DD on
@@ -658,11 +754,26 @@ impl Db {
 
         // While we're already on the day boundary, clear any expired hides
         // (hidden_until <= today) for both items and notes — time-limited hides
-        // auto-restore here, no separate job.
-        tx.execute(
-            "UPDATE items SET hidden = 0, hidden_until = NULL, updated_at = ?1
-             WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?2",
-            params![now, today])?;
+        // auto-restore here, no separate job. Each item restore logs `unpaused`
+        // (the pause window's close); notes have no journal and stay unlogged.
+        {
+            let expiring: Vec<(String, String, String)> = {
+                let mut stmt = tx.prepare(
+                    "SELECT id, text, section FROM items
+                     WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?1")?;
+                let rows = stmt.query_map(params![today], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+                })?;
+                rows.filter_map(|r| r.ok()).collect()
+            };
+            for (id, text, section) in &expiring {
+                tx.execute(
+                    "UPDATE items SET hidden = 0, hidden_until = NULL, updated_at = ?1 WHERE id = ?2",
+                    params![now, id],
+                )?;
+                log_action(&tx, id, text, "unpaused", Some(section), Some(section), None, None, &now)?;
+            }
+        }
         tx.execute(
             "UPDATE notes SET hidden = 0, hidden_until = NULL, updated_at = ?1
              WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?2",

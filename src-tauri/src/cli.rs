@@ -350,6 +350,8 @@ fn verb(action: &str) -> &str {
         "edited" => "edited",
         "deleted" => "deleted",
         "fell_to_backlog" => "fell to backlog",
+        "paused" => "paused",
+        "unpaused" => "unpaused",
         "goal_created" => "set goal",
         "goal_achieved" => "achieved goal",
         "goal_unachieved" => "reopened goal",

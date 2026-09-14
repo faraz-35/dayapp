@@ -100,8 +100,11 @@ meta    key, value           — currently holds last_sweep_date
   always filtering `hidden = 0`; in `include` mode archived rows render inline in
   their sections (dimmed, ◐ expiry chip, ↺/× actions only, not draggable).
   `hidden_until` is NULL
-  (forever) or an ISO date cleared by the 6am-boundary sweep. Hide/unhide is **not** logged to
-  `actions` — it's housekeeping, not activity.
+  (forever) or an ISO date cleared by the 6am-boundary sweep. Hide/unhide IS logged —
+  as `paused`/`unpaused` actions (2026-09-14, Faraz's call): the flag is the display
+  mechanism, the log is its dated record, and the daily-miss replay folds them to know
+  which days a habit was paused. Daily rows say "Pause" (the word for a recurring
+  habit); every other surface keeps "Hide" — one mechanism, two names.
 - `project_id` — optional assignment to a `projects` row (housekeeping; **not** logged). Shown
   as a color-coded label on the far right of each item row (deterministic hue per project id).
   Deleting a project nulls the FK (items kept).
@@ -141,7 +144,7 @@ meta    key, value           — currently holds last_sweep_date
   send-to-Today button, `--move`) — a reminder's job is pulling the row into Today, done
   once the row has been pulled.
 - `actions.action` ∈ `created | completed | uncompleted | moved | edited | deleted | fell_to_backlog |
-  goal_created | goal_achieved | goal_unachieved | goal_edited | goal_deleted`
+  paused | unpaused | goal_created | goal_achieved | goal_unachieved | goal_edited | goal_deleted`
 - `actions` rows set exactly one subject: `item_id` on item rows, `goal_id` on goal rows
   (CHECK-enforced). On goal rows the section columns carry the horizon and the status
   columns carry active/achieved, so `--journal` renders both subjects uniformly.
@@ -1136,7 +1139,7 @@ into Notes or edit fields isn't hijacked.
   filtered history stays deletion-proof): done/streak/avg, heatmap intensities, splits,
   ledger counts, day-detail rows, and the miss replay — a habit outside the filter is
   neither expected nor missed (population = the habit's current axes, since assignments
-  are unlogged — the same "currently" call the hidden exclusion makes; the done-check
+  are unlogged — the one remaining "currently" call; the done-check
   reads the unfiltered completion set, so a reassigned habit never reads as a phantom
   miss). A split card whose axis is filtered hides (the filtered view already answers
   it — a card scoped to the selection would restate the filter while disagreeing with
@@ -1151,8 +1154,10 @@ into Notes or edit fields isn't hijacked.
   count, a re-completed misclick counts once), Avg/day (when the range spans >1 day),
   Streak (consecutive days with ≥1 completion; a live today with nothing yet doesn't
   break it), **Daily missed** (habits the day ended without — replayed from the log
-  itself, so deleted habits count for the days they existed; currently-hidden items are
-  excluded so an archived habit can't accrue misses forever; the current day never shows
+  itself, so deleted habits count for the days they existed; pauses fold in with the
+  habit: a `paused`/`unpaused` window's days are never missed, the days before the
+  pause keep their verdicts — visible even while the habit is paused now; the current
+  day never shows
   daily misses — a live day has no verdict), and **Today missed** (`fell_to_backlog` —
   the sweep's own record of a today task the day ended without).
 - **Activity**: the current month as a Monday-first calendar heatmap — one square per
@@ -1190,7 +1195,10 @@ into Notes or edit fields isn't hijacked.
 
 - Derivation lives in `src-tauri/src/dashboard.rs` (`journal_dashboard` +
   `journal_day_detail`, behind commands of the same names); the UI is `AnalyticsView.tsx`
-  (self-contained, the Notes/Goals pattern). The CLI's `--journal` prints the same
+  (self-contained, the Notes/Goals pattern). No caching: every render re-folds the
+  whole log — sub-millisecond at hundreds of rows; only revisit if the log ever grows
+  six figures (noted 2026-09-14, Faraz's efficiency question). The CLI's `--journal`
+  prints the same
   summary block ahead of the full raw log — the read surface mirrors the GUI, plus the
   log the GUI no longer shows.
 
