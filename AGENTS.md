@@ -224,16 +224,17 @@ capture-only, like the entry routes: an edit never re-routes a row — the drag 
 - `##j` → a **journal entry**: one line of reflection stamped with its day, rendered by the
   **Journal view** (its own page — see UI/UX). The action log stays the journal of *what was
   done*; this table is the journal of *what was thought*.
-- `##q` → a **quote**: rendered only by the quote modal (⌘P → Show a Quote) — its one
-  surface. For now quotes have **no management surface** (capture-only; no edit/delete
-  anywhere in the GUI).
+- `##q` → a **quote**: two surfaces, two jobs — the quote modal (⌘P → Show a Quote) is
+  the summoned *moment*, and the **Quotes view** (header `❝`) is the archive: every
+  capture, day-grouped, editable and deletable like journal entries (2026-09-14,
+  superseding the old capture-only rule).
 - `day` is the local date at capture; edits never move it (`created_at` keeps the within-day
   order, ULID text order breaking same-second ties). Entries have **no organising axes at
   all** — no priority, project, hide, or sort: just text and its day.
 - Entries are **content** (the notes/sessions call): never logged to `actions`, excluded
-  from the phone export, no CLI surface (the Journal view is their home). Logic lives in
-  `src-tauri/src/journal.rs`; the UI is `src/Journal.tsx` (view) + `src/Quotes.tsx`
-  (modal).
+  from the phone export, no CLI surface (the entry pages are their home). Logic lives in
+  `src-tauri/src/journal.rs`; the UI is `src/EntriesPage.tsx` (the two views) +
+  `src/Quotes.tsx` (modal).
 
 ### Projects (a second organising axis — NOT logged)
 
@@ -558,7 +559,7 @@ dayapp/
 │   ├── index.css                   ← the dark theme + all component styles
 │   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + token-caught tier groups + the ##j/##q capture router)
 │   ├── Goals.tsx                   ← goals: horizon groups + capture + achieve (own state; between Notes and the sections)
-│   ├── Journal.tsx                 ← the ##j page: day-grouped entries + capture + inline edit/delete (quotes never render here; self-contained, the Notes/Analytics pattern)
+│   ├── EntriesPage.tsx             ← the two entry pages (Journal ¶ / Quotes ❝): day-grouped entries + capture + inline edit/delete, one component parameterized by kind
 │   ├── Quotes.tsx                  ← the ##q moment: one quote on a dim backdrop, ⌘P-summoned or idle-screensavered (self-contained fetch + pick + linger; `version` prop is the refresh trigger)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
@@ -610,8 +611,8 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 |---|---|---|
 | `App.tsx` | state (incl. the active timer + the one focused thing), effects, the focus grammar key handler, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
 | `Goals.tsx` | goals state + capture + horizon groups + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
-| `Quotes.tsx` | the ##q moment: quote pool fetch, the modal's pick (no consecutive repeats), 45s linger (⌘P summons) / linger-until-input (screensaver opens) | capture (Notes' router adds quotes), the idle watcher (App's), quote management (none exists — capture-only) |
-| `Journal.tsx` | the Journal view: entries state, day groups, capture (plain = journal entry), inline edit/delete (self-contained; remounts per view switch; quotes filtered out) | the quote modal (Quotes.tsx), analytics (AnalyticsView) |
+| `Quotes.tsx` | the ##q moment: quote pool fetch, the modal's pick (no consecutive repeats), 45s linger (⌘P summons) / linger-until-input (screensaver opens) | capture (Notes' router adds quotes; the entry pages' captures too), the idle watcher (App's), the pool's archive (EntriesPage's Quotes view) |
+| `EntriesPage.tsx` | both entry views (kind prop): entries state, day groups, capture (plain = that page's kind; the opposite token routes), inline edit/delete (self-contained; remounts per view switch) | the quote modal (Quotes.tsx), analytics (AnalyticsView) |
 | `SectionList.tsx` | the task capture bus (##t/##d/##b route, default Today), `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
@@ -637,7 +638,7 @@ separately" bug.
 .app       display:flex column; height:100%; overflow:hidden   ← the shell, never scrolls
   .header  flex-shrink:0                                       ← pinned
   .scroll   flex:1; overflow-y:auto; min-height:0              ← THE ONE scroll container
-    Goals / Notes / SectionList / AnalyticsView / Journal ← in-flow, no own scroll
+    Goals / Notes / SectionList / AnalyticsView / EntriesPage ← in-flow, no own scroll
 ```
 
 `.notes`, `.goals`, `.sections`, `.analytics`, `.journal`, `.hidden-view` must **not** set `overflow`,
@@ -721,7 +722,7 @@ keyboard-first.** Every choice below is intentional.
 Typography: `-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif`.
 Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spacing.
 The serif surfaces are the centered header masthead (the "Live @ Faraz" brand, or
-"Analytics"/"Journal" in those views) and the quote modal's line: `ui-serif` (New York)
+"Analytics"/"Journal"/"Quotes" in those views) and the quote modal's line: `ui-serif` (New York)
 italic, Didot/Georgia fallbacks (14px for the masthead; the quote scales with the
 window — `clamp(19px, 2.5vw, 22px)`, line-height 1.75 — never above 22px,
 compact in the 480px frame). The brand
@@ -764,7 +765,7 @@ nothing colors either (the routed entry line is verbatim content), while the tas
 capture's `##t`/`##d`/`##b` only routes the destination so its item grammar keeps
 coloring past it; inline tokens in a note body never color
 (they never process there). Horizon words in the Goals surfaces are prose, not sigil
-tokens — they stay plain. Journal entry EDITS stay plain too (entries store
+tokens — they stay plain. Entry EDITS stay plain too (entries store
 verbatim); the details body has no grammar at all.
 
 **Token display forms (2026-08-29):** a recognized token doesn't just tint — it
@@ -1099,31 +1100,30 @@ into Notes or edit fields isn't hijacked.
   last-shown quote (the masthead rotation's rule, reused; session-only memory).
 - Source: `##q` captures (the notes bus) — never projects, never logged. The palette
   entries hide while the pool is empty (`quoteCount` rides up from `Quotes.tsx` — no
-  pool, nothing to summon). Not a layout toggle: Focus Mode and Show Default View don't
-  special-case it (a summoned moment isn't ambient chrome). It is quotes' **only**
-  surface — no management, no list anywhere (Faraz's call, 2026-08-25; capture-only
-  unchanged). Component is `Quotes.tsx` (self-contained fetch + pick + linger; App owns
-  the open boolean for the key-handler gate and bumps `version` on demo swaps and
-  `##q` captures).
+  pool, nothing to summon; the Quotes view is where the pool gets filled). Not a layout
+  toggle: Focus Mode and Show Default View don't special-case it (a summoned moment
+  isn't ambient chrome). The modal stays quotes' one *moment* — the browsing/editing
+  surface is the Quotes view (2026-09-14). Component is `Quotes.tsx` (self-contained
+  fetch + pick + linger; App owns the open boolean for the key-handler gate and bumps
+  `version` on demo swaps and `##q` captures).
 
-**Journal view (⌘P → View Journal, or the header `¶`):**
-- The written journal's own page — Analytics replaced the old journal view, so `##j`
-  entries get this one. The masthead reads `Journal`; the header button is a per-view
-  toggle like `≡` (the active view's button reads ✕ and returns to the list).
+**Journal & Quotes views (⌘P → View Journal / View Quotes, or the header `¶` / `❝`):**
+- The written word's two pages over `entries`, one per kind — Journal (##j) and Quotes
+  (##q). One component, `EntriesPage.tsx`, parameterized by kind: the masthead reads
+  `Journal`/`Quotes`, and each header button is a per-view toggle like `≡` (the active
+  view's button reads ✕ and returns to the list).
 - **Days ledger, prose edition**: days newest-first under uppercase day headers
   ("Today" / "Mon, Aug 24"), entries in capture order within a day. Rows are the
   `.item` language minus every axis an entry lacks (no grip/checkbox/bars): single-click
   edits inline (the shared `EditInput`), hover reveals × delete. Empty commit is a
   no-op; edits never move an entry's day.
-- **Capture at the top is the bus with a default**: plain lines land as today's journal
-  entries; a leading `##q` still routes to quotes from here. No placeholder — the
-  section-input language.
-- **Quotes never render here** (Faraz's call, 2026-08-25): the quote modal is their one
-  surface and they carry no management surface at all for now — the view filters them out
-  and shows journal entries only.
+- **Capture at the top is the bus with a default**: plain lines land as that page's
+  kind; the opposite token still routes from here (##q from the Journal page, ##j from
+  Quotes). No placeholder — the section-input language. A routed line renders on its
+  own page, not this one.
 - Mouse-first like Analytics: no focus-grammar wiring (free-mode `j`/`k` scrolling works
-  globally). Self-contained (`Journal.tsx`, the Notes pattern): remounts on every view
-  switch so it always renders fresh data; `reloadEpoch` covers demo-mode swaps.
+  globally). Self-contained (`EntriesPage.tsx`, the Notes pattern): remounts on every
+  view switch so it always renders fresh data; `reloadEpoch` covers demo-mode swaps.
 
 **Analytics view (⌘P → View Analytics, or the header `≡`):**
 - The analytics page is **synthesis, never the log**: it answers questions over the

@@ -1,17 +1,18 @@
-// Journal — the written journal's own view. Analytics owns the aggregates
-// over `actions`; this page owns the prose captured through the notes bus's
-// `##j` token (plus its own capture line, which defaults to a journal entry).
-// Days render newest-first with their entries in capture order underneath.
-// Quotes are NOT shown here — the ⌘P quote modal is their one surface, and
-// for now they have no management surface at all (the notes bar's ##q is the
-// natural way in; this view's capture still routes a ##q line too).
+// EntriesPage — the two written-word pages over the `entries` table, one per
+// kind: Journal (##j reflections) and Quotes (##q captures). Same page both
+// times: days newest-first under uppercase day headers, entries in capture
+// order, single-click to edit inline, hover reveals ×. The capture line is
+// the bus with a default — plain text lands as this page's kind, and the
+// opposite token still routes (##q from the Journal page, ##j from Quotes).
+// The quote modal (Quotes.tsx) stays the summoned moment; these pages are
+// the archive — the browsing and editing surface.
 //
 // Self-contained like Notes/Goals: own state, own API, re-fetches on mount
 // (every view switch remounts it) and on reloadEpoch (demo-mode swaps).
 // Mouse-first like Analytics — free-mode j/k scrolling works globally, but
 // the view has no focus-grammar wiring of its own. Rows are the `.item`
 // language minus every axis an entry doesn't have: no grip, no checkbox, no
-// bars — single-click edits inline (the shared EditInput), hover reveals ×.
+// bars.
 
 import { useEffect, useMemo, useState } from "react";
 import { entriesApi, parseEntryCapture, todayStr, type Entry, type EntryKind } from "./lib";
@@ -41,15 +42,19 @@ const dayLabel = (day: string, today: string) =>
         day: "numeric",
       });
 
-export default function Journal({
+export default function EntriesPage({
+  kind,
   reloadEpoch = 0,
   onQuotesChanged,
 }: {
+  /** Which of the two pages this is — the kind shown and the capture default. */
+  kind: EntryKind;
   reloadEpoch?: number;
-  /** Bumped up to App when a ##q capture routes from this view's capture
-   *  line, so the quote modal's pool re-fetches. */
+  /** Bumped up to App when a quote lands from this page's capture line (either
+   *  page can route one), so the quote modal's pool re-fetches. */
   onQuotesChanged?: () => void;
 }) {
+  const title = kind === "journal" ? "Journal" : "Quotes";
   const [entries, setEntries] = useState<Entry[]>([]);
   const [draft, setDraft] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -57,31 +62,31 @@ export default function Journal({
   useEffect(() => {
     entriesApi.list()
       .then((list) => setEntries(sortEntries(list)))
-      .catch((e) => log.error("journal load failed", e));
+      .catch((e) => log.error("entries load failed", e));
   }, [reloadEpoch]);
 
-  // Journal entries grouped by day in display order (the sort above already
-  // sequences them; this just draws the group boundaries). Quotes are filtered
-  // out — they render only in the rotating line, never here.
+  // This page's entries grouped by day in display order (the sort above
+  // already sequences them; this just draws the group boundaries). The other
+  // kind is filtered out — it renders on its own page.
   const days = useMemo(() => {
     const out: { day: string; entries: Entry[] }[] = [];
     for (const e of entries) {
-      if (e.kind !== "journal") continue;
+      if (e.kind !== kind) continue;
       const last = out[out.length - 1];
       if (last && last.day === e.day) last.entries.push(e);
       else out.push({ day: e.day, entries: [e] });
     }
     return out;
-  }, [entries]);
+  }, [entries, kind]);
 
   const today = todayStr(); // the app's day (6am→6am)
 
-  // The capture line is the bus with a default: plain text becomes a journal
-  // entry (this view's context), a leading ##q still routes to quotes.
+  // The capture line is the bus with a default: plain text becomes this
+  // page's kind, a leading token of either family still routes.
   const handleCapture = (raw: string) => {
-    const route = parseEntryCapture(raw) ?? { kind: "journal" as EntryKind, text: raw };
+    const route = parseEntryCapture(raw) ?? { kind, text: raw };
     if (!route.text) return;
-    trace("capture.entry", { kind: route.kind, text: clip(route.text), via: "journal" });
+    trace("capture.entry", { kind: route.kind, text: clip(route.text), via: title.toLowerCase() });
     entriesApi
       .add(route.kind, route.text)
       .then((e) => {
@@ -109,7 +114,7 @@ export default function Journal({
 
   const renderRow = (entry: Entry) => (
     <div
-      className="journal-row"
+      className="entry-row"
       key={entry.id}
       onClick={() => {
         if (editingId !== entry.id) {
@@ -121,7 +126,7 @@ export default function Journal({
       {editingId === entry.id ? (
         <EditInput initial={entry.text} onCommit={(text) => handleCommit(entry, text)} />
       ) : (
-        <span className="journal-text">{entry.text}</span>
+        <span className="entry-text">{entry.text}</span>
       )}
       <button
         className="item-action danger"
@@ -136,16 +141,16 @@ export default function Journal({
   );
 
   return (
-    <section className="journal">
+    <section className="entry-page">
       <div className="section-head">
-        <span className="section-name">Journal</span>
+        <span className="section-name">{title}</span>
       </div>
 
-      {/* The bus's home capture: plain lines land as today's entries. The
+      {/* The bus's home capture: plain lines land as this page's kind. The
           input itself is the affordance — no placeholder, the section
-          language. Only the ##q route colors here: past it (and everywhere
-          else) this line is verbatim prose — nothing else processes, so
-          nothing else colors. */}
+          language. Only the ##j/##q routes color here: past them (and
+          everywhere else) this line is verbatim prose — nothing else
+          processes, so nothing else colors. */}
       <div className="capture">
         <TokenField
           kinds={["entry"]}
@@ -169,13 +174,14 @@ export default function Journal({
       </div>
 
       {days.length === 0 && (
-        <div className="journal-empty">
-          No entries yet — write above, or type <code>##j</code> in Notes from the list view.
+        <div className="entry-empty">
+          No {kind === "journal" ? "entries" : "quotes"} yet — write above, or type{" "}
+          <code>##{kind === "journal" ? "j" : "q"}</code> in Notes from the list view.
         </div>
       )}
       {days.map((d) => (
         <div key={d.day}>
-          <div className="journal-day">{dayLabel(d.day, today)}</div>
+          <div className="entry-day">{dayLabel(d.day, today)}</div>
           {d.entries.map(renderRow)}
         </div>
       ))}

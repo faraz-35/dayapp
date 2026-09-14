@@ -346,10 +346,10 @@ function Chevron({ up }: { up?: boolean }) {
 // Controlled input that commits on Enter/blur, cancels on Escape.
 // Focus lands at the end of the text (not a full select) so a click-to-edit
 // appends naturally, like the notes textareas. Shared with Goals.tsx and
-// Journal.tsx. With `kinds` set it renders as a TokenField so the edit colors
-// the tokens its commit will parse (task edits carry the full grammar, goal
-// edits the #tag); without it, the plain input — the surface parses nothing
-// (Journal entries are stored verbatim).
+// EntriesPage.tsx. With `kinds` set it renders as a TokenField so the edit
+// colors the tokens its commit will parse (task edits carry the full grammar,
+// goal edits the #tag); without it, the plain input — the surface parses
+// nothing (entry edits are stored verbatim).
 export function EditInput({ initial, onCommit, kinds }: {
   initial: string;
   onCommit: (text: string) => void;

@@ -14,7 +14,7 @@ import { clip, devlogActive, devlogStart, devlogStop, trace } from "./devlog";
 import Notes from "./Notes";
 import Goals from "./Goals";
 import Quotes from "./Quotes";
-import Journal from "./Journal";
+import EntriesPage from "./EntriesPage";
 import SectionList from "./components/SectionList";
 import AnalyticsView from "./AnalyticsView";
 import CommandPalette, { type Command } from "./CommandPalette";
@@ -25,7 +25,7 @@ import MobileSyncSettings from "./MobileSyncSettings";
 import KeyboardHelp from "./KeyboardHelp";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, popoverOpen, scrollIntoViewEl } from "./focusNav";
 
-type View = "list" | "analytics" | "journal";
+type View = "list" | "analytics" | "journal" | "quotes";
 
 // Labels for the per-section ⌘P toggles (Show/Hide Today, …).
 const SECTION_LABELS: Record<Section, string> = {
@@ -241,8 +241,8 @@ function DayApp() {
     setQuoteIdle(false);
   }, []);
   // The quote pool's refresh trigger: bumped on demo-mode swaps and whenever
-  // a ##q capture lands (Notes' onEntryRouted) or a quote changes in the
-  // Journal view. Quotes.tsx re-fetches on it — no polling.
+  // a ##q capture lands (Notes' onEntryRouted) or a quote is captured from
+  // one of the entry pages. Quotes.tsx re-fetches on it — no polling.
   const [quotesVersion, setQuotesVersion] = useState(0);
   // ⌘F "@agent/my" — narrow the list to the agent's tasks or Faraz's own;
   // null = off. Session-only like the project filter (a search-shaped focus).
@@ -634,9 +634,8 @@ function DayApp() {
     // (rarity is what gives it weight; the old always-on line became
     // wallpaper). Sits second in the palette, where the line's Show/Hide
     // toggle lived, so the ⌘P muscle memory finds it — and it's on the first
-    // screen, not buried below the fold. Hidden while the pool is empty:
-    // quotes have no management surface, so an empty pool means nothing to
-    // summon.
+    // screen, not buried below the fold. Hidden while the pool is empty —
+    // nothing to summon; the Quotes page (❝) is where the pool gets filled.
     ...(quoteCount > 0 ? [
       {
         id: "show-quote",
@@ -830,6 +829,7 @@ function DayApp() {
     ]),
     { id: "view-analytics", label: "View Analytics", run: () => setView("analytics") },
     { id: "view-journal", label: "View Journal", run: () => setView("journal") },
+    { id: "view-quotes", label: "View Quotes", run: () => setView("quotes") },
     {
       id: "keyboard-help",
       label: "Keyboard Shortcuts",
@@ -915,8 +915,8 @@ function DayApp() {
 
   // Notes reports a ##j/##q capture it routed to the entries table. Only
   // quotes matter here — they're the entry kind App surfaces (the quote
-  // modal), so its pool re-fetches; journal entries belong to the Journal
-  // view, which fetches fresh on every mount.
+  // modal), so its pool re-fetches; both entry pages fetch fresh on every
+  // mount.
   const handleEntryRouted = useCallback((kind: EntryKind) => {
     if (kind === "quote") setQuotesVersion((n) => n + 1);
   }, []);
@@ -1559,7 +1559,7 @@ function DayApp() {
             view while the disposable demo db is active — the one unmissable
             (but calm) signal of which data is on screen. */}
         <span className="title" key={demoMode ? "demo" : view === "list" ? liveAt : view}>
-          {demoMode ? "Live @ Demo" : view === "analytics" ? "Analytics" : view === "journal" ? "Journal" : `Live @ ${liveAt}`}
+          {demoMode ? "Live @ Demo" : view === "analytics" ? "Analytics" : view === "journal" ? "Journal" : view === "quotes" ? "Quotes" : `Live @ ${liveAt}`}
         </span>
         <div className="header-right">
           {/* The running timer is always visible here — survives scrolling away
@@ -1624,6 +1624,21 @@ function DayApp() {
             aria-label="Toggle journal"
           >
             {view === "journal" ? "✕" : "¶"}
+          </button>
+          {/* ❝ — the Quotes view's door (the ##q pool, browsed and edited;
+              the modal keeps the summoned moment). Same per-button toggle:
+              the active view's button reads ✕ and returns to the list. */}
+          <button
+            className={`icon-btn ${view === "quotes" ? "active" : ""}`}
+            onClick={() => {
+              const next = view === "quotes" ? "list" : "quotes";
+              trace("view.switch", { view: next });
+              setView(next);
+            }}
+            title={view === "quotes" ? "Back to list" : "View quotes"}
+            aria-label="Toggle quotes"
+          >
+            {view === "quotes" ? "✕" : "❝"}
           </button>
         </div>
       </header>
@@ -1715,11 +1730,13 @@ function DayApp() {
           </>
         ) : view === "analytics" ? (
           <AnalyticsView />
+        ) : view === "journal" ? (
+          /* The two entry pages (##j reflections, ##q quotes) — one component,
+             one kind each. Self-contained like Notes; remount on every view
+             switch, so they always render fresh data. */
+          <EntriesPage kind="journal" reloadEpoch={dataEpoch} onQuotesChanged={() => setQuotesVersion((n) => n + 1)} />
         ) : (
-          /* The written journal's own page (##j entries + the Quotes group).
-             Self-contained like Notes; remounts on every view switch, so it
-             always renders fresh data. */
-          <Journal reloadEpoch={dataEpoch} onQuotesChanged={() => setQuotesVersion((n) => n + 1)} />
+          <EntriesPage kind="quote" reloadEpoch={dataEpoch} onQuotesChanged={() => setQuotesVersion((n) => n + 1)} />
         )}
       </div>
 

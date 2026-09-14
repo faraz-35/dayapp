@@ -21,7 +21,8 @@
 // trigger — `version` bumps on demo-mode swaps and whenever a ##q capture
 // lands, so the pool is always current without polling. The pool size rides
 // `onCount` up to App so the ⌘P entries can hide while there's nothing to
-// summon (quotes have no management surface — no pool, no entries).
+// summon. The pool's archive lives on the Quotes page (❝ — EntriesPage.tsx);
+// this modal stays the moment, not the list.
 
 import { useEffect, useRef, useState } from "react";
 import { entriesApi, type Entry } from "./lib";

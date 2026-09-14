@@ -1689,18 +1689,19 @@ button {
   animation: title-in 0.35s ease;
 }
 
-/* ---- Journal view (the ##j page) ------------------------------------------ */
-/* The written journal's own view: days newest-first, entries in capture
-   order, single-click to edit inline, hover reveals ×. In-flow block like
-   .notes/.goals — .scroll owns scroll. Rows are the .item language minus
-   every axis an entry doesn't have (no grip, no checkbox, no bars). */
+/* ---- Entry pages (Journal ¶ + Quotes ❝) ----------------------------------- */
+/* The written word's two views over `entries`, one per kind: days
+   newest-first, entries in capture order, single-click to edit inline, hover
+   reveals ×. In-flow blocks like .notes/.goals — .scroll owns scroll. Rows
+   are the .item language minus every axis an entry doesn't have (no grip, no
+   checkbox, no bars). */
 
-.journal {
+.entry-page {
   padding: 8px 8px 0;
 }
 
 /* Day header — the section-name language, but marking a day, not a section. */
-.journal-day {
+.entry-day {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -1709,7 +1710,7 @@ button {
   margin: 14px 8px 2px;
 }
 
-.journal-row {
+.entry-row {
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -1718,11 +1719,11 @@ button {
   cursor: default;
   transition: background 0.08s ease;
 }
-.journal-row:hover { background: var(--bg-hover); }
+.entry-row:hover { background: var(--bg-hover); }
 
 /* Primary content, full strength — entries ARE the page. pre-wrap so a
    multi-line capture keeps its shape; word-break for long unbroken lines. */
-.journal-text {
+.entry-text {
   flex: 1;
   font-size: 13px;
   color: var(--text);
@@ -1731,21 +1732,21 @@ button {
   min-width: 0;
 }
 
-/* The × inherits .item-action's hover-reveal shape; journal rows aren't
+/* The × inherits .item-action's hover-reveal shape; entry rows aren't
    .item, so the reveal rides this row's own hover. Baseline-aligned with the
    text (align-items above), not centered — a one-line row reads cleaner. */
-.journal-row .item-action { opacity: 0; align-self: center; }
-.journal-row:hover .item-action { opacity: 1; }
+.entry-row .item-action { opacity: 0; align-self: center; }
+.entry-row:hover .item-action { opacity: 1; }
 
 /* The inline editor takes the text's exact slot so the row doesn't shift. */
-.journal-row .item-edit { flex: 1; min-width: 0; }
+.entry-row .item-edit { flex: 1; min-width: 0; }
 
-.journal-empty {
+.entry-empty {
   color: var(--text-faint);
   font-size: 13px;
   padding: 14px 8px;
 }
-.journal-empty code {
+.entry-empty code {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 12px;
   color: var(--text-dim);

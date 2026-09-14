@@ -109,9 +109,9 @@ export const projectsApi = {
 // ---- Entries (the ##j/##q typed capture) -----------------------------------
 // The notes bus's other destination: a leading `##j`/`##q` token in the Notes
 // capture bar routes the line to the `entries` table instead of creating a
-// note — a journal entry (rendered by the Journal view) or a quote (rendered
-// by the rotating line under the header). Content like notes: never logged to
-// `actions`. See src-tauri/src/journal.rs.
+// note — a journal entry or a quote, each with its own page (EntriesPage.tsx;
+// quotes also surface through the ⌘P quote modal). Content like notes: never
+// logged to `actions`. See src-tauri/src/journal.rs.
 
 export type EntryKind = "journal" | "quote";
 
