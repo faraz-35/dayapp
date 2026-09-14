@@ -201,44 +201,28 @@ function DayApp() {
   const [agentTasksVisible, setAgentTasksVisible] = useState(
     () => localStorage.getItem("dayapp-agent-tasks-visible") !== "0",
   );
-  // ⌘P "Enable/Disable Quote Screensaver" — two minutes of focused stillness
-  // summons the quote modal (the idle watcher below). Persisted like the
-  // layout toggles; default on. With an empty pool it can't fire, and the
-  // palette entry hides alongside "Show a Quote".
-  const [quoteScreensaver, setQuoteScreensaver] = useState(
-    () => localStorage.getItem("dayapp-quote-screensaver") !== "0",
-  );
-  // The quote moment (⌘P → Show a Quote, or the idle screensaver below): App
-  // owns the open boolean (the floating-surface gate in the key handler needs
-  // it) and the pool size (reported up from Quotes so the palette entries
-  // hide while empty). Quotes.tsx owns the rest — pick, linger, dismissal.
+  // The quote screensaver — two minutes of focused stillness summons the
+  // quote modal (the idle watcher below). Default on; no palette entry since
+  // 2026-09-15 — `dayapp-quote-screensaver=0` in localStorage is the off
+  // switch, read once at mount. With an empty pool it can't fire.
+  const quoteScreensaver = localStorage.getItem("dayapp-quote-screensaver") !== "0";
+  // The quote moment: App owns the open boolean (the floating-surface gate in
+  // the key handler needs it) and the pool size (Quotes reports it up; the
+  // idle watcher won't fire on an empty pool). Quotes.tsx owns the rest —
+  // pick, dismissal. Its only open path is the screensaver now: the deliberate
+  // surface is the Quotes page (❝ / ⌘P → View Quotes).
   const [quoteOpen, setQuoteOpen] = useState(false);
-  // Whether the open modal arrived by stillness rather than ⌘P — a
-  // screensaver open lingers until input instead of LINGER_MS.
-  const [quoteIdle, setQuoteIdle] = useState(false);
-  // When the modal was summoned (epoch ms). The keystroke that RUNS the
-  // palette command also bubbles on to the window key handler a moment later
-  // — by then quoteOpen has committed true, so without a grace window the
-  // summoning Enter/click dismisses the modal it just opened (born and killed
-  // in one event; the "modal never appears" bug).
-  const quoteOpenedAt = useRef(0);
   // Ref mirror for handlers whose closures don't track the state (the meta-key
   // effect runs once) — a quote-open check at key time, not mount time.
   const quoteOpenRef = useRef(false);
   quoteOpenRef.current = quoteOpen;
-  const openQuote = useCallback((idle = false) => {
-    quoteOpenedAt.current = Date.now();
-    trace("quote.open", { via: idle ? "screensaver" : "palette" });
-    setQuoteIdle(idle);
+  const openQuote = useCallback(() => {
+    trace("quote.open", { via: "screensaver" });
     setQuoteOpen(true);
   }, []);
   const [quoteCount, setQuoteCount] = useState(0);
-  // Stable identity: Quotes' linger timer depends on onClose, and App
-  // re-renders every second while a timer runs — an inline arrow would reset
-  // the 45s clock on each tick.
   const closeQuote = useCallback(() => {
     setQuoteOpen(false);
-    setQuoteIdle(false);
   }, []);
   // The quote pool's refresh trigger: bumped on demo-mode swaps and whenever
   // a ##q capture lands (Notes' onEntryRouted) or a quote is captured from
@@ -435,12 +419,13 @@ function DayApp() {
     localStorage.setItem("dayapp-focus-mode", focusMode ? "1" : "0");
     localStorage.setItem("dayapp-fun-mode", funMode ? "1" : "0");
     localStorage.setItem("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
-    localStorage.setItem("dayapp-quote-screensaver", quoteScreensaver ? "1" : "0");
     // Retired keys: the single-tier "only" filter era, and the rotating
-    // quote line the modal replaced — one-time cleanups.
+    // quote line the modal replaced — one-time cleanups. (The quote
+    // screensaver's key stays lookup-only since its palette toggle retired:
+    // it's read at mount, never rewritten.)
     localStorage.removeItem("dayapp-priority");
     localStorage.removeItem("dayapp-quotes-visible");
-  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, quoteScreensaver]);
+  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -492,7 +477,7 @@ function DayApp() {
         !document.hasFocus() ||
         Date.now() - lastInputAt.current < SCREENSAVER_IDLE_MS
       ) return;
-      openQuote(true);
+      openQuote();
     }, 5_000);
     return () => clearInterval(id);
   }, [quoteScreensaver, quoteOpen, quoteCount, paletteOpen, searchOpen, helpOpen, syncSettingsOpen, updateStatus, openQuote]);
@@ -630,29 +615,10 @@ function DayApp() {
         setGoalsVisible(false);
       },
     },
-    // The ##q moment — one quote on a dim backdrop, deliberately summoned
-    // (rarity is what gives it weight; the old always-on line became
-    // wallpaper). Sits second in the palette, where the line's Show/Hide
-    // toggle lived, so the ⌘P muscle memory finds it — and it's on the first
-    // screen, not buried below the fold. Hidden while the pool is empty —
-    // nothing to summon; the Quotes page (❝) is where the pool gets filled.
-    ...(quoteCount > 0 ? [
-      {
-        id: "show-quote",
-        label: "Show a Quote",
-        hint: "a moment with one of your ##q captures",
-        run: () => openQuote(),
-      },
-      {
-        // The idle twin: 2 minutes of focused stillness and a quote comes to
-        // you, lingering until any key or click. Hides with the empty pool
-        // like Show a Quote — nothing to show, nothing to toggle.
-        id: "quote-screensaver",
-        label: quoteScreensaver ? "Disable Quote Screensaver" : "Enable Quote Screensaver",
-        hint: "after 2 min of stillness, while focused",
-        run: () => setQuoteScreensaver((v) => !v),
-      },
-    ] : []),
+    // The ##q moment has no palette door anymore (2026-09-15): the Quotes
+    // page (❝ / View Quotes) is the deliberate surface, the screensaver the
+    // idle one. Both entries — Show a Quote and the screensaver toggle —
+    // retired; the watcher below carries the whole feature.
     {
       id: "toggle-goals",
       label: goalsVisible ? "Hide Goals" : "Show Goals",
@@ -842,7 +808,7 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, quoteScreensaver, quoteCount, demoMode, devlogOn]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, demoMode, devlogOn]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1410,11 +1376,9 @@ function DayApp() {
       if (quoteOpen) {
         pendingAddr.current = "";
         // Bare modifier chords are prefixes (⌘P/⌘F still work via their own
-        // listener), and the first moments belong to the summoning event's
-        // own tail — neither dismisses. Every other key does.
+        // listener) and don't dismiss. Every other key does.
         const chordPrefix = e.metaKey || e.ctrlKey || e.altKey || e.key === "Shift";
-        const isSummonTail = Date.now() - quoteOpenedAt.current <= 250;
-        if (!chordPrefix && !isSummonTail) {
+        if (!chordPrefix) {
           e.preventDefault();
           setQuoteOpen(false);
         }
@@ -1760,14 +1724,13 @@ function DayApp() {
         commands={commands}
         onClose={() => setPaletteOpen(false)}
       />
-      {/* The quote moment (⌘P → Show a Quote, or the idle screensaver) — a
-          floating surface like the palette: dim backdrop, centered serif
-          italic, never inline. App owns the open flag (the key-handler gate);
-          Quotes owns pick + linger. */}
+      {/* The quote moment — a floating surface like the palette: dim backdrop,
+          centered serif italic, never inline. Its only open path is the
+          screensaver; the deliberate surface is the Quotes page. App owns the
+          open flag (the key-handler gate); Quotes owns pick + dismissal. */}
       <Quotes
         version={quotesVersion}
         open={quoteOpen}
-        lingerForever={quoteIdle}
         funMode={funMode}
         onClose={closeQuote}
         onCount={setQuoteCount}

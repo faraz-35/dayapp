@@ -38,7 +38,7 @@ A dashboard built from the log: done / streak / missed stats, a month heatmap, p
 
 ## Journal & quotes
 
-`##j` in the capture bar writes a journal entry (rendered in the `¶` view); `##q` saves a quote. Quotes show one at a time on a dim backdrop (⌘P → Show a Quote), double as a screensaver after two idle minutes, and live in their own `❝` view — every capture, editable and deletable. The task capture routes the same way: `##t` / `##d` / `##b` send a line to Today / Daily / Backlog.
+`##j` in the capture bar writes a journal entry (rendered in the `¶` view); `##q` saves a quote. Quotes live in their own `❝` view — every capture, editable and deletable — and after two idle minutes one of them fills the screen on a dim backdrop; any key or click sends it away. The task capture routes the same way: `##t` / `##d` / `##b` send a line to Today / Daily / Backlog.
 
 ## Notes
 

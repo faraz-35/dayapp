@@ -1646,7 +1646,7 @@ button {
   flex-shrink: 0;
 }
 
-/* ---- Quote modal (⌘P → Show a Quote) ------------------------------------ */
+/* ---- Quote modal (the screensaver's moment) --- */
 /* The ##q moment: one quote on a dim backdrop, nothing else — no card, no
    close button, no countdown chrome. The backdrop is what creates the pause
    (it dims the task list the way an inline line never could); the quote

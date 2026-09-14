@@ -224,10 +224,10 @@ capture-only, like the entry routes: an edit never re-routes a row — the drag 
 - `##j` → a **journal entry**: one line of reflection stamped with its day, rendered by the
   **Journal view** (its own page — see UI/UX). The action log stays the journal of *what was
   done*; this table is the journal of *what was thought*.
-- `##q` → a **quote**: two surfaces, two jobs — the quote modal (⌘P → Show a Quote) is
-  the summoned *moment*, and the **Quotes view** (header `❝`) is the archive: every
-  capture, day-grouped, editable and deletable like journal entries (2026-09-14,
-  superseding the old capture-only rule).
+- `##q` → a **quote**: two surfaces, two jobs — the quote modal
+  (screensaver-summoned) is the summoned *moment*, and the **Quotes view** (header
+  `❝`) is the archive: every capture, day-grouped, editable and deletable like
+  journal entries (2026-09-14, superseding the old capture-only rule).
 - `day` is the local date at capture; edits never move it (`created_at` keeps the within-day
   order, ULID text order breaking same-second ties). Entries have **no organising axes at
   all** — no priority, project, hide, or sort: just text and its day.
@@ -560,7 +560,7 @@ dayapp/
 │   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + token-caught tier groups + the ##j/##q capture router)
 │   ├── Goals.tsx                   ← goals: horizon groups + capture + achieve (own state; between Notes and the sections)
 │   ├── EntriesPage.tsx             ← the two entry pages (Journal ¶ / Quotes ❝): day-grouped entries + capture + inline edit/delete, one component parameterized by kind
-│   ├── Quotes.tsx                  ← the ##q moment: one quote on a dim backdrop, ⌘P-summoned or idle-screensavered (self-contained fetch + pick + linger; `version` prop is the refresh trigger)
+│   ├── Quotes.tsx                  ← the ##q moment: one quote on a dim backdrop, screensaver-summoned (self-contained fetch + pick; `version` prop is the refresh trigger)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
@@ -611,7 +611,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 |---|---|---|
 | `App.tsx` | state (incl. the active timer + the one focused thing), effects, the focus grammar key handler, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
 | `Goals.tsx` | goals state + capture + horizon groups + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
-| `Quotes.tsx` | the ##q moment: quote pool fetch, the modal's pick (no consecutive repeats), 45s linger (⌘P summons) / linger-until-input (screensaver opens) | capture (Notes' router adds quotes; the entry pages' captures too), the idle watcher (App's), the pool's archive (EntriesPage's Quotes view) |
+| `Quotes.tsx` | the ##q moment: quote pool fetch, the modal's pick (no consecutive repeats); every open is screensaver-born and lingers until input — no self-timer | capture (Notes' router adds quotes; the entry pages' captures too), the idle watcher (App's), the pool's archive (EntriesPage's Quotes view) |
 | `EntriesPage.tsx` | both entry views (kind prop): entries state, day groups, capture (plain = that page's kind; the opposite token routes), inline edit/delete (self-contained; remounts per view switch) | the quote modal (Quotes.tsx), analytics (AnalyticsView) |
 | `SectionList.tsx` | the task capture bus (##t/##d/##b route, default Today), `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
@@ -1054,57 +1054,55 @@ into Notes or edit fields isn't hijacked.
   `ProjectMenu` items use. ⌘P → Show/Hide Goals toggles the whole section (persisted).
   Every mutation is logged to `actions` (goal_* values) — see the data model.
 
-**Quote modal (⌘P → Show a Quote):**
+**Quote modal (the screensaver's moment):**
 - One quote at a time on a dim, blurred backdrop (`rgba(0,0,0,0.65)` +
   `backdrop-filter: blur(12px)`, deeper than the palette's 0.4 — the dim *is* the
   pause) — a single centered serif-italic line, ~75% width,
   multi-line wrap (never ellipsized), no card, no close button, no countdown chrome.
   The backdrop is what creates the "think about this" moment; an inline line can't.
   Static filter only — same never-animate-the-fixed-backdrop rule as below.
-- **Summoned, never ambient.** The rotating quote line under the header (shipped
+- **Arrives only in absence.** The rotating quote line under the header (shipped
   2026-08-25, retired 2026-08-26) failed because a quote always in view becomes
-  wallpaper — rarity plus deliberate invocation is what gives a quote weight. An
-  uninvited modal is a push notification — it interrupts presence and trains
-  reflex-dismissal. There is **no timed/wall-clock version**, with exactly one
-  carve-out: the **quote screensaver** (next bullet), which arrives only in
-  *absence* and so never interrupts. If any other cadence is ever wanted, anchor
-  to interaction (app regaining visibility after ≥N hours — the daily-reset's
-  render-time-comparison idiom), never wall-clock — and still never as a modal.
-- **The quote screensaver (⌘P → Enable/Disable, default on, persisted
-  `dayapp-quote-screensaver`):** two minutes of focused stillness summons the same
-  modal unprompted. The idle clock runs only while the window is focused — away
-  time never counts (Faraz's call, 2026-08-26: it's for sitting with the app, not
-  having left it; `blur` restarts the clock, `document.hasFocus()` gates the
-  trigger) — and only real user input resets it: keys, clicks, pointer movement,
-  scrolling. App-driven re-renders (the timer's 1s tick, the 60s sweep, the
-  masthead rotation) deliberately don't — DOM churn is not attention. Screensaver
-  opens **linger until input** instead of `LINGER_MS` (a screensaver that dismisses
-  itself back into blank idleness defeats itself — one quote per idle stretch, and
-  the input that wakes it restarts the 2-min clock). The waking keystroke is
-  already consumed by the dismissal handler's `preventDefault`, so it can't also
-  type into whatever sat beneath. Gates: pool non-empty (the toggle hides with
-  "Show a Quote" while it is) and no other floating surface open. The watcher
-  lives in `App.tsx` (event bumpers + a 5s check); `Quotes.tsx` only learns the
-  open is idle-born through `lingerForever`.
-- Dismissal: any key (beyond a bare modifier chord — ⌘P/⌘F still work, their listener
-  closes the modal) or any click ends it instantly; after ~45s (`LINGER_MS`) a ⌘P
-  summon dismisses itself — the duration is a default, not a rule. Two WKWebView-era
-  rules
-  learned the hard way (the "modal never appears" bug, 2026-08-26): **the summoning
-  keystroke must not double as its dismissal** (React commits `quoteOpen=true`
-  synchronously during the palette's Enter handling, so the tail of that same event
-  reaches the window handler with the fresh state — `quoteOpenedAt`'s 250ms grace
-  window skips it), and **never animate the fixed full-screen backdrop** (the
-  compositor left an animated fixed layer stuck at the `from { opacity: 0 }` frame —
-  it never painted; only the quote text fades in). The pick never repeats the
-  last-shown quote (the masthead rotation's rule, reused; session-only memory).
-- Source: `##q` captures (the notes bus) — never projects, never logged. The palette
-  entries hide while the pool is empty (`quoteCount` rides up from `Quotes.tsx` — no
-  pool, nothing to summon; the Quotes view is where the pool gets filled). Not a layout
-  toggle: Focus Mode and Show Default View don't special-case it (a summoned moment
-  isn't ambient chrome). The modal stays quotes' one *moment* — the browsing/editing
-  surface is the Quotes view (2026-09-14). Component is `Quotes.tsx` (self-contained
-  fetch + pick + linger; App owns the open boolean for the key-handler gate and bumps
+  wallpaper. ⌘P → Show a Quote carried the deliberate summon until 2026-09-15,
+  when it retired together with the screensaver's palette toggle (Faraz's ask):
+  the **Quotes view** (❝) is now the deliberate surface, and the modal's only
+  open path is the screensaver. There is **no timed/wall-clock version**: if any
+  other cadence is ever wanted, anchor to interaction (app regaining visibility
+  after ≥N hours — the daily-reset's render-time-comparison idiom), never
+  wall-clock — and still never as a modal.
+- **The quote screensaver (default on; the persisted `dayapp-quote-screensaver`
+  key is the off switch, read once at mount — no in-app toggle):** two minutes of
+  focused stillness summons the modal unprompted. The idle clock runs only while
+  the window is focused — away time never counts (Faraz's call, 2026-08-26: it's
+  for sitting with the app, not having left it; `blur` restarts the clock,
+  `document.hasFocus()` gates the trigger) — and only real user input resets it:
+  keys, clicks, pointer movement, scrolling. App-driven re-renders (the timer's
+  1s tick, the 60s sweep, the masthead rotation) deliberately don't — DOM churn
+  is not attention. The open **lingers until input** — a screensaver that
+  dismisses itself back into blank idleness defeats itself (one quote per idle
+  stretch, and the input that wakes it restarts the 2-min clock). The waking
+  keystroke is already consumed by the dismissal handler's `preventDefault`, so
+  it can't also type into whatever sat beneath. Gates: pool non-empty and no
+  other floating surface open. The watcher lives in `App.tsx` (event bumpers +
+  a 5s check).
+- Dismissal: any key (beyond a bare modifier chord — ⌘P/⌘F still work, their
+  listener closes the modal) or any click ends it instantly; it never dismisses
+  itself — an idle-born moment outlives its own idleness. WKWebView rule learned
+  the hard way (the "modal never appears" bug, 2026-08-26): **never animate the
+  fixed full-screen backdrop** (the compositor left an animated fixed layer
+  stuck at the `from { opacity: 0 }` frame — it never painted; only the quote
+  text fades in). The bug's other half — a summoning keystroke doubling as the
+  dismissal — died with the ⌘P summon; if a keystroke-summoned surface ever
+  returns, the cure is a 250ms grace window before the dismissal handler
+  listens. The pick never repeats the last-shown quote (the masthead rotation's
+  rule, reused; session-only memory).
+- Source: `##q` captures (the notes bus) — never projects, never logged. The idle
+  watcher skips an empty pool (`quoteCount` rides up from `Quotes.tsx`; the
+  Quotes view is where the pool gets filled). Not a layout toggle: Focus Mode
+  and Show Default View don't special-case it (a summoned moment isn't ambient
+  chrome). The modal stays quotes' one *moment* — the browsing/editing surface
+  is the Quotes view (2026-09-14). Component is `Quotes.tsx` (self-contained
+  fetch + pick; App owns the open boolean for the key-handler gate and bumps
   `version` on demo swaps and `##q` captures).
 
 **Journal & Quotes views (⌘P → View Journal / View Quotes, or the header `¶` / `❝`):**
