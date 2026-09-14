@@ -1061,7 +1061,7 @@ mod tests {
     fn completions_and_deletions_snapshot_project_and_priority() {
         let (db, dir) = tmp_db();
         let p = db.create_project("meridian").unwrap();
-        let i = db.create_item("ship it", "today").unwrap();
+        let i = db.create_item("ship it", "today", None, None).unwrap();
         db.set_item_project(&i.id, Some(&p.id)).unwrap();
         db.set_item_priority(&i.id, Some(2)).unwrap();
         db.complete_item(&i.id).unwrap();
@@ -1176,8 +1176,8 @@ mod tests {
     #[test]
     fn pauses_shape_the_miss_replay() {
         let (db, dir) = tmp_db();
-        let a = db.create_item("habit a", "daily").unwrap();
-        let b = db.create_item("habit b", "daily").unwrap();
+        let a = db.create_item("habit a", "daily", None, None).unwrap();
+        let b = db.create_item("habit b", "daily", None, None).unwrap();
         // B's pause window: Jan 3 → Jan 5. The actions carry real timestamps;
         // backdate them onto the replay's calendar like the created/completed.
         db.hide_item(&b.id, "forever").unwrap();
@@ -1306,7 +1306,7 @@ mod tests {
     #[test]
     fn reassigned_habit_is_never_a_phantom_miss() {
         let (db, dir) = tmp_db();
-        let h = db.create_item("habit h", "daily").unwrap();
+        let h = db.create_item("habit h", "daily", None, None).unwrap();
         db.set_item_priority(&h.id, Some(2)).unwrap(); // the current axes
         {
             let conn = db.conn.lock().unwrap();
@@ -1375,6 +1375,31 @@ mod tests {
         assert!(d.fell.is_empty() && d.daily_missed.is_empty());
         let d = db.day_detail("2026-01-03", &ScopeFilter::default(), Subject::Done).unwrap();
         assert_eq!(d.tasks.len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+    /// A capture with tokens snapshots its birth axes onto the `created`
+    /// action — the whole data the Created lens reads. This is the
+    /// regression test for the two-step-capture bug (create bare, set tokens
+    /// after), which left every created action NULL-attributed.
+    #[test]
+    fn created_actions_snapshot_birth_axes() {
+        let (db, dir) = tmp_db();
+        let p = db.create_project("meridian").unwrap();
+        let i = db.create_item("ship it", "today", Some(&p.id), Some(2)).unwrap();
+        // A later reassignment must not rewrite the birth snapshot.
+        db.set_item_priority(&i.id, Some(1)).unwrap();
+
+        let s = db.journal_dashboard(None, None, &ScopeFilter::default(), Subject::Created).unwrap();
+        assert_eq!(s.totals.count, 1);
+        let names: Vec<(Option<&str>, i64)> =
+            s.projects.iter().map(|p| (p.name.as_deref(), p.count)).collect();
+        assert_eq!(names, [(Some("meridian"), 1)]);
+        let tiers: Vec<(Option<i64>, i64)> =
+            s.priorities.iter().map(|t| (t.tier, t.count)).collect();
+        assert_eq!(tiers, [(Some(1), 0), (Some(2), 1), (Some(3), 0), (None, 0)]);
+        let d = db.day_detail(&today_iso(), &ScopeFilter::default(), Subject::Created).unwrap();
+        assert_eq!(d.tasks[0].project.as_deref(), Some("meridian"));
+        assert_eq!(d.tasks[0].priority, Some(2));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

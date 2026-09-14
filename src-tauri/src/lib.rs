@@ -58,10 +58,15 @@ async fn list_items(
 }
 
 #[tauri::command]
-async fn create_item(db: State<'_, DbState>, text: String, section: String)
-    -> Result<Item, String>
+async fn create_item(
+    db: State<'_, DbState>, text: String, section: String,
+    projectId: Option<String>, priority: Option<i64>,
+) -> Result<Item, String>
 {
-    with_db(db, move |db| db.create_item(&text, &section)).await
+    with_db(db, move |db| {
+        db.create_item(&text, &section, projectId.as_deref(), priority)
+    })
+    .await
 }
 
 #[tauri::command]

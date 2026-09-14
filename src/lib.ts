@@ -55,8 +55,11 @@ export interface Action {
 export const api = {
   listItems: (section: Section, includeDone = false, hidden: HiddenFilter = "exclude") =>
     invoke<Item[]>("list_items", { section, includeDone, hidden }),
-  createItem: (text: string, section: Section) =>
-    invoke<Item>("create_item", { text, section }),
+  /** Project and priority ride the create call — the `created` action
+   *  snapshots the row's axes at birth, so they must be on it when the log
+   *  fires. */
+  createItem: (text: string, section: Section, projectId?: string | null, priority?: number | null) =>
+    invoke<Item>("create_item", { text, section, projectId: projectId ?? null, priority: priority ?? null }),
   editItem: (id: string, text: string) =>
     invoke<void>("edit_item", { id, text }),
   completeItem: (id: string) => invoke<void>("complete_item", { id }),

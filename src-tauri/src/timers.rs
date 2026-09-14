@@ -389,8 +389,8 @@ mod tests {
     #[test]
     fn completing_an_item_stops_its_own_timer_only() {
         let (db, dir) = tmp_db();
-        let a = db.create_item("timed task", "today").unwrap();
-        let b = db.create_item("other task", "today").unwrap();
+        let a = db.create_item("timed task", "today", None, None).unwrap();
+        let b = db.create_item("other task", "today", None, None).unwrap();
 
         // b is the running one; complete a — b's timer must be untouched.
         db.start_timer(&a.id).unwrap();
@@ -422,7 +422,7 @@ mod tests {
         drop(conn);
 
         // Deleting a running item stops its timer too — same in-transaction rule.
-        let c = db.create_item("doomed task", "today").unwrap();
+        let c = db.create_item("doomed task", "today", None, None).unwrap();
         db.start_timer(&c.id).unwrap();
         db.delete_item(&c.id).unwrap();
         assert_eq!(open_session_count(&db), 0);
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn retiring_sweep_finalizes_orphaned_sessions() {
         let (db, dir) = tmp_db();
-        let a = db.create_item("orphaned timer", "today").unwrap();
+        let a = db.create_item("orphaned timer", "today", None, None).unwrap();
         db.start_timer(&a.id).unwrap();
         // Simulate the pre-rule bug: complete the row via raw SQL so no path
         // stops the timer — status done, dated yesterday, session still open.

@@ -305,6 +305,42 @@ impl Db {
         if consumed > 0 {
             log::info!("migrate: consumed {consumed} stored note footer(s) into columns");
         }
+        // The created-axis backfill: captures made by the old two-step path
+        // (item created bare, tokens applied after) logged `created` actions
+        // with NULL axes, so the analytics Created lens reads everything
+        // unattributed. Fill them once from the items' CURRENT axes — the
+        // same best effort the snapshot columns' backfill took (deleted
+        // items stay unattributed). Meta-gated one-shot: a standing
+        // statement would rewrite post-fix rows whose NULL birth axes are
+        // legitimate (born untagged, assigned later).
+        let flagged: bool = conn
+            .query_row(
+                "SELECT 1 FROM meta WHERE key = 'migrated_created_axes'",
+                [], |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if !flagged {
+            let n = conn.execute(
+                "UPDATE actions SET
+                   project = (SELECT p.name FROM items i
+                              LEFT JOIN projects p ON p.id = i.project_id
+                              WHERE i.id = actions.item_id),
+                   priority = (SELECT i.priority FROM items i WHERE i.id = actions.item_id)
+                 WHERE action = 'created' AND item_id IS NOT NULL
+                   AND project IS NULL AND priority IS NULL
+                   AND item_id IN (SELECT id FROM items)",
+                [],
+            )?;
+            conn.execute(
+                "INSERT INTO meta(key,value) VALUES('migrated_created_axes','1')
+                 ON CONFLICT(key) DO UPDATE SET value = '1'",
+                [],
+            )?;
+            if n > 0 {
+                log::info!("migrate: backfilled birth axes onto {n} created action row(s)");
+            }
+        }
         Ok(())
     }
 
@@ -346,7 +382,16 @@ impl Db {
     // Every write mutates `items` AND appends to `actions`. The log is the journal;
     // it must never drift from the live row. These are wrapped in a transaction.
 
-    pub fn create_item(&self, text: &str, section: &str) -> anyhow::Result<Item> {
+    /// `project_id`/`priority` ride the INSERT and are ON the row before
+    /// `log_action` fires — the `created` action snapshots the live row, and
+    /// that birth snapshot is the analytics Created lens's whole data. (The
+    /// pre-2026-09-14 two-step capture — create bare, set tokens after —
+    /// left every created action NULL-attributed; `migrate` backfills those
+    /// once.)
+    pub fn create_item(
+        &self, text: &str, section: &str,
+        project_id: Option<&str>, priority: Option<i64>,
+    ) -> anyhow::Result<Item> {
         let conn = self.conn.lock().unwrap();
         let now = now_iso();
         let id = ulid::Ulid::new().to_string();
@@ -359,9 +404,9 @@ impl Db {
 
         let tx = conn.unchecked_transaction()?;
         tx.execute(
-            "INSERT INTO items (id,text,section,status,last_completed_date,sort_order,created_at,updated_at)
-             VALUES (?1,?2,?3,'active',NULL,?4,?5,?5)",
-            params![id, text, section, sort_order, now],
+            "INSERT INTO items (id,text,section,status,last_completed_date,sort_order,created_at,updated_at,project_id,priority)
+             VALUES (?1,?2,?3,'active',NULL,?4,?5,?5,?6,?7)",
+            params![id, text, section, sort_order, now, project_id, priority],
         )?;
         log_action(&tx, &id, text, "created", None, Some(section), None, Some("active"), &now)?;
         tx.commit()?;
@@ -371,7 +416,7 @@ impl Db {
             status: "active".into(), last_completed_date: None,
             sort_order, created_at: now.clone(), updated_at: now,
             hidden: false, hidden_until: None,
-            project_id: None, remind_at: None, priority: None,
+            project_id: project_id.map(String::from), remind_at: None, priority,
             assigned_to_agent: false, details: String::new(),
         })
     }

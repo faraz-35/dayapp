@@ -947,14 +947,16 @@ function DayApp() {
   const handleCreate = async (section: Section, raw: string) => {
     // Resolve `#tag` → project, `!1..3` → priority, and `@` → agent assignment
     // on capture (e.g. "fix bug #day !2 @" → dayapp project, priority 2,
-    // agent-owned), stripping the tokens from the text. Assignment is
-    // housekeeping, so it happens after the item exists.
+    // agent-owned), stripping the tokens from the text. Project and priority
+    // go INTO the create call: the `created` action snapshots the row's axes
+    // at birth, so they must be on it before the log fires. Only `@` stays a
+    // post-create set (actions carry no agent snapshot).
     const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects);
-    const item = await api.createItem(text, section);
     const assignId = projectId ?? (await materializeTagProject(createProjectName));
     // !0 ("clear") is a no-op at capture — a fresh item has no priority yet.
     // Same for @0: fresh rows start unassigned.
     const tier = priority === 0 ? null : priority;
+    const item = await api.createItem(text, section, assignId, tier);
     const patch: Partial<Item> = {};
     if (assignId) patch.projectId = assignId;
     if (tier !== null) patch.priority = tier;
@@ -968,8 +970,6 @@ function DayApp() {
         ? sortBacklog([...s.backlog, { ...item, ...patch }])
         : [...s[section], { ...item, ...patch }],
     }));
-    if (assignId) api.setItemProject(item.id, assignId);
-    if (tier !== null) api.setItemPriority(item.id, tier);
     if (agent === true) api.setItemAgent(item.id, true);
   };
 

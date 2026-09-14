@@ -626,7 +626,7 @@ fn add(db: &Db, rest: &[String]) -> anyhow::Result<()> {
     if text.trim().is_empty() {
         anyhow::bail!("empty text");
     }
-    let item = db.create_item(text.trim(), &section)?;
+    let item = db.create_item(text.trim(), &section, None, None)?; // --add stores text raw — no token parsing, so no birth axes
     println!("added to {section}: {}", item.text);
     deploy_hint(db);
     Ok(())
