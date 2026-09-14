@@ -1465,7 +1465,8 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 6px 8px;
+  width: 30%;
+  margin: 14px auto;
 }
 .tier-divider::before,
 .tier-divider::after {
