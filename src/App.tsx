@@ -225,8 +225,9 @@ function DayApp() {
     setQuoteOpen(false);
   }, []);
   // The quote pool's refresh trigger: bumped on demo-mode swaps and whenever
-  // a ##q capture lands (Notes' onEntryRouted) or a quote is captured from
-  // one of the entry pages. Quotes.tsx re-fetches on it — no polling.
+  // a quote changes — a ##q capture (Notes' onEntryRouted) or a capture,
+  // edit, or delete on one of the entry pages. Quotes.tsx re-fetches on it —
+  // no polling.
   const [quotesVersion, setQuotesVersion] = useState(0);
   // ⌘F "@agent/my" — narrow the list to the agent's tasks or Faraz's own;
   // null = off. Session-only like the project filter (a search-shaped focus).

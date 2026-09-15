@@ -5,7 +5,8 @@
 // the bus with a default — plain text lands as this page's kind, and the
 // opposite token still routes (##q from the Journal page, ##j from Quotes).
 // The quote modal (Quotes.tsx) stays the summoned moment; these pages are
-// the archive — the browsing and editing surface.
+// the archive — the browsing and editing surface, and the pool's source of
+// truth: every quote mutation here re-fetches the modal's pool.
 //
 // Self-contained like Notes/Goals: own state, own API, re-fetches on mount
 // (every view switch remounts it) and on reloadEpoch (demo-mode swaps).
@@ -50,8 +51,9 @@ export default function EntriesPage({
   /** Which of the two pages this is — the kind shown and the capture default. */
   kind: EntryKind;
   reloadEpoch?: number;
-  /** Bumped up to App when a quote lands from this page's capture line (either
-   *  page can route one), so the quote modal's pool re-fetches. */
+  /** Bumped up to App when a quote changes from this page — a capture routed
+   *  here, an edit, or a delete — so the quote modal's pool re-fetches and
+   *  the screensaver never picks a stale line. */
   onQuotesChanged?: () => void;
 }) {
   const title = kind === "journal" ? "Journal" : "Quotes";
@@ -97,19 +99,22 @@ export default function EntriesPage({
   };
 
   // Empty commit is a no-op (a blur-cleared line never deletes content — × is
-  // the explicit path). Edits never move the day.
+  // the explicit path). Edits never move the day. A quote edit re-fetches the
+  // modal's pool — this page is the archive, the modal follows it.
   const handleCommit = (entry: Entry, text: string) => {
     setEditingId(null);
     const t = text.trim();
     if (!t || t === entry.text) return;
     setEntries((s) => sortEntries(s.map((e) => (e.id === entry.id ? { ...e, text: t } : e))));
     entriesApi.update(entry.id, t).catch((e) => log.error("entry edit failed", e));
+    if (entry.kind === "quote") onQuotesChanged?.();
   };
 
   const handleDelete = (entry: Entry) => {
     trace("entry.delete", { text: clip(entry.text) });
     setEntries((s) => s.filter((e) => e.id !== entry.id));
     entriesApi.delete(entry.id).catch((e) => log.error("entry delete failed", e));
+    if (entry.kind === "quote") onQuotesChanged?.();
   };
 
   const renderRow = (entry: Entry) => (

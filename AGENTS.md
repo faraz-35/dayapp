@@ -1103,7 +1103,9 @@ into Notes or edit fields isn't hijacked.
   chrome). The modal stays quotes' one *moment* — the browsing/editing surface
   is the Quotes view (2026-09-14). Component is `Quotes.tsx` (self-contained
   fetch + pick; App owns the open boolean for the key-handler gate and bumps
-  `version` on demo swaps and `##q` captures).
+  `version` on demo swaps and whenever a quote changes — a capture anywhere, an
+  edit or delete on the Quotes view (2026-09-15) — so the pool always mirrors
+  the page).
 
 **Journal & Quotes views (⌘P → View Journal / View Quotes, or the header `¶` / `❝`):**
 - The written word's two pages over `entries`, one per kind — Journal (##j) and Quotes
