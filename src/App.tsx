@@ -331,6 +331,9 @@ function DayApp() {
   // tour, the "demo-mode" event catches toggles/resets. `dataEpoch` bumps on
   // every swap so the self-contained surfaces (Notes, Goals) reload too.
   const [demoMode, setDemoMode] = useState(false);
+  // Whether mobile sync has a repo configured. Only the palette follows this —
+  // unsynced, the feature shows one quiet door instead of its working verbs.
+  const [syncConfigured, setSyncConfigured] = useState(false);
   // The demo session's interaction recorder (see devlog.ts): arms when demo
   // mode opens, disarms on exit, ⌘P-toggleable mid-session. The state only
   // mirrors the devlog module for the palette label.
@@ -384,6 +387,10 @@ function DayApp() {
     // Demo mode is session-only, so the backend decides — this catches the
     // first-run tour before the first paint settles.
     demoApi.active().then(setDemoMode).catch((e) => log.warn("demo mode query failed", e));
+    syncApi
+      .getConfig()
+      .then((c) => setSyncConfigured(c.repo.trim().length > 0))
+      .catch((e) => log.warn("sync config query failed", e));
     // Re-check the day boundary while the app stays open. The app's day runs
     // 6am→6am, so when local time crosses 6am the sweep fires and Today items
     // fall to Backlog without a relaunch.
@@ -813,34 +820,38 @@ function DayApp() {
       },
     }] : []),
     // Mobile sync belongs to the real db — hide its entries while demo mode is
-    // active (the backend gates deploy/pull/config hard as well).
+    // active (the backend gates deploy/pull/config hard as well). Unsynced, the
+    // feature shows one quiet door; deploy/pull are the working verbs and only
+    // exist once a repo is configured.
     ...(demoMode ? [] : [
-      {
-        id: "mobile-deploy",
-        label: "Mobile: Deploy Task List Now",
-        hint: "push to GitHub",
-        run: () => {
-          syncApi.deploy(true)
-            .then((m) => { log.info(`sync: deploy — ${m}`); showToast(`Deploy: ${m}`); })
-            .catch((e) => { log.error("sync: deploy failed", e); showToast(`Deploy failed: ${e}`); });
+      ...(syncConfigured ? [
+        {
+          id: "mobile-deploy",
+          label: "Mobile: Deploy Task List Now",
+          hint: "push to GitHub",
+          run: () => {
+            syncApi.deploy(true)
+              .then((m) => { log.info(`sync: deploy — ${m}`); showToast(`Deploy: ${m}`); })
+              .catch((e) => { log.error("sync: deploy failed", e); showToast(`Deploy failed: ${e}`); });
+          },
         },
-      },
-      {
-        id: "mobile-pull",
-        label: "Mobile: Pull Captures Now",
-        hint: "ingest from phone",
-        run: () => {
-          ingestRef.current()
-            .then((n) => {
-              if (n > 0) refresh();
-              showToast(n ? `Ingested ${n} capture${n === 1 ? "" : "s"}` : "No new captures");
-            })
-            .catch((e) => { log.error("sync: pull failed", e); showToast(`Pull failed: ${e}`); });
+        {
+          id: "mobile-pull",
+          label: "Mobile: Pull Captures Now",
+          hint: "ingest from phone",
+          run: () => {
+            ingestRef.current()
+              .then((n) => {
+                if (n > 0) refresh();
+                showToast(n ? `Ingested ${n} capture${n === 1 ? "" : "s"}` : "No new captures");
+              })
+              .catch((e) => { log.error("sync: pull failed", e); showToast(`Pull failed: ${e}`); });
+          },
         },
-      },
+      ] : []),
       {
         id: "mobile-configure",
-        label: "Mobile: Configure Sync…",
+        label: "Sync with mobile app",
         hint: "repo + token",
         run: () => setSyncSettingsOpen(true),
       },
@@ -874,7 +885,7 @@ function DayApp() {
       hint: "rebuild from source",
       run: startUpdate,
     },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, demoMode, devlogOn]);
+  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, demoMode, devlogOn, syncConfigured]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1808,7 +1819,15 @@ function DayApp() {
       />
       <MobileSyncSettings
         open={syncSettingsOpen}
-        onClose={() => setSyncSettingsOpen(false)}
+        onClose={() => {
+          setSyncSettingsOpen(false);
+          // The modal saves internally — re-read the config so the palette
+          // reveals (or retires) the deploy/pull entries right away.
+          syncApi
+            .getConfig()
+            .then((c) => setSyncConfigured(c.repo.trim().length > 0))
+            .catch((e) => log.warn("sync config query failed", e));
+        }}
       />
       {toast && <div className="toast">{toast}</div>}
     </div>

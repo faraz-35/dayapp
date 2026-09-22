@@ -328,7 +328,9 @@ architecture — don't grow this one into it.
 - **Auth**: `meta.sync_repo` / `sync_branch` / `sync_token`; empty token falls back to
   `gh auth token` (zero-config on a machine with the gh CLI). The phone stores its own
   fine-grained PAT (Contents rw, that repo only) in localStorage. Configure via
-  ⌘P → "Mobile: Configure Sync…" (`MobileSyncSettings.tsx`). The APK itself is
+  ⌘P → "Sync with mobile app" (`MobileSyncSettings.tsx`) — the one entry an
+  unsynced install shows; "Mobile: Deploy/Pull Now" only appear once a repo is
+  configured, so the feature is quiet until it is real. The APK itself is
   distributed from the **public** `faraz-35/dayapp-mobile` repo's Releases (authless
   download — the binary carries no secrets); keep release uploads signed with the same
   debug keystore so they install as updates.
@@ -815,9 +817,12 @@ overlay there), so its footer bars render width-fitted to the raw `!N`
   Checkbox circle
   border → `--accent`. Editing is reached by single-click or the `e` key — there is no explicit
   edit button.
-- Timing (the one row whose timer is running): the ⏸ button + live `H:MM:SS` elapsed are
-  **always visible** (not hover-gated), in the accent colour, so the active timer is
-  identifiable at a glance. The pinned header chip mirrors it (survives scrolling away).
+- Timing (the one row whose timer is running): the metadata columns render as on
+  every row (the project label stays), with the live `H:MM:SS` elapsed in the
+  priority-bars slot — accent, always visible, so the active timer is identifiable
+  at a glance (the slot widens for the digits; the columns right of it keep their
+  positions). The ⏸ button is hover-revealed like every action (digit `1` still
+  fires it). The pinned header chip mirrors the elapsed (survives scrolling away).
 - Done (today): stays in place, greyed + line-through with the checkbox filled accent —
   the same look as done-daily. Enter or a checkbox click toggles it back to active
   (logged as `uncompleted`); the day-boundary sweep deletes the row. A running timer on
