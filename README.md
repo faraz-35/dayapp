@@ -92,7 +92,7 @@ The binary lives inside the app bundle. ⌘P → CLI: Enable installs the `dayap
 
 ## Update
 
-Installed from a release? A small accent icon appears at the top right of the header when a new version is out — one click downloads, verifies, and installs it. Building from source? ⌘P → Update App Locally rebuilds, swaps, and relaunches (or `npm run update`). Publishing a release: `npm run release` builds everything the channel needs.
+Installed from a release? A small accent icon appears at the top right of the header when a new version is out — one click downloads, verifies, and installs it. Building from source? ⌘P → Update App Locally rebuilds, swaps, and relaunches (or `npm run update`). Shipping a release: `npm run release patch` (or `minor`/`major`) publishes everything in one pass — the GitHub release, the in-app update channel, the Homebrew cask, and the site.
 
 ## Develop
 

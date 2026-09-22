@@ -1356,13 +1356,26 @@ npm run update         # build + swap /Applications/DayApp.app + relaunch (CLI)
 Both call `scripts/update.sh`. See the README "Update the installed app" section for the
 mechanics (detached swap helper, LaunchServices re-registration).
 
-Publishing a release (builds the cask's `.dmg` AND the in-app updater's
-`.app.tar.gz` + `latest.json` in one pass, signed — see "Release updates" under
-Architecture):
+Publishing a release is one command, and it ships everywhere:
 
 ```bash
-npm run release        # → prints the exact files to upload to the GitHub release
+npm run release patch        # or minor | major; add --dry-run to build + verify only
 ```
+
+Stages: guards (clean main, synced) → bump `tauri.conf.json` (the version
+source; package.json follows) → signed build + `latest.json` + verify gates →
+commit + tag + push → `gh release` (dmg, `.app.tar.gz`, `.sig`,
+`latest.json`; notes auto-generated from commits since the last tag — this
+activates the update channel) → cask version + sha256 in the tapped
+homebrew-tap, push, `brew audit` + livecheck must agree → site download link,
+push, `vercel --prod` (retries the Not-authorized quirk), live fetch must
+serve the new link → receipt. Every stage checks current state first, so
+re-running after a failure resumes where it stopped. `--dry-run` runs guards,
+build (version overridden inline — no repo edits), and all verify gates
+without publishing anything. The signing key is read from the macOS keychain
+(service `dayapp-updater-key`); the script imports it from
+`~/.tauri/dayapp-updater.key` on first run, after which the keychain is the
+source of truth. See "Release updates" under Architecture.
 
 To regenerate icons after editing `icon-source.svg`:
 
