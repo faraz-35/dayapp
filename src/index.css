@@ -1562,9 +1562,10 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-/* Live elapsed on the running row. Always visible (not hover-gated, not an
-   .item-action) so the active timer is identifiable at a glance. Sits in the
-   action cluster just left of the ⏸ button. */
+/* Live elapsed on the running row. Sits in the row's priority column (the
+   bars yield — the running timer is the row's salient fact), always visible
+   so the active timer is identifiable at a glance; the stop ⏸ is an ordinary
+   hover-revealed .item-action beside the header chip's mirror. */
 .timer-live {
   font-size: 12px;
   color: var(--accent);
@@ -1572,17 +1573,10 @@ button {
   font-weight: 500;
   white-space: nowrap;
 }
-
-/* The ▶/⏸ toggle. Resting ▶ is an .item-action (hover-revealed); the running
-   ⏸ overrides opacity to stay visible on the timed row, in the accent colour. */
-.timer-btn.timing {
-  opacity: 1;
-  color: var(--accent);
-}
-.timer-btn.timing:hover {
-  background: var(--bg-elev);
-  color: var(--accent);
-}
+/* The timing row's priority slot widens past its 13px bars width for the
+   digits — it's right-anchored, so the extra width extends leftward and the
+   agent/project columns keep their list-wide positions. */
+.meta-priority.timing { width: auto; }
 
 /* ---- Timer chip (header) ---------------------------------------------- */
 /* Pinned in the header so the running timer survives scrolling away from the

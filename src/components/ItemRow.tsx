@@ -131,12 +131,13 @@ export default function ItemRow({
           column clips names to 6 letters + an ellipsis (clipProject — the
           full name lives in the tooltip), so the metadata reads as one
           aligned block down the list. The transient facts (hidden status,
-          tracked time, reminder) flow left of the columns and fade on
+          cumulative time, reminder) flow left of the columns and fade on
           hover, yielding to the buttons. Robot + priority + project stay
           visible on hover (the row's identity, wanted while its actions are
-          on screen). Suppressed while timing — the live elapsed then lives
-          in the action cluster instead. */}
-      {!editing && !isTiming && (item.hidden || totalSec > 0 || project || item.remindAt || priorityBars || item.assignedToAgent) && (
+          on screen). While timing the priority slot carries the live elapsed
+          instead of bars — the running timer is the row's salient fact, and
+          the project column keeps its place. */}
+      {!editing && (item.hidden || (totalSec > 0 && !isTiming) || project || item.remindAt || item.assignedToAgent || isTiming) && (
         <div className="item-meta">
           {item.hidden && (
             <span
@@ -150,7 +151,7 @@ export default function ItemRow({
               ◐ {item.hiddenUntil ? `until ${formatReminder(item.hiddenUntil)}` : "forever"}
             </span>
           )}
-          {totalSec > 0 && (
+          {!isTiming && totalSec > 0 && (
             <span className="time-label" title="Time tracked">⏱ {formatDuration(totalSec)}</span>
           )}
           {item.remindAt && (
@@ -158,7 +159,13 @@ export default function ItemRow({
               → {formatReminder(item.remindAt)}
             </span>
           )}
-          <span className="meta-priority">{priorityBars}</span>
+          <span className={`meta-priority${isTiming ? " timing" : ""}`}>
+            {isTiming ? (
+              <span className="timer-live" title="Elapsed">{formatLiveDuration(elapsedSec)}</span>
+            ) : (
+              priorityBars
+            )}
+          </span>
           <span className="meta-agent">{item.assignedToAgent && <AgentBadge />}</span>
           <span className="meta-project">
             {project && (
@@ -174,23 +181,18 @@ export default function ItemRow({
 
       {!editing && (
         <>
-          {/* Live elapsed shows only on the running row, always visible (not
-              hover-gated) so the active timer is identifiable at a glance. A
-              hidden row only ever shows the stop form — it can't start one. */}
-          {isTiming && (
-            <span className="timer-live" title="Elapsed">{formatLiveDuration(elapsedSec)}</span>
-          )}
           {/* Slot 1 — the row's primary verb, in digit order. A timing row
-              always shows ⏸: the one always-visible stop control outranks
-              everything. Otherwise the Backlog's slot 1 is "send to Today" —
-              pulling work into the day is the one action a shelved row
-              offers; timing belongs to Today/Daily, where the work happens.
-              A hidden row never starts anything, so it only ever shows the
-              stop form. */}
+              shows ⏸, hover-revealed like every action — the live elapsed in
+              the metadata columns is the at-a-glance signal, and digit `1`
+              reaches the stop without hover. Otherwise the Backlog's slot 1
+              is "send to Today" — pulling work into the day is the one
+              action a shelved row offers; timing belongs to Today/Daily,
+              where the work happens. A hidden row never starts anything, so
+              it only ever shows the stop form. */}
           {(isTiming || !item.hidden) &&
             (isTiming ? (
               <button
-                className="item-action timer-btn timing"
+                className="item-action timer-btn"
                 data-kb="1"
                 onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
                 title="Stop timer"
