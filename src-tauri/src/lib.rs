@@ -693,6 +693,117 @@ async fn self_update(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// ---- Release updates (GitHub Releases → in-app auto-update) ----------------
+//
+// The channel for people who installed the shipped .app and have no source
+// checkout (the opposite of self_update above). The frontend polls
+// `update_check` (launch + every few hours) and shows a header icon when a
+// newer release exists; clicking it runs `update_install`, which downloads,
+// verifies the release's minisign signature against the pubkey baked into
+// tauri.conf.json, swaps the bundle, and relaunches. Artifacts are only built
+// by scripts/release.sh (tauri.release.conf.json), so a plain source build
+// never needs the signing key.
+//
+// Progress rides the same "update-status" channel the local build uses, with
+// phase "downloading" instead of "building" — the overlay renders either.
+
+/// True when the app was built from a source checkout that still exists at the
+/// path embedded at compile time. Release binaries carry this machine's build
+/// path, which doesn't exist on a user's Mac — that's the whole local/release
+/// split the frontend branches on.
+#[tauri::command]
+async fn update_source_available() -> Result<bool, String> {
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("no parent")?;
+    Ok(repo.join("package.json").exists())
+}
+
+/// The version a release update would install, or None when this install is
+/// current (or the manifest is unreachable — offline, no release yet). A
+/// failed check reads as "no update": the icon just doesn't appear, and the
+/// next poll retries. Failures warn once per distinct message like the sync
+/// loop, so an outage doesn't spam the log.
+#[tauri::command]
+async fn update_check(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let update = app
+        .updater()
+        .map_err(|e| format!("{e:#}"))?
+        .check()
+        .await
+        .map_err(|e| format!("{e:#}"))?;
+    Ok(update.map(|u| {
+        log::info!("update: release {} available", u.version);
+        u.version
+    }))
+}
+
+/// Download, signature-verify, and install the pending release update, then
+/// relaunch. Progress streams as throttled "downloading" lines (one per 256
+/// KB, plus the final total) so the overlay log stays readable.
+#[tauri::command]
+async fn update_install(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+    log::info!("update: downloading release update");
+    let mut update = app
+        .updater()
+        .map_err(|e| format!("{e:#}"))?
+        .check()
+        .await
+        .map_err(|e| format!("{e:#}"))?
+        .ok_or_else(|| "no update available".to_string())?;
+    let handle = app.clone();
+    let last_emit = std::cell::Cell::new(0u64);
+    let mut downloaded: u64 = 0;
+    update
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                let final_ = total == Some(downloaded);
+                // Throttle: emit at 256 KB steps and at completion.
+                if final_ || downloaded.saturating_sub(last_emit.get()) >= 256 * 1024 {
+                    last_emit.set(downloaded);
+                    let so_far = format_bytes(downloaded);
+                    let text = match total {
+                        Some(t) => format!("Downloading {so_far} / {}", format_bytes(t)),
+                        None => format!("Downloading {so_far}"),
+                    };
+                    let _ = handle.emit(
+                        "update-status",
+                        serde_json::json!({ "phase": "downloading", "data": text }),
+                    );
+                }
+            },
+            || log::info!("update: download complete, installing"),
+        )
+        .await
+        .map_err(|e| {
+            log::error!("update: release install failed: {e:#}");
+            format!("{e:#}")
+        })?;
+    log::info!("update: release {} installed; relaunching", update.version);
+    let _ = app.emit(
+        "update-status",
+        serde_json::json!({
+            "phase": "restarting",
+            "data": format!("Update {} installed — restarting DayApp…", update.version),
+        }),
+    );
+    app.restart();
+}
+
+/// Byte count the way the overlay log wants it: "364 KB", "4.2 MB".
+fn format_bytes(n: u64) -> String {
+    if n >= 1024 * 1024 {
+        format!("{:.1} MB", n as f64 / (1024.0 * 1024.0))
+    } else if n >= 1024 {
+        format!("{:.0} KB", n as f64 / 1024.0)
+    } else {
+        format!("{n} B")
+    }
+}
+
 // ---- Setup ----------------------------------------------------------------
 
 // The launch placement ritual, automated: DayApp always lands fullscreened in
@@ -740,6 +851,7 @@ fn aerospace_fullscreen() {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             // Logs to a rotating file in the app log dir AND stdout. The webview
             // can also emit via the JS `log` plugin, but we keep it backend-only
@@ -835,6 +947,7 @@ pub fn run() {
             capture_backup, reveal_backups,
             demo_mode, enter_demo_mode, exit_demo_mode, reset_demo_data,
             self_update,
+            update_source_available, update_check, update_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DayApp");

@@ -1,8 +1,11 @@
-// UpdateOverlay — full-screen modal shown while self_update runs. Three
-// phases driven by the "update-status" events from the backend:
-//   building   — live compiler output scrolls by, with an elapsed timer
-//   restarting — build succeeded; app is handing off to the swap helper
-//   error      — build failed; show why, let the user dismiss and keep working
+// UpdateOverlay — full-screen modal shown while an update runs. Phases driven
+// by the "update-status" events from the backend:
+//   building    — local rebuild: live compiler output scrolls by, elapsed timer
+//   downloading — release update: throttled byte-progress lines, elapsed timer
+//   restarting  — succeeded; the app is handing off to the swap/relaunch
+//                 (status.message overrides the default line — the release
+//                 path names the installed version there)
+//   error       — failed; show why, let the user dismiss and keep working
 //
 // The parent owns the status state and passes it down; this component is purely
 // presentational plus a couple of side-effects (auto-scroll, elapsed timer).
@@ -19,13 +22,14 @@ export default function UpdateOverlay({
   const logRef = useRef<HTMLDivElement>(null);
   const [elapsed, setElapsed] = useState(0);
 
-  // Tick the elapsed seconds while building.
+  // Tick the elapsed seconds while building or downloading.
+  const running = status?.phase === "building" || status?.phase === "downloading";
   useEffect(() => {
-    if (status?.phase !== "building") return;
+    if (!running) return;
     setElapsed(0);
     const id = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(id);
-  }, [status?.phase]);
+  }, [running]);
 
   // Auto-scroll the log to the bottom as new lines arrive.
   useEffect(() => {
@@ -38,11 +42,11 @@ export default function UpdateOverlay({
   return (
     <div className="overlay-backdrop">
       <div className="overlay">
-        {phase === "building" && (
+        {running && (
           <>
             <div className="overlay-head">
               <span className="spinner" />
-              <span className="overlay-title">Building…</span>
+              <span className="overlay-title">{phase === "downloading" ? "Downloading…" : "Building…"}</span>
               <span className="overlay-elapsed">{elapsed}s</span>
             </div>
             <div className="overlay-log" ref={logRef}>
@@ -56,14 +60,14 @@ export default function UpdateOverlay({
         {phase === "restarting" && (
           <div className="overlay-message">
             <span className="spinner" />
-            <span>Build complete — restarting DayApp…</span>
+            <span>{status.message || "Build complete — restarting DayApp…"}</span>
           </div>
         )}
 
         {phase === "error" && (
           <>
             <div className="overlay-head">
-              <span className="overlay-title error-text">Build failed</span>
+              <span className="overlay-title error-text">Update failed</span>
             </div>
             <div className="overlay-log">
               {status.lines.map((line, i) => (

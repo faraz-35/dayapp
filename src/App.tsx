@@ -160,11 +160,31 @@ function CloseIcon() {
   );
 }
 
+// The release-update door's glyph: an arrow dropping into a tray — the one
+// header icon that isn't a view, so it reads as "something to receive", not
+// "somewhere to go". Same 16-box, stroke 1.7 round as the rest of the set.
+function UpdateIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M8 2.5v7.2M4.8 6.8 8 10l3.2-3.2M3 13h10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 // Self-update status, accumulated from "update-status" events emitted by the
-// backend's self_update command. `lines` is the streamed build log; `message`
-// is populated only on error.
+// backend's self_update (phase "building") and update_install (phase
+// "downloading") commands. `lines` is the streamed log; `message` is
+// populated on error, and on "restarting" it overrides the overlay's default
+// line (the release path names the installed version there).
 export type UpdateStatus = {
-  phase: "building" | "restarting" | "error";
+  phase: "building" | "downloading" | "restarting" | "error";
   lines: string[];
   message: string;
 };
@@ -634,12 +654,14 @@ function DayApp() {
         if (phase === "restarting") log.info("update: build done, restarting");
         else if (phase === "error") log.error("update: build failed", data);
         setUpdateStatus((prev) => {
-          if (phase === "building") {
-            const lines = prev && prev.phase === "building" ? [...prev.lines, data] : [data];
-            return { phase: "building", lines, message: "" };
+          if (phase === "building" || phase === "downloading") {
+            const lines = prev && (prev.phase === "building" || prev.phase === "downloading")
+              ? [...prev.lines, data]
+              : [data];
+            return { phase, lines, message: "" };
           }
           if (phase === "restarting") {
-            return { phase: "restarting", lines: prev?.lines ?? [], message: "" };
+            return { phase: "restarting", lines: prev?.lines ?? [], message: data };
           }
           if (phase === "error") {
             return { phase: "error", lines: prev?.lines ?? [], message: data };
@@ -656,6 +678,43 @@ function DayApp() {
     setUpdateStatus({ phase: "building", lines: [], message: "" });
     api.selfUpdate().catch((err) => {
       log.error("update: invoke failed", err);
+      setUpdateStatus({ phase: "error", lines: [], message: String(err) });
+    });
+  }, []);
+
+  // ---- Release updates (installed from GitHub Releases, no source) ---------
+  // A source checkout updates itself (⌘P → Update App Locally); a release
+  // install gets the header icon instead. `localRepo` is null until the
+  // compile-time-path check returns, and the palette entry stays out of the
+  // list until then — a control that might not work never shows. The channel
+  // poll starts 10s after launch (never competing with the startup pulls),
+  // then every 6h; a failed check just means no icon until the next one.
+  const [localRepo, setLocalRepo] = useState<boolean | null>(null);
+  const [releaseUpdate, setReleaseUpdate] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.updateSourceAvailable().then(setLocalRepo).catch(() => setLocalRepo(null));
+  }, []);
+
+  useEffect(() => {
+    if (localRepo !== false) return;
+    let stopped = false;
+    const check = () =>
+      api.updateCheck()
+        .then((v) => { if (!stopped) setReleaseUpdate(v); })
+        .catch((e) => log.warn("update: release check failed", String(e)));
+    const t = setTimeout(() => {
+      check();
+      setInterval(check, 6 * 60 * 60 * 1000);
+    }, 10_000);
+    return () => { stopped = true; clearTimeout(t); };
+  }, [localRepo]);
+
+  const startReleaseUpdate = useCallback(() => {
+    log.info("update: starting release update");
+    setUpdateStatus({ phase: "downloading", lines: [], message: "" });
+    api.updateInstall().catch((err) => {
+      log.error("update: release install invoke failed", err);
       setUpdateStatus({ phase: "error", lines: [], message: String(err) });
     });
   }, []);
@@ -879,13 +938,20 @@ function DayApp() {
       hint: "the focus grammar",
       run: () => setHelpOpen(true),
     },
-    {
-      id: "update",
-      label: "Update DayApp",
-      hint: "rebuild from source",
-      run: startUpdate,
-    },
-  ], [startUpdate, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, demoMode, devlogOn, syncConfigured]);
+    // Local rebuilds are a source-checkout privilege; a release install gets
+    // the header icon instead. Hidden until the check answers — a control
+    // that might not work never shows.
+    ...(localRepo
+      ? [
+          {
+            id: "update",
+            label: "Update App Locally",
+            hint: "rebuild from source",
+            run: startUpdate,
+          },
+        ]
+      : []),
+  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, demoMode, devlogOn, syncConfigured]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1681,6 +1747,22 @@ function DayApp() {
           >
             {view === "quotes" ? <CloseIcon /> : <QuotesIcon />}
           </button>
+          {/* The release-update door (release installs only — source
+              checkouts use ⌘P → Update App Locally instead): mounts only
+              while a newer release exists on the channel; one click
+              downloads, signature-verifies, and swaps the app in place.
+              Hidden in demo mode — a relaunch would end the demo session
+              (and a first-run tour has no update to take anyway). */}
+          {releaseUpdate && !demoMode && (
+            <button
+              className="icon-btn update-ready"
+              onClick={startReleaseUpdate}
+              title={`Update available: v${releaseUpdate} — download & install`}
+              aria-label="Install available update"
+            >
+              <UpdateIcon />
+            </button>
+          )}
         </div>
       </header>
 

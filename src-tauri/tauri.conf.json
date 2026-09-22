@@ -39,5 +39,13 @@
       "icons/icon.ico"
     ],
     "category": "Productivity"
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/faraz-35/dayapp/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDYxOUFFMDQwRTI1RTkzOTAKUldTUWsxN2lRT0NhWVdORGJRNTBTcEs4dzM1NmFORVNuUjFhQmxjbFBmRzdsRGJCdVNvUkc3SUwK"
+    }
   }
 }

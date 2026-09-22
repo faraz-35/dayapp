@@ -473,6 +473,40 @@ standalone file (no `-wal`/`-shm` siblings), safe to copy/archive anywhere.
 - Logic lives in `src-tauri/src/backup.rs`; the capture logs one INFO line
   (`backup: captured dayapp-…db (240 KB)`).
 
+### Release updates (GitHub Releases → the in-app channel)
+
+Two update paths split on one fact: does the source repo still exist at the path
+the binary embedded at build time (`update_source_available` — release binaries
+carry the build machine's path, which never exists on a user's Mac)?
+
+- **Source checkout** → ⌘P → **Update App Locally** (`self_update`): rebuilds
+  in place, hands off to `scripts/update.sh --swap-only`. The palette entry is
+  hidden until that check answers, so a control that might not work never shows.
+- **Release install** → the **header update icon** (`.update-ready`, the drawn
+  arrow-into-tray glyph, accent at rest): mounts only while a newer release
+  exists. The frontend polls `update_check` 10s after launch and every 6h
+  after (a failed check = no icon, warn-once in the log — the next poll
+  retries); one click runs `update_install`: download, minisign signature
+  check against the pubkey baked into `tauri.conf.json`, swap, relaunch.
+  Progress rides the same "update-status" channel as the local build, phase
+  `downloading`, so `UpdateOverlay` renders both unchanged (it only grew a
+  title and a message override). Hidden in demo mode — a relaunch ends the
+  demo session, and a first-run tour has no update to take.
+
+- The channel is the release's own `latest.json`
+  (`releases/latest/download/latest.json` — no server, the sync-repo idea
+  pointed the other way). **`npm run release` (`scripts/release.sh`) exists so
+  `latest.json` can't be forgotten**: a plain `tauri build` produces NO
+  updater artifacts and needs NO signing key; artifacts only generate in the
+  release config (`tauri.release.conf.json` sets `createUpdaterArtifacts`),
+  which signs with the passwordless keypair at `~/.tauri/dayapp-updater.key`
+  (never commit it; **lose it and the channel is dead** — every installed app
+  verifies against the pubkey it shipped with, recovery is manual reinstall).
+- Bump `tauri.conf.json`'s `version` as part of the ritual — the channel's
+  comparison and the cask's bump hang off it. The channel activates on the
+  first release that carries `latest.json` (0.3.0's doesn't — installs of it
+  simply never see an icon until the next release).
+
 ---
 
 ## Logging
@@ -497,7 +531,8 @@ a detached helper.
   `sync: ingesting N mobile capture(s)`). Steady-state "no changes" deploys are silent by
   design; deploy failures log at WARN once per distinct message (the 60s loop must not
   spam the log during an outage).
-- **Every external-flow step at INFO:** the `self_update` command logs each phase (starting
+- **Every external-flow step at INFO:** the `self_update` and release-update
+  (`update_check`/`update_install`) commands log each phase (starting
   build → build succeeded → spawning swap helper → exiting app). This is the critical path
   to debug update failures.
 - **Errors at ERROR:** failed spawns, failed builds, failed IPC. Always include the
@@ -550,6 +585,7 @@ dayapp/
 ├── icon-source.svg                 ← icon master; regenerate others via `npx tauri icon`
 ├── scripts/
 │   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
+│   └── release.sh                  ← release artifacts: dmg + signed updater bundle + latest.json (npm run release)
 ├── src/
 │   ├── App.tsx                     ← shell only: state, effects, the focus grammar (key handler), header, view switching, timer chip
 │   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + goalsApi/parseGoalText + projectColor/formatReminder/formatDuration
@@ -597,7 +633,8 @@ dayapp/
     ├── schema.sql                  ← items + actions + meta + notes + projects + goals + sessions + entries
     ├── demo.sql                    ← the demo seed (relative timestamps; embedded via include_str!, never commit the .db)
     ├── Cargo.toml
-    ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target
+    ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target, updater pubkey/endpoints
+    ├── tauri.release.conf.json     ← release-only override: createUpdaterArtifacts (signed; used by scripts/release.sh)
     └── capabilities/default.json
 ```
 
@@ -1290,11 +1327,19 @@ update the app from source, use one of:
 
 ```bash
 npm run update         # build + swap /Applications/DayApp.app + relaunch (CLI)
-# or, from inside the running app: ⌘P → "Update DayApp"
+# or, from inside the running app: ⌘P → "Update App Locally"
 ```
 
 Both call `scripts/update.sh`. See the README "Update the installed app" section for the
 mechanics (detached swap helper, LaunchServices re-registration).
+
+Publishing a release (builds the cask's `.dmg` AND the in-app updater's
+`.app.tar.gz` + `latest.json` in one pass, signed — see "Release updates" under
+Architecture):
+
+```bash
+npm run release        # → prints the exact files to upload to the GitHub release
+```
 
 To regenerate icons after editing `icon-source.svg`:
 

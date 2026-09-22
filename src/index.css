@@ -123,6 +123,9 @@ button {
 }
 .icon-btn:hover { background: var(--bg-hover); color: var(--text); }
 .icon-btn.active { color: var(--accent); }
+/* The release-update door (mounts only while a newer release exists) — the
+   one accent icon at rest, since its whole job is to be noticed. */
+.icon-btn.update-ready { color: var(--accent); }
 
 /* ---- Search (⌘F) — floating modal ---------------------------------- */
 /* Mirrors the ⌘P command palette: a fixed dim backdrop + a centered card. NOT

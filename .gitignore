@@ -23,3 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 .zcode/
+
+# Local-only: session memory + untracked demo captures
+MEMORY.md
+.zcodeignore
+assets/demo-capture-keys.mp4
+assets/demo-dayapp-v2.mp4

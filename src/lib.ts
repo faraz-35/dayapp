@@ -88,6 +88,10 @@ export const api = {
       until: opts.until ?? null,
     }),
   selfUpdate: () => invoke<void>("self_update"),
+  /** Release channel (no source checkout): see the three lib.rs commands. */
+  updateSourceAvailable: () => invoke<boolean>("update_source_available"),
+  updateCheck: () => invoke<string | null>("update_check"),
+  updateInstall: () => invoke<void>("update_install"),
 };
 
 export interface Project {

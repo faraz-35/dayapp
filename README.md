@@ -88,9 +88,24 @@ dayapp --add "call bank #money !1" --to backlog
 dayapp --complete "call bank"
 ```
 
+The binary lives inside the app bundle. To reach it as `dayapp` from any shell, put this wrapper on your PATH:
+
+```bash
+mkdir -p ~/.local/bin
+cat > ~/.local/bin/dayapp <<'EOF'
+#!/bin/sh
+BIN=/Applications/DayApp.app/Contents/MacOS/dayapp
+[ $# -eq 0 ] && set -- --list
+exec "$BIN" "$@"
+EOF
+chmod +x ~/.local/bin/dayapp
+```
+
+Bare `dayapp` then prints the list. If `~/.local/bin` isn't on your PATH yet, add `export PATH="$HOME/.local/bin:$PATH"` to your `~/.zshrc`.
+
 ## Update
 
-In the app: ⌘P → Update DayApp — it builds, swaps, and relaunches itself. From the repo: `npm run update`.
+Installed from a release? A small accent icon appears at the top right of the header when a new version is out — one click downloads, verifies, and installs it. Building from source? ⌘P → Update App Locally rebuilds, swaps, and relaunches (or `npm run update`). Publishing a release: `npm run release` builds everything the channel needs.
 
 ## Develop
 
