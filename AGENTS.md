@@ -424,6 +424,17 @@ The flags are deliberately ungated (the CLI is Faraz's remote access too) — th
 "agents touch only their 🤖 queue" discipline lives in the agent's instructions, not the
 binary.
 
+**Installing the command (⌘P → CLI: Enable):** the binary is inside the app
+bundle, so it isn't on anyone's PATH by default. The palette entry writes a
+wrapper at `~/.local/bin/dayapp` — bare `dayapp` means `--list` — exec'ing
+`current_exe()`, so it tracks the real install instead of a hardcoded
+/Applications; and appends the PATH line to `~/.zshrc` only when the file
+doesn't mention `~/.local/bin` yet (the GUI process can't see the user's
+interactive PATH, so the check is over the rc file, not the env). Idempotent
+by content — re-running repairs a stale wrapper. It's a deliberate keystroke,
+never a launch side effect: an app that edits dotfiles unprompted is
+malware-shaped. Works in demo mode (machine-level, not db-level).
+
 ### Timers (per-task time tracking — NOT logged)
 
 ```

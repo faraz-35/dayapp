@@ -565,6 +565,62 @@ async fn reveal_backups(db: State<'_, DbState>) -> Result<(), String> {
     with_db(db, move |db| backup::reveal(&db.real_path)).await
 }
 
+// ---- CLI shell command -----------------------------------------------------
+// ⌘P → CLI: Enable installs the `dayapp` command: a wrapper script in
+// ~/.local/bin exec'ing the running binary (resolved via current_exe, so it
+// tracks the real install rather than a hardcoded /Applications), plus the
+// PATH line in ~/.zshrc when the file doesn't mention ~/.local/bin yet.
+// Idempotent by content — re-running repairs a stale wrapper after an app
+// move. Only the user's keystroke does this: an app that edits dotfiles
+// unprompted is malware-shaped, so it's a door, not a launch side effect.
+
+#[tauri::command]
+async fn cli_install() -> Result<String, String> {
+    use std::os::unix::fs::PermissionsExt;
+    let home = std::env::var("HOME").map_err(|_| "no HOME set".to_string())?;
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("resolve binary: {e}"))?
+        .to_string_lossy()
+        .to_string();
+
+    let bin_dir = std::path::Path::new(&home).join(".local/bin");
+    std::fs::create_dir_all(&bin_dir)
+        .map_err(|e| format!("create {}: {e}", bin_dir.display()))?;
+    let wrapper = bin_dir.join("dayapp");
+    std::fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\n# dayapp — passthrough to the installed DayApp binary (⌘P → CLI: Enable).\n# Bare `dayapp` means `dayapp --list`; every other argument passes through.\nBIN=\"{exe}\"\n[ $# -eq 0 ] && set -- --list\nexec \"$BIN\" \"$@\"\n"
+        ),
+    )
+    .map_err(|e| format!("write {}: {e}", wrapper.display()))?;
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755))
+        .map_err(|e| format!("chmod {}: {e}", wrapper.display()))?;
+    log::info!("cli: wrapper installed at {}", wrapper.display());
+
+    // The GUI process can't see the user's interactive PATH (launchd gives it
+    // a minimal one), so the check is over the rc file, not the env.
+    let rc = std::path::Path::new(&home).join(".zshrc");
+    let rc_text = std::fs::read_to_string(&rc).unwrap_or_default();
+    let mut path_added = false;
+    if !rc_text.contains(".local/bin") {
+        let mut next = rc_text;
+        if !next.is_empty() && !next.ends_with('\n') {
+            next.push('\n');
+        }
+        next.push_str("\n# Added by DayApp — expose the dayapp CLI\nexport PATH=\"$HOME/.local/bin:$PATH\"\n");
+        std::fs::write(&rc, &next).map_err(|e| format!("write {}: {e}", rc.display()))?;
+        path_added = true;
+        log::info!("cli: PATH line added to {}", rc.display());
+    }
+
+    Ok(if path_added {
+        "CLI enabled — `dayapp` works in new terminal windows".to_string()
+    } else {
+        "CLI enabled — `dayapp` is on your PATH".to_string()
+    })
+}
+
 // ---- Demo mode -----------------------------------------------------------
 // A second, disposable db (dayapp-demo.db) swapped in under the connection
 // lock — see demo.rs for the invariants. The "demo-mode" event tells the
@@ -963,6 +1019,7 @@ pub fn run() {
             self_update,
             update_source_available, update_check, update_install,
             get_owner_name, set_owner_name,
+            cli_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DayApp");

@@ -95,6 +95,8 @@ export const api = {
   /** Masthead owner: null = never asked, "" = asked and skipped. */
   getOwnerName: () => invoke<string | null>("get_owner_name"),
   setOwnerName: (name: string) => invoke<void>("set_owner_name", { name }),
+  /** Install the `dayapp` shell command; returns the toast message. */
+  cliInstall: () => invoke<string>("cli_install"),
 };
 
 export interface Project {

@@ -88,20 +88,7 @@ dayapp --add "call bank #money !1" --to backlog
 dayapp --complete "call bank"
 ```
 
-The binary lives inside the app bundle. To reach it as `dayapp` from any shell, put this wrapper on your PATH:
-
-```bash
-mkdir -p ~/.local/bin
-cat > ~/.local/bin/dayapp <<'EOF'
-#!/bin/sh
-BIN=/Applications/DayApp.app/Contents/MacOS/dayapp
-[ $# -eq 0 ] && set -- --list
-exec "$BIN" "$@"
-EOF
-chmod +x ~/.local/bin/dayapp
-```
-
-Bare `dayapp` then prints the list. If `~/.local/bin` isn't on your PATH yet, add `export PATH="$HOME/.local/bin:$PATH"` to your `~/.zshrc`.
+The binary lives inside the app bundle. ⌘P → CLI: Enable installs the `dayapp` command for you: it writes a wrapper to `~/.local/bin` (pointing at the running app) and adds `~/.local/bin` to your PATH in `~/.zshrc` if it isn't there yet. New terminal windows then know `dayapp` — bare `dayapp` prints the list.
 
 ## Update
 

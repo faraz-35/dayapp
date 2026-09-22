@@ -958,6 +958,18 @@ function DayApp() {
         run: () => backupApi.reveal().catch((e) => log.error("backup: reveal failed", e)),
       },
     ]),
+    // The `dayapp` shell command. Machine-level, not db-level — works (and
+    // stays listed) in demo mode; idempotent, re-running repairs a stale
+    // wrapper after an app move.
+    {
+      id: "cli-enable",
+      label: "CLI: Enable",
+      hint: "`dayapp` command in your terminal",
+      run: () =>
+        api.cliInstall()
+          .then((msg) => { log.info("cli: enabled"); showToast(msg); })
+          .catch((e) => { log.error("cli: enable failed", e); showToast(`CLI enable failed: ${e}`); }),
+    },
     { id: "view-analytics", label: "View Analytics", run: () => setView("analytics") },
     { id: "view-journal", label: "View Journal", run: () => setView("journal") },
     { id: "view-quotes", label: "View Quotes", run: () => setView("quotes") },
