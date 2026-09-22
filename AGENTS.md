@@ -570,12 +570,12 @@ dayapp/
 │   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
 │   ├── MobileView.tsx              ← Android client: read-only list + capture bar (GitHub fetch, renders when UA is Android)
 │   ├── MobileSyncSettings.tsx      ← ⌘P sync-config modal (repo/branch/token + validate-by-deploy)
+│   ├── AnalyticsView.tsx           ← the analytics page: stats + heatmap + splits + day ledger/day cards over dashboard.rs (no raw log)
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← the ONE task capture (##t/##d/##b routing) + DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + sortable items + dropzone; Backlog tier dividers)
 │       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput + ItemDetailsBody
 │       ├── PriorityBars.tsx        ← the tier signal bars (rows, tier dividers, analytics legend, the token display)
-│       ├── AnalyticsView.tsx       ← the analytics page: stats + heatmap + splits + day ledger over dashboard.rs (no raw log)
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
 └── src-tauri/
     ├── src/
@@ -616,7 +616,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionList.tsx` | the task capture bus (##t/##d/##b route, default Today), `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
-| `AnalyticsView.tsx` | the analytics page: range/dayPick state, dashboard + time fetch, stats/heatmap/splits/day-ledger render | derivation (all in `dashboard.rs`), item state |
+| `AnalyticsView.tsx` | the analytics page: range/day-pick state, dashboard + time fetch, stats/heatmap/splits/day-card render | derivation (all in `dashboard.rs`), item state |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---
@@ -1155,7 +1155,7 @@ into Notes or edit fields isn't hijacked.
   the Done stat). **Tracked time deliberately does not follow the filter** (Faraz's
   call, 2026-08-25 — the timer is barely used, not worth snapshot columns on `sessions`):
   while filtered the ledger hides its per-day time total and time alone can't surface a
-  day row; per-task time still renders in an expanded day (it rides the filtered task
+  day row; per-task time still renders in the day card (it rides the filtered task
   rows). The Activity card is React-keyed on the rendered-sibling state because WKWebView
   doesn't re-resolve its aspect-ratio cells when the grid track re-widens on unfilter
   (the "heatmap didn't shrink back" bug, 2026-08-25).
@@ -1172,23 +1172,33 @@ into Notes or edit fields isn't hijacked.
 - **Activity**: the current month as a Monday-first calendar heatmap — one square per
   day (aspect-ratio cells, so one shape serves every window width), intensity steps of
   the one accent = that day's completions, the day number top-left, the count
-  bottom-right, today ringed, a Less→More legend. Clicking a cell picks that day — the
-  ledger row expands to its tasks and the cell is ringed; clicking the picked day again
-  clears the pick. A pick outside the active range widens the range to All so the row
-  has somewhere to render. Picking never re-scopes the stats — the range pills own
-  that.
+  bottom-right, today ringed, a Less→More legend. Clicking a cell opens that day's
+  card and the cell is ringed; clicking the picked day again closes it. Picking never
+  re-scopes the stats — the range pills own that. The calendar's width is capped at the
+  480px-window size and centers inside its card, so filtering an axis away (which
+  unmounts its split card and frees the track) can't stretch the squares across the
+  row — the cap is on the calendar, never the card: an auto-margin grid item sizes to
+  fit-content and collapses the cells (the 2026-09-21 oval-cells regression).
 - **Splits**: every project's share of the range's completions as label/bar/count rows
-  (zero-filled from the roster so neglected projects read as 0; a trailing "none" bucket
-  when unprojected work exists), and the priority card — one segmented bar (tier
+  (zero-filled from the roster, but zero-count rows hide by default — the chevron in
+  the card head reveals the whole roster; a trailing "none" bucket when unprojected
+  work exists), and the priority card — one segmented bar (tier
   proportions as intensity steps of the accent, P1 the strongest) plus a signal-bars
   glyph legend. Both read the `actions.project`/`actions.priority` write-time snapshots.
-- **Days ledger**: one line per day that had any signal — `MON, AUG 24 · 7 done · 1
-  missed · 2h 7m` (time only when tracked). Clicking a row expands that day at task
-  level (`journal_day_detail`): the tasks done that day (✓, HH:MM, tracked time), what
-  fell to Backlog (↓), and the missed habits (○) — counts roll up, the expansion is the
-  substance. The open row inverts against the card (bg recess) so the expansion reads as
-  one unit. The picked day stays listed even when empty, so its expansion always has a
-  row. Still counts-first: never the raw action stream.
+- **Days ledger → day cards**: one line per day that had any signal — `MON, AUG 24 · 7
+  done · 1 missed · 2h 7m` (time only when tracked). Selecting a day — a ledger row, a
+  calendar cell, the date field, or the Today pill (which scopes the range to today and
+  opens its card) — replaces the ledger with that one day's card: day label + counts in
+  the title row, a back button (←) returning to the ledger (back from a Today-picked
+  card restores the Week range), and the day at task level (`journal_day_detail`): the
+  tasks done that day (✓, HH:MM, tracked time), what fell to Backlog (↓), and the
+  missed habits (○) — every row carries its axes at the right edge (project name
+  left-aligned against a fixed-width priority-bars slot that pins the edge and renders
+  even when empty; fell rows carry their at-the-fall snapshots, missed habits their
+  current axes — the scope filter's call; the ↓/○ mark is the row's kind, no text tag),
+  and the counts derive from the day detail itself, so a day
+  outside the range reads as correctly as one inside it. Still counts-first: never the
+  raw action stream.
 - **Responsive**: the page is a stack of elevated cards (the token system's elevated
   surface — `.an-card`, bg-elev + border hairline + 12px radius): hero stats, then
   Activity · Projects · Priority in one band, then the days ledger on its own full-width

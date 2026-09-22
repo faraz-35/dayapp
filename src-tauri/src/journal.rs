@@ -23,6 +23,13 @@
 use crate::db::{now_iso, today_iso, Db};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
+
+/// The entries' id source — monotonic ULIDs, process-wide. `created_at` has
+/// second granularity, so within a same-second burst the id is the only
+/// capture-order signal `list_entries` has; random ULIDs (every other
+/// table's id) would order the burst by coin flip.
+static ENTRY_IDS: Mutex<ulid::Generator> = Mutex::new(ulid::Generator::new());
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -70,7 +77,14 @@ impl Db {
         }
         let conn = self.conn.lock().unwrap();
         let now = now_iso();
-        let id = ulid::Ulid::new().to_string();
+        // Overflow would need 2^80 ids in one millisecond — impossible; the
+        // error path exists only to say so loudly if it ever does.
+        let id = ENTRY_IDS
+            .lock()
+            .unwrap()
+            .generate()
+            .map_err(|e| anyhow::anyhow!("entry id generation: {e}"))?
+            .to_string();
         let day = today_iso();
         conn.execute(
             "INSERT INTO entries (id, kind, text, day, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",

@@ -4,21 +4,26 @@
 // completions, with the miss verdicts) or created (the tasks that entered
 // the list); every card follows it, and the done-only stats (streak, both
 // misses) hide in created mode. A hero stats card, the current month as a
-// calendar heatmap (intensity = the subject's per-day count; click a day to
-// open it), the distribution cards (project bars + a segmented priority
-// bar), and the day ledger whose rows expand to that day's tasks (done with
-// times, what fell, missed habits — the raw action log's textual home
-// remains the CLI's --journal). Clicking a calendar cell, a ledger row, or
-// the date field picks a day; click it again to clear.
+// calendar heatmap (intensity = the subject's per-day count), the
+// distribution cards (project bars + a segmented priority bar), and the day
+// ledger. Selecting a day — a ledger row, a calendar cell, the date field,
+// or the Today pill (which scopes the range to today and opens its card) —
+// replaces the ledger with that one day's card: label + counts, a back
+// button, and the day at task level (done with times and axes, what fell,
+// missed habits — the raw action log's textual home remains the CLI's
+// --journal). The calendar card's width is capped at the 480px-window card
+// size, so a filtered axis unmounting its split card can't stretch the
+// squares across the freed track; the projects card hides zero-count rows
+// until its expand chevron reveals the whole roster.
 // The filter bar also carries the axis scope filters — a `#` project picker
 // (multi-select popover) and priority tier chips — which every derivation
 // follows via the backend's write-time snapshots (see dashboard.rs); a split
 // card whose axis is filtered hides (a filtered view already answers it),
-// and time deliberately doesn't follow (the ledger hides its day total while
+// and time deliberately doesn't follow (the day card hides its total while
 // filtered; per-task time rides the filtered task rows).
 // Responsive: cards stack on the 480px window; a wide window spans the hero
 // across the top, sets Activity/Projects/Priority in one row, and gives the
-// ledger its own full-width row. All derivation lives in
+// ledger/day card its own full-width row. All derivation lives in
 // src-tauri/src/dashboard.rs; per-task time is layered in from sessions.
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -168,11 +173,12 @@ function PriorityCard({ tiers, max }: { tiers: TierCount[]; max: number }) {
 }
 
 /** The expand affordance — one chevron glyph, rotated open (never two
- *  mismatched unicode glyphs riding the font baseline). */
-function Chevron({ open }: { open: boolean }) {
+ *  mismatched unicode glyphs riding the font baseline). `className` carries
+ *  per-surface variants (`.left` = the day card's back arrow). */
+function Chevron({ open = false, className = "" }: { open?: boolean; className?: string }) {
   return (
     <svg
-      className={`dd-chev${open ? " open" : ""}`}
+      className={`dd-chev${open ? " open" : ""}${className ? ` ${className}` : ""}`}
       width="10"
       height="10"
       viewBox="0 0 12 12"
@@ -199,9 +205,11 @@ export default function AnalyticsView() {
   // picked day survives a switch: the same day re-expands through the other
   // lens.
   const [subject, setSubject] = useState<DashboardSubject>("done");
-  // The day whose ledger row is expanded (and whose calendar cell is ringed).
-  // Picking never re-scopes the stats — the range pills own that.
+  // The day whose card is open (and whose calendar cell is ringed). Picking
+  // never re-scopes the stats — the range pills own that.
   const [pickedDay, setPickedDay] = useState<string | null>(null);
+  // The projects card hides its zero-count rows until this chevron opens them.
+  const [showZeroProjects, setShowZeroProjects] = useState(false);
 
   // ---- Axis scope filters (session-only, like the range) -------------------
   // "" in selProjects = the "no project" bucket; 0 in selTiers = unmarked.
@@ -342,13 +350,13 @@ export default function AnalyticsView() {
       .catch((e) => log.warn("day detail load failed", e));
   }, [pickedDay, filter, subject]);
 
-  // Bring the expanded row into view once its data has landed.
+  // Bring the open day card into view.
   useEffect(() => {
     if (!pickedDay) return;
     document
-      .querySelector(`[data-day="${pickedDay}"]`)
+      .querySelector(".an-daycard")
       ?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [pickedDay, dash, detail]);
+  }, [pickedDay]);
 
   // Per-day tracked-time totals (sessions are a separate dimension; the
   // ledger shows the sum only).
@@ -365,11 +373,16 @@ export default function AnalyticsView() {
       return;
     }
     trace("analytics.pick", { day: d, on: true });
-    // A day outside the active range's ledger (calendar cell, date field):
-    // widen to All so the expanded row has somewhere to render.
-    const { since, until } = bounds;
-    if ((since && d < since) || (until && d >= until)) setRange("all");
     setPickedDay(d);
+  };
+
+  // Back from the day card to the ledger. A Today-picked card came from the
+  // Today range pill, whose ledger is a single row — back restores the
+  // working Week view.
+  const backToLedger = () => {
+    trace("analytics.pick", { day: pickedDay, on: false });
+    setPickedDay(null);
+    if (range === "today") setRange("week");
   };
 
   const ranges: { id: Range; label: string }[] = [
@@ -387,21 +400,28 @@ export default function AnalyticsView() {
   });
   const maxProject = Math.max(1, ...(dash?.projects ?? []).map((p) => p.count));
   const maxTier = Math.max(1, ...(dash?.priorities ?? []).map((t) => t.count));
+  // Zero-count projects (roster rows with nothing in the range) hide until
+  // the card head's chevron opens them.
+  const zeroProjects = (dash?.projects ?? []).some((p) => p.count === 0);
+  const projectRows = dash
+    ? showZeroProjects
+      ? dash.projects
+      : dash.projects.filter((p) => p.count > 0)
+    : [];
 
-  // The ledger: one line per day that had any signal (the picked day stays
-  // listed even when empty, so its expansion has a row), newest first. Time
+  // The ledger: one line per day that had any signal, newest first. Time
   // doesn't follow the scope filter, so while filtered it neither surfaces a
-  // day nor shows as the day's total — only the per-task time inside an
-  // expanded day (which rides the filtered task rows) renders. Created mode
-  // surfaces creations only: time and the miss verdicts are done-flavored.
+  // day nor shows as the day's total — only the per-task time inside the day
+  // card (which rides the filtered task rows) renders. Created mode surfaces
+  // creations only: time and the miss verdicts are done-flavored.
   const ledger = useMemo(() => {
     if (!dash) return [];
     return dash.days
-      .filter((d) => d.date === pickedDay || d.count > 0 ||
+      .filter((d) => d.count > 0 ||
         (subject === "done" && (d.dailyMissed + d.todayMissed > 0 ||
           (!hasFilter && (timeByDay.get(d.date) ?? 0) > 0))))
       .reverse();
-  }, [dash, timeByDay, pickedDay, hasFilter, subject]);
+  }, [dash, timeByDay, hasFilter, subject]);
 
   const today = todayStr();
   const dayCount = dash?.days.length ?? 0;
@@ -409,6 +429,27 @@ export default function AnalyticsView() {
     dash && dayCount > 1 ? (dash.totals.count / dayCount).toFixed(1) : null;
   // The subject's noun, for every label the page renders.
   const noun = subject === "created" ? "created" : "done";
+
+  // The picked day's card, derived from the day detail itself (not the range
+  // stats), so a day outside the range — a calendar cell, the date field —
+  // reads as correctly as one inside it.
+  const pickedLabel = pickedDay
+    ? pickedDay === today
+      ? "Today"
+      : new Date(pickedDay + "T00:00:00").toLocaleDateString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        })
+    : "";
+  const pickedMissed =
+    detail && subject === "done"
+      ? detail.fell.length + detail.dailyMissed.length
+      : 0;
+  const pickedSecs =
+    detail && subject === "done" && !hasFilter
+      ? detail.tasks.reduce((s, t) => s + t.secs, 0)
+      : 0;
 
   // The `#` pill's label: the state of the project selection in pill language.
   const projLabel = (() => {
@@ -420,8 +461,8 @@ export default function AnalyticsView() {
 
   return (
     <div className="analytics-view">
-      {/* Range segments · date jump. The date field (like a calendar cell)
-          picks a day to expand in the ledger. Right of them, the axis scope
+      {/* Range segments · date jump. The date field (like a calendar cell or
+          a ledger row) opens that day's card. Right of them, the axis scope
           filters: the `#` project picker (multi-select popover) and the tier
           chips — every derivation follows them (see the module comment). */}
       <div className="filter-bar">
@@ -448,7 +489,9 @@ export default function AnalyticsView() {
             onClick={() => {
               if (r.id !== range) trace("analytics.range", { range: r.id });
               setRange(r.id);
-              setPickedDay(null);
+              // The Today range is one day — its pill opens that day's card;
+              // every other range returns to the ledger.
+              setPickedDay(r.id === "today" ? today : null);
             }}
           >{r.label}</button>
         ))}
@@ -591,8 +634,19 @@ export default function AnalyticsView() {
                   Done stat. */}
               {!filter.projects && dash.projects.length > 0 && (
                 <section className="an-card an-projects">
-                  <div className="an-card-title">Projects</div>
-                  {dash.projects.map((p) => (
+                  <div className="an-card-title">
+                    Projects
+                    {zeroProjects && (
+                      <button
+                        className="an-expand"
+                        onClick={() => setShowZeroProjects(!showZeroProjects)}
+                        title={showZeroProjects ? "Hide empty projects" : "Show empty projects"}
+                      >
+                        <Chevron open={showZeroProjects} />
+                      </button>
+                    )}
+                  </div>
+                  {projectRows.map((p) => (
                     <BarRow
                       key={p.name ?? "__none"}
                       label={p.name ?? "none"}
@@ -601,27 +655,96 @@ export default function AnalyticsView() {
                       max={maxProject}
                     />
                   ))}
+                  {projectRows.length === 0 && (
+                    <div className="dash-empty">Nothing in this range.</div>
+                  )}
                 </section>
               )}
 
               {!filter.priorities && <PriorityCard tiers={dash.priorities} max={maxTier} />}
             </div>
 
-            <section className="an-card an-days">
-              <div className="an-card-title">Days</div>
-              {ledger.length === 0 && (
-                <div className="dash-empty">No activity in this range.</div>
-              )}
-              {ledger.map((d) => {
-                const secs = timeByDay.get(d.date) ?? 0;
-                const missed = d.dailyMissed + d.todayMissed;
-                const open = pickedDay === d.date;
-                return (
-                  <div key={d.date} className={`an-day-wrap${open ? " open" : ""}`} data-day={d.date}>
+            {/* Selecting a day swaps the ledger for that day's card — back
+                returns to the list. Rows carry the axes at the right edge
+                (bars then project, the item-row column order); missed habits
+                sit time-less with the ○ mark. */}
+            {pickedDay ? (
+              <section className="an-card an-days an-daycard">
+                <div className="an-card-title">
+                  <span className="an-daycard-head">
+                    <button className="an-back" onClick={backToLedger} title="Back to all days">
+                      <Chevron className="left" />
+                    </button>
+                    <span className="an-daycard-day">{pickedLabel}</span>
+                  </span>
+                  <span className="hint">
+                    {detail != null && detail.tasks.length > 0 && (
+                      <span>{detail.tasks.length} {noun}</span>
+                    )}
+                    {detail != null && pickedMissed > 0 && <span>{pickedMissed} missed</span>}
+                    {pickedSecs > 0 && <span>{formatDuration(pickedSecs)}</span>}
+                  </span>
+                </div>
+                <div className="an-day-detail">
+                  {detail == null && <div className="dd-empty">…</div>}
+                  {detail?.tasks.map((t) => (
+                    <div key={t.itemId} className={`dd-row ${noun}`}>
+                      <span className="dd-mark">{noun === "created" ? "+" : "✓"}</span>
+                      <span className="dd-time">{t.time}</span>
+                      <span className="dd-text">{t.text}</span>
+                      {subject === "done" && t.secs > 0 && (
+                        <span className="dd-secs">{formatDuration(t.secs)}</span>
+                      )}
+                      <span className="dd-proj">{t.project ?? ""}</span>
+                      <span className="dd-axis">
+                        {t.priority != null && <PriorityBars priority={t.priority} />}
+                      </span>
+                    </div>
+                  ))}
+                  {detail?.fell.map((f) => (
+                    <div key={`f-${f.time}-${f.text}`} className="dd-row fell">
+                      <span className="dd-mark">↓</span>
+                      <span className="dd-time">{f.time}</span>
+                      <span className="dd-text">{f.text}</span>
+                      <span className="dd-proj">{f.project ?? ""}</span>
+                      <span className="dd-axis">
+                        {f.priority != null && <PriorityBars priority={f.priority} />}
+                      </span>
+                    </div>
+                  ))}
+                  {detail?.dailyMissed.map((m) => (
+                    <div key={`m-${m.text}-${m.project ?? ""}`} className="dd-row missed">
+                      <span className="dd-mark">○</span>
+                      <span className="dd-text">{m.text}</span>
+                      <span className="dd-proj">{m.project ?? ""}</span>
+                      <span className="dd-axis">
+                        {m.priority != null && <PriorityBars priority={m.priority} />}
+                      </span>
+                    </div>
+                  ))}
+                  {detail != null &&
+                    detail.tasks.length === 0 &&
+                    detail.fell.length === 0 &&
+                    detail.dailyMissed.length === 0 && (
+                      <div className="dd-empty">Nothing that day.</div>
+                    )}
+                </div>
+              </section>
+            ) : (
+              <section className="an-card an-days">
+                <div className="an-card-title">Days</div>
+                {ledger.length === 0 && (
+                  <div className="dash-empty">No activity in this range.</div>
+                )}
+                {ledger.map((d) => {
+                  const secs = timeByDay.get(d.date) ?? 0;
+                  const missed = d.dailyMissed + d.todayMissed;
+                  return (
                     <button
-                      className={`an-day${open ? " picked" : ""}`}
+                      key={d.date}
+                      className="an-day"
                       onClick={() => pickDay(d.date)}
-                      title={open ? "Click again to collapse" : "Show this day's tasks"}
+                      title="Show this day's tasks"
                     >
                       <span className="d">
                         {d.date === today
@@ -638,49 +761,13 @@ export default function AnalyticsView() {
                         {subject === "done" && !hasFilter && secs > 0 && (
                           <span className="time">{formatDuration(secs)}</span>
                         )}
-                        <Chevron open={open} />
+                        <Chevron />
                       </span>
                     </button>
-                    {open && (
-                      <div className="an-day-detail">
-                        {detail == null && <div className="dd-empty">…</div>}
-                        {detail?.tasks.map((t) => (
-                          <div key={t.itemId} className={`dd-row ${noun}`}>
-                            <span className="dd-mark">{noun === "created" ? "+" : "✓"}</span>
-                            <span className="dd-time">{t.time}</span>
-                            <span className="dd-text">{t.text}</span>
-                            {subject === "done" && t.secs > 0 && (
-                              <span className="dd-secs">{formatDuration(t.secs)}</span>
-                            )}
-                          </div>
-                        ))}
-                        {detail?.fell.map((f) => (
-                          <div key={`f-${f.time}-${f.text}`} className="dd-row fell">
-                            <span className="dd-mark">↓</span>
-                            <span className="dd-time">{f.time}</span>
-                            <span className="dd-text">{f.text}</span>
-                            <span className="dd-tag">fell</span>
-                          </div>
-                        ))}
-                        {detail?.dailyMissed.map((m) => (
-                          <div key={`m-${m}`} className="dd-row missed">
-                            <span className="dd-mark">○</span>
-                            <span className="dd-text">{m}</span>
-                            <span className="dd-tag">missed</span>
-                          </div>
-                        ))}
-                        {detail != null &&
-                          detail.tasks.length === 0 &&
-                          detail.fell.length === 0 &&
-                          detail.dailyMissed.length === 0 && (
-                            <div className="dd-empty">Nothing that day.</div>
-                          )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </section>
+                  );
+                })}
+              </section>
+            )}
           </>
         )}
       </div>

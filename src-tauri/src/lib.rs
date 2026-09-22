@@ -146,11 +146,10 @@ async fn journal_dashboard(
     .await
 }
 
-// One day at task level — what the analytics ledger's expanded row renders,
-// for either subject. The per-task session seconds are layered on here in
-// Done mode (a separate dimension; day_detail itself never touches
-// `sessions`, and time deliberately doesn't follow the scope filter — see
-// dashboard.rs).
+// One day at task level — what the analytics day card renders, for either
+// subject. The per-task session seconds are layered on here in Done mode (a
+// separate dimension; day_detail itself never touches `sessions`, and time
+// deliberately doesn't follow the scope filter — see dashboard.rs).
 #[tauri::command]
 async fn journal_day_detail(
     db: State<'_, DbState>, date: String,

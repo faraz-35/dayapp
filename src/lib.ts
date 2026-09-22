@@ -320,8 +320,9 @@ export const journalApi = {
     invoke<DayDetail>("journal_day_detail", { date, filter, subject }),
 };
 
-/** A task in the picked day's expansion — a completion (Done mode, with the
- *  day's tracked seconds) or a creation (Created mode). */
+/** A task in the picked day's card — a completion (Done mode, with the day's
+ *  tracked seconds) or a creation (Created mode); the axes are the write-time
+ *  snapshots, rendered project-left / bars-right on the row. */
 export interface TaskDetail {
   itemId: string;
   time: string;
@@ -331,10 +332,19 @@ export interface TaskDetail {
   secs: number;
 }
 
-/** A today task that fell to Backlog that day. */
+/** A today task that fell to Backlog that day, with its axes at the fall. */
 export interface FellTaskDetail {
   time: string;
   text: string;
+  project: string | null;
+  priority: 1 | 2 | 3 | null;
+}
+
+/** A habit the day ended without, with the axes the scope filter saw. */
+export interface MissedHabit {
+  text: string;
+  project: string | null;
+  priority: 1 | 2 | 3 | null;
 }
 
 export interface DayDetail {
@@ -343,9 +353,9 @@ export interface DayDetail {
    *  tasks created that day). */
   tasks: TaskDetail[];
   fell: FellTaskDetail[];
-  /** Texts of habits the day ended without (empty for the live today; empty
-   *  in created mode). */
-  dailyMissed: string[];
+  /** Habits the day ended without (empty for the live today; empty in created
+   *  mode). */
+  dailyMissed: MissedHabit[];
 }
 
 // ---- Mobile sync ----------------------------------------------------------

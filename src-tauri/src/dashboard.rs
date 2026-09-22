@@ -230,26 +230,41 @@ pub struct TaskDetail {
     pub secs: i64,
 }
 
-/// A today task that fell to Backlog that day — the sweep's own record.
+/// A today task that fell to Backlog that day — the sweep's own record, with
+/// the axes it carried at the fall.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FellTaskDetail {
     pub time: String,
     pub text: String,
+    pub project: Option<String>,
+    pub priority: Option<i64>,
 }
 
-/// A single day at task level — what clicking a day on the analytics page
-/// expands to: the subject's rows (`tasks` — effective completions under
-/// Done, creations under Created), plus the done-only fell/missed lists
-/// (empty under Created).
+/// A habit the day ended without — its text plus the axes the scope filter
+/// saw (the live row's current axes when it still exists, else the folded
+/// life-event snapshot), so the day card can show them beside the text.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissedHabit {
+    pub text: String,
+    pub project: Option<String>,
+    pub priority: Option<i64>,
+}
+
+/// A single day at task level — what the analytics day card renders: the
+/// subject's rows (`tasks` — effective completions under Done, creations
+/// under Created), plus the done-only fell/missed lists (empty under
+/// Created). Every row carries its axes; the ↓/○ mark is the row's kind —
+/// no text tag rides along.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DayDetail {
     pub date: String,
     pub tasks: Vec<TaskDetail>,
     pub fell: Vec<FellTaskDetail>,
-    /// Texts of habits the day ended without (empty for the live today).
-    pub daily_missed: Vec<String>,
+    /// Habits the day ended without (empty for the live today).
+    pub daily_missed: Vec<MissedHabit>,
 }
 
 /// An item's standing on one day, folded from that day's completed/
@@ -369,30 +384,31 @@ fn apply_life_event(live: &mut HashMap<String, LiveItem>, ev: &LifeEv) {
     }
 }
 
-/// The day's missed-habit texts: alive daily items not inside a logged pause
-/// whose day ended without a daily completion. Under a scope filter, only
-/// habits whose axes match are in the population — a habit outside the filter
-/// is neither expected nor missed. Axes come from the live row when it still
-/// exists, else the folded life-event snapshot.
-fn daily_missed_texts(
+/// The day's missed habits: alive daily items not inside a logged pause
+/// whose day ended without a daily completion, each with the axes the scope
+/// filter saw. Under a scope filter, only habits whose axes match are in the
+/// population — a habit outside the filter is neither expected nor missed.
+/// Axes come from the live row when it still exists, else the folded
+/// life-event snapshot.
+fn missed_habits(
     live: &HashMap<String, LiveItem>,
     done_daily: &HashSet<String>,
     axes: &HashMap<String, (Option<String>, Option<i64>)>,
     scope: &Scope,
-) -> Vec<String> {
+) -> Vec<MissedHabit> {
     live.iter()
-        .filter(|(id, it)| {
+        .filter_map(|(id, it)| {
             let (project, priority) = axes
                 .get(id.as_str())
                 .cloned()
-                .unwrap_or((it.project.clone(), it.priority));
-            it.alive
+                .unwrap_or_else(|| (it.project.clone(), it.priority));
+            (it.alive
                 && it.section.as_deref() == Some("daily")
                 && !it.paused
                 && !done_daily.contains(id.as_str())
-                && scope.allows(&project, &priority)
+                && scope.allows(&project, &priority))
+                .then(|| MissedHabit { text: it.text.clone(), project, priority })
         })
-        .map(|(_, it)| it.text.clone())
         .collect()
 }
 
@@ -660,7 +676,7 @@ impl Db {
                         .collect()
                 });
                 daily_missed =
-                    daily_missed_texts(&live, &done_daily, &axes, &scope).len() as i64;
+                    missed_habits(&live, &done_daily, &axes, &scope).len() as i64;
             }
             let today_missed = fell_by_day.get(&day).copied().unwrap_or(0);
 
@@ -869,7 +885,7 @@ impl Db {
         let mut fell: Vec<FellTaskDetail> = Vec::new();
         {
             let mut sql = String::from(
-                "SELECT substr(timestamp,12,5), item_text FROM actions
+                "SELECT substr(timestamp,12,5), item_text, project, priority FROM actions
                  WHERE item_id IS NOT NULL AND action = 'fell_to_backlog'
                    AND timestamp >= ? AND timestamp < ?",
             );
@@ -880,7 +896,12 @@ impl Db {
             let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
             let mut stmt = conn.prepare(&sql)?;
             let rows = stmt.query_map(refs.as_slice(), |r| {
-                Ok(FellTaskDetail { time: r.get(0)?, text: r.get(1)? })
+                Ok(FellTaskDetail {
+                    time: r.get(0)?,
+                    text: r.get(1)?,
+                    project: r.get(2)?,
+                    priority: r.get(3)?,
+                })
             })?;
             for row in rows {
                 fell.push(row?);
@@ -889,7 +910,7 @@ impl Db {
 
         // Missed habits: the replay frozen at this day's end. The live today
         // has no verdict yet.
-        let mut daily_missed: Vec<String> = Vec::new();
+        let mut daily_missed: Vec<MissedHabit> = Vec::new();
         if date != today_iso() {
             // The replay frozen at this day's end — 06:00 the next wall-clock
             // morning. The live today has no verdict yet.
@@ -911,7 +932,7 @@ impl Db {
                 .filter(|(_, sec)| sec.as_deref() == Some("daily"))
                 .map(|(id, _)| id.clone())
                 .collect();
-            daily_missed = daily_missed_texts(&live, &done_daily, &axes, &scope);        }
+            daily_missed = missed_habits(&live, &done_daily, &axes, &scope);        }
 
         Ok(DayDetail { date: date.to_string(), tasks, fell, daily_missed })
     }
@@ -1112,9 +1133,9 @@ mod tests {
             // E from the Backlog.
             act(&conn, "E", "created", None, Some("backlog"), None, None, "2026-01-01T09:00:00");
             act(&conn, "E", "completed", Some("backlog"), Some("backlog"), None, None, "2026-01-02T14:00:00");
-            // C fell at the day boundary.
+            // C fell at the day boundary, carrying its axes at the fall.
             act(&conn, "C", "created", None, Some("today"), None, None, "2026-01-01T09:00:00");
-            act(&conn, "C", "fell_to_backlog", Some("today"), Some("backlog"), None, None, "2026-01-02T06:01:00");
+            act(&conn, "C", "fell_to_backlog", Some("today"), Some("backlog"), Some("growth"), Some(2), "2026-01-02T06:01:00");
         }
         let d = db.day_detail("2026-01-02", &ScopeFilter::default(), Subject::Done).unwrap();
         let texts: Vec<&str> = d.tasks.iter().map(|t| t.text.as_str()).collect();
@@ -1123,7 +1144,10 @@ mod tests {
         assert_eq!(d.tasks[1].project.as_deref(), Some("meridian"));
         let fell: Vec<&str> = d.fell.iter().map(|f| f.text.as_str()).collect();
         assert_eq!(fell, ["C"]);
-        assert_eq!(d.daily_missed, ["B"]);
+        assert_eq!(d.fell[0].project.as_deref(), Some("growth"));
+        assert_eq!(d.fell[0].priority, Some(2));
+        let missed: Vec<&str> = d.daily_missed.iter().map(|m| m.text.as_str()).collect();
+        assert_eq!(missed, ["B"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1219,7 +1243,8 @@ mod tests {
         let d4 = db.day_detail("2026-01-04", &ScopeFilter::default(), Subject::Done).unwrap();
         assert!(d4.daily_missed.is_empty());
         let d2 = db.day_detail("2026-01-02", &ScopeFilter::default(), Subject::Done).unwrap();
-        assert_eq!(d2.daily_missed, vec!["habit b".to_string()]);
+        let missed: Vec<&str> = d2.daily_missed.iter().map(|m| m.text.as_str()).collect();
+        assert_eq!(missed, ["habit b"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

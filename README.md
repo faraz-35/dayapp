@@ -34,7 +34,7 @@ The day runs 6am to 6am. Work past midnight and it's still yesterday: nothing re
 
 ## Analytics
 
-A dashboard built from the log: done / streak / missed stats, a month heatmap, project and priority splits, and a day-by-day ledger that expands to show exactly what happened. Filter by project or priority. A Done / Created toggle switches what it counts — what you finished, or what you took on.
+A dashboard built from the log: done / streak / missed stats, a month heatmap, project and priority splits, and a day-by-day ledger — click any day (ledger row, calendar cell, or date field) to open it as its own card. Filter by project or priority. A Done / Created toggle switches what it counts — what you finished, or what you took on.
 
 ## Journal & quotes
 

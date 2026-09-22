@@ -604,6 +604,16 @@ button {
   gap: 14px;
   align-items: stretch;
 }
+/* The calendar's size is bounded: filtering an axis away unmounts its split
+   card, and the freed grid track would otherwise stretch the squares across
+   the row. The cap sits on the calendar, not the card — an auto-margin grid
+   ITEM sizes to fit-content, which collapsed the 1fr columns into oval cells
+   (the 2026-09-21 regression); the card stays a stretched band member and
+   the calendar centers inside it. */
+.an-activity .cal {
+  max-width: 410px;
+  margin-inline: auto;
+}
 
 /* Hero stats — one card, evenly spread. The numbers carry the page. */
 .an-hero {
@@ -799,19 +809,10 @@ button {
 }
 .an-seg-legend .leg.zero { color: var(--text-faint); }
 
-/* Day ledger: one line per day that had any signal — counts only, never the
-   raw action rows (the log's textual home is the CLI's --journal). Clicking
-   a row expands that day's tasks inline: done (✓ + HH:MM + tracked time),
-   what fell, missed habits. The open row inverts (bg recess) against the
-   card so the expansion reads as one unit. */
-.an-day-wrap {
-  border-radius: 10px;
-}
-.an-day-wrap.open {
-  background: var(--bg);
-  padding: 4px;
-}
-.an-day-wrap.open .an-day { padding: 5px 8px; }
+/* Day ledger and the day card it opens. The list is counts only, never the
+   raw action rows (the log's textual home is the CLI's --journal); clicking
+   a row — or a calendar cell, the date field, or the Today pill — swaps the
+   whole section for that one day's card with a back button. */
 .an-day {
   display: flex;
   align-items: center;
@@ -845,6 +846,22 @@ button {
 }
 .an-day .s .done { color: var(--text); }
 .an-day .s .time { color: var(--accent); }
+/* The picked day's card: the ledger row's expansion promoted to a card. The
+   back chevron sits before the day label in the title row, the counts read
+   in the hint, and the rows sit flush with the card's padding. */
+.an-daycard .an-card-title { align-items: center; }
+.an-daycard-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.an-daycard-day { color: var(--text-dim); }
+.an-daycard .hint {
+  display: inline-flex;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.an-daycard .an-day-detail { padding: 0; }
 .an-day-detail {
   display: flex;
   flex-direction: column;
@@ -886,11 +903,26 @@ button {
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
-.dd-tag {
-  color: var(--text-faint);
-  font-style: italic;
-  font-size: 11px;
+/* The row's organising axes at the right edge, the item-row language: the
+   project name (variable, right-aligned) reads first, the fixed-width bars
+   slot pins the edge — rendered even when empty, so the bars align down the
+   card. Every row kind carries them (task, fell, missed). */
+.dd-axis {
+  width: 13px; /* 3 bars × 3px + 2 × 2px gap */
   flex-shrink: 0;
+  display: inline-flex;
+  justify-content: center;
+  align-self: center;
+}
+.dd-proj {
+  flex-shrink: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--text-dim);
+  font-size: 11px;
 }
 .dd-empty {
   color: var(--text-faint);
@@ -899,16 +931,38 @@ button {
   font-size: 12px;
 }
 /* One chevron glyph, rotated open — the expand affordance. Hidden at rest,
-   revealed on row hover and while open. */
+   revealed on row hover; card-head buttons keep it always on. */
 .dd-chev {
   color: var(--text-faint);
   opacity: 0;
   flex-shrink: 0;
   transition: opacity 0.08s ease, transform 0.08s ease;
 }
-.an-day:hover .dd-chev,
-.an-day-wrap.open .dd-chev { opacity: 1; }
+.an-day:hover .dd-chev { opacity: 1; }
 .dd-chev.open { transform: rotate(90deg); }
+.dd-chev.left { transform: rotate(180deg); }
+/* Card-head icon buttons — the inner action button language carrying an
+   always-on chevron: the projects card's zero-rows reveal and the day
+   card's back arrow. */
+.an-expand,
+.an-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.08s ease, background 0.08s ease;
+}
+.an-expand:hover,
+.an-back:hover { color: var(--text); background: var(--bg-hover); }
+.an-expand .dd-chev,
+.an-back .dd-chev { opacity: 1; }
 .dash-empty {
   color: var(--text-faint);
   font-style: italic;
