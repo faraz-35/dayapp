@@ -9,10 +9,9 @@
 // swap back — a real timer left running keeps counting honestly the whole time.
 //
 // Rules the feature is built on (deliberate — don't relax them):
-// - Demo MODE never persists across launches: every launch opens the real db.
-//   The one exception is the first run — with no real db in place the app opens
-//   straight into demo mode as the tour, and "Exit Demo Mode" is the on-ramp
-//   to a clean, empty real db.
+// - Demo MODE never persists across launches, and launch never enters it:
+//   every launch opens the real db (a first run is the clean, empty one
+//   greeted by the name ask); Demo Mode exists only as the ⌘P action.
 // - Demo DATA persists: mutations live in dayapp-demo.db across sessions, and
 //   "Reset Demo Data" (⌘P, demo mode only) re-runs the seed.
 // - Mobile sync is fully gated while demo is active (see sync.rs) — demo tasks

@@ -23,6 +23,7 @@ import UpdateOverlay from "./UpdateOverlay";
 import MobileView from "./MobileView";
 import MobileSyncSettings from "./MobileSyncSettings";
 import KeyboardHelp from "./KeyboardHelp";
+import NamePrompt from "./NamePrompt";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, popoverOpen, scrollIntoViewEl } from "./focusNav";
 
 type View = "list" | "analytics" | "journal" | "quotes";
@@ -347,9 +348,8 @@ function DayApp() {
       .catch((e) => { log.error("backup: capture failed", e); showToast(`Backup failed: ${e}`); });
   }, [showToast]);
   // Demo mode (⌘P → Enter/Exit): the backend swapped the whole database to the
-  // disposable demo file. Session-only — the initial query catches the first-run
-  // tour, the "demo-mode" event catches toggles/resets. `dataEpoch` bumps on
-  // every swap so the self-contained surfaces (Notes, Goals) reload too.
+  // disposable demo file. Session-only — never a launch state. `dataEpoch`
+  // bumps on every swap so the self-contained surfaces (Notes, Goals) reload.
   const [demoMode, setDemoMode] = useState(false);
   // Whether mobile sync has a repo configured. Only the palette follows this —
   // unsynced, the feature shows one quiet door instead of its working verbs.
@@ -374,9 +374,16 @@ function DayApp() {
   // Ref mirror for the meta-key effect (runs once) — the zoom it acts on.
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
-  // The masthead brand word after "Live @ " — "Faraz" is home. Session-only:
-  // a launch always starts at home.
-  const [liveAt, setLiveAt] = useState("Faraz");
+  // The masthead brand word after "Live @ " — the owner's name is home
+  // ("DayApp" until they answer the first-run ask). Session-only: a launch
+  // always starts at home.
+  const [liveAt, setLiveAt] = useState("DayApp");
+  // The masthead owner, from the db's meta (so the mobile export carries it):
+  // undefined = still loading, null = never asked (the first-run prompt shows
+  // for exactly that launch — skipping stores ""), "" = skipped, a string =
+  // named. Demo mode never asks and always renders "Live @ Demo".
+  const [ownerName, setOwnerName] = useState<string | null | undefined>(undefined);
+  const [namePromptOpen, setNamePromptOpen] = useState(false);
   // The theme shown before the current home stretch — the next pick avoids it,
   // so the rotation shuffles rather than dice-rolls repeats.
   const lastTheme = useRef("");
@@ -525,7 +532,7 @@ function DayApp() {
   // the masthead while it's on — home becomes "Fun" and the pool the fun
   // words (demo mode still overrides the whole line with "Live @ Demo").
   useEffect(() => {
-    const home = funMode ? "Fun" : "Faraz";
+    const home = funMode ? "Fun" : (ownerName || "DayApp");
     const themes = funMode ? FUN_MASTHEAD_THEMES : MASTHEAD_THEMES;
     setLiveAt(home);
     const id = setInterval(() => {
@@ -538,7 +545,29 @@ function DayApp() {
       });
     }, 120_000);
     return () => clearInterval(id);
-  }, [funMode]);
+  }, [funMode, ownerName]);
+
+  // Owner name: fetched once at mount; the first-run ask opens when the db
+  // has never answered (null) and demo mode isn't covering the masthead.
+  // Saving trims; Esc on the first-run ask stores "" so it never nags again —
+  // ⌘P → Set Your Name… is the door back.
+  useEffect(() => {
+    api.getOwnerName()
+      .then(setOwnerName)
+      .catch((e) => { log.warn("owner name load failed", e); setOwnerName(null); });
+  }, []);
+
+  useEffect(() => {
+    if (ownerName === null && !demoMode) setNamePromptOpen(true);
+  }, [ownerName, demoMode]);
+
+  const saveOwnerName = useCallback((name: string) => {
+    const trimmed = name.trim();
+    api.setOwnerName(trimmed).then(() => {
+      setOwnerName(trimmed);
+      setNamePromptOpen(false);
+    }).catch((e) => log.error("owner name save failed", e));
+  }, []);
 
   // ---- Quote screensaver --------------------------------------------------
   // SCREENSAVER_IDLE_MS of focused stillness summons the quote modal — the
@@ -932,6 +961,14 @@ function DayApp() {
     { id: "view-analytics", label: "View Analytics", run: () => setView("analytics") },
     { id: "view-journal", label: "View Journal", run: () => setView("journal") },
     { id: "view-quotes", label: "View Quotes", run: () => setView("quotes") },
+    // The masthead's owner (hidden in demo mode — the name would write into
+    // the demo db's meta, and the masthead reads "Live @ Demo" there anyway).
+    ...(demoMode ? [] : [{
+      id: "owner-name",
+      label: "Set Your Name…",
+      hint: ownerName ? `now “${ownerName}”` : "the masthead’s “Live @ …”",
+      run: () => setNamePromptOpen(true),
+    }]),
     {
       id: "keyboard-help",
       label: "Keyboard Shortcuts",
@@ -1895,6 +1932,13 @@ function DayApp() {
         onCount={setQuoteCount}
       />
       <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
+      {namePromptOpen && (
+        <NamePrompt
+          initial={ownerName ?? ""}
+          onSave={saveOwnerName}
+          onClose={ownerName === null ? () => saveOwnerName("") : () => setNamePromptOpen(false)}
+        />
+      )}
       <UpdateOverlay
         status={updateStatus}
         onDismiss={() => setUpdateStatus(null)}

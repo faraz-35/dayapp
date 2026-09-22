@@ -92,6 +92,9 @@ export const api = {
   updateSourceAvailable: () => invoke<boolean>("update_source_available"),
   updateCheck: () => invoke<string | null>("update_check"),
   updateInstall: () => invoke<void>("update_install"),
+  /** Masthead owner: null = never asked, "" = asked and skipped. */
+  getOwnerName: () => invoke<string | null>("get_owner_name"),
+  setOwnerName: (name: string) => invoke<void>("set_owner_name", { name }),
 };
 
 export interface Project {

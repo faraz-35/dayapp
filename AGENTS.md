@@ -353,11 +353,12 @@ seeded demo always shows a live-looking week of journal history.
   swap-back is instant, and a real timer left running keeps counting honestly
   across the whole demo session. Entering/exiting runs the launch sweeps
   against the newly-active db (each behaves as if relaunched).
-- **Demo mode is session-only.** Every launch opens the real db; the flag
-  never persists. The single exception is by design: **first run** (no real db
-  exists at launch) opens straight into demo mode as the tour, and "Exit Demo
-  Mode" is the on-ramp to the clean, empty real db. Do not add any other
-  launch path into demo.
+- **Demo mode is session-only, and launch-gated to the ⌘P action alone.**
+  Every launch opens the real db; the flag never persists. There is **no
+  first-run demo path** (removed 2026-09-22): a first run is the real, empty
+  db greeted by the name ask (see "Owner name" under UI/UX), and Demo Mode is
+  purely a ⌘P action for trying/showing the app. Do not add any other launch
+  path into demo.
 - **Demo data persists** across sessions (no auto-reset — deliberate).
   ⌘P → **Reset Demo Data** (demo mode only) re-runs the seed; because seed
   dates are relative to seed day, a reset also freshens an aged demo. A stale
@@ -491,7 +492,7 @@ carry the build machine's path, which never exists on a user's Mac)?
   Progress rides the same "update-status" channel as the local build, phase
   `downloading`, so `UpdateOverlay` renders both unchanged (it only grew a
   title and a message override). Hidden in demo mode — a relaunch ends the
-  demo session, and a first-run tour has no update to take.
+  demo session.
 
 - The channel is the release's own `latest.json`
   (`releases/latest/download/latest.json` — no server, the sync-repo idea
@@ -617,7 +618,7 @@ dayapp/
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
 └── src-tauri/
     ├── src/
-    │   ├── lib.rs                  ← Tauri commands + setup (first-run demo, sweeps, reminders, logging plugin) + self_update
+    │   ├── lib.rs                  ← Tauri commands + setup (sweeps, reminders, logging plugin) + self_update + owner name
     │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, reminders, completions + Db struct (conn swap, launch_sweeps)
     │   ├── notes.rs                ← notes DB logic + setters + the stored-footer migration (methods on Db)
     │   ├── journal.rs              ← the ##j/##q typed capture: entries table (journal lines + quotes), day-stamped (methods on Db)
@@ -760,12 +761,12 @@ keyboard-first.** Every choice below is intentional.
 
 Typography: `-apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif`.
 Base size **13px**. Section headers are 11px uppercase with `0.08em` letter-spacing.
-The serif surfaces are the centered header masthead (the "Live @ Faraz" brand, or
+The serif surfaces are the centered header masthead (the "Live @ <owner>" brand, or
 "Analytics"/"Journal"/"Quotes" in those views) and the quote modal's line: `ui-serif` (New York)
 italic, Didot/Georgia fallbacks (14px for the masthead; the quote scales with the
 window — `clamp(19px, 2.5vw, 22px)`, line-height 1.75 — never above 22px,
 compact in the 480px frame). The brand
-rotates like a station ident — "Faraz" is home, and every 2
+rotates like a station ident — the owner's name is home, and every 2
 minutes it steps out to a random word from `MASTHEAD_THEMES` in `App.tsx`
 (growth/money/journey/learn, never the same one twice in a row) and back, each swap
 fading in (`title-in`). Fun Mode owns the masthead while it's on — home becomes "Fun"
@@ -773,6 +774,17 @@ and the pool becomes `FUN_MASTHEAD_THEMES` (experiment/play/create), the same ro
 mechanics; Demo Mode still overrides the whole line with "Live @ Demo". It is always rendered, even while a timer runs — the timer chip
 shows only a pulse + elapsed (task name in its tooltip) so the two coexist on the 480px
 window; below 455px of width a media query hides the masthead.
+
+**Owner name (the masthead's home word):** asked once, on the first launch —
+a floating `NamePrompt` card ("What's your name?") over the clean, empty db a
+first run now opens on (there is no first-run demo tour). Enter saves the
+trimmed name; Esc stores `""` (skip) so the ask never repeats; ⌘P → **Set
+Your Name…** is the permanent door (hidden in demo mode — the write would
+land in the demo db's meta, and the masthead reads "Live @ Demo" there
+anyway). The name lives in the real db's `meta` (`owner_name`), not
+localStorage — that's what lets the mobile export carry it (`tasks.json`'s
+`owner` field; the phone renders `Live @ <owner>`, falling back to
+"Live @ DayApp"). Skipped/unnamed installs read "Live @ DayApp".
 
 ### Spacing & shape
 

@@ -1871,6 +1871,49 @@ button {
   font-style: italic;
 }
 
+/* ---- Name prompt (first-run ask / ⌘P → Set Your Name…) ----------------- */
+/* A floating surface in the palette's mold — the ask is transient, never
+   inline chrome. Deliberately modal: only Enter and Esc leave it. */
+
+.name-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.name-card {
+  width: 90%;
+  max-width: 320px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.name-label { font-size: 13px; color: var(--text); }
+.name-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 8px;
+  outline: none;
+  transition: border-color 0.08s ease;
+}
+.name-input:focus { border-color: var(--accent); }
+.name-input::placeholder { color: var(--text-faint); }
+.name-hint { font-size: 11px; color: var(--text-faint); }
+
 /* ---- Keyboard help (⌘P → Keyboard Shortcuts) ---------------------------- */
 /* Mirrors the palette's floating-surface pattern; z sits under the palette
    (100) — the help opens after the palette closes, so they never stack. */

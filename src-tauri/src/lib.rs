@@ -504,6 +504,25 @@ async fn sync_get_config(db: State<'_, DbState>) -> Result<SyncConfig, String> {
     with_db(db, move |db| Ok(db.sync_config())).await
 }
 
+// The masthead owner: None = never asked (the first-run prompt shows),
+// Some("") = asked and skipped ("Live @ DayApp"), Some(name) = named.
+// Lives in the real db's meta so the mobile export can carry it.
+#[tauri::command]
+async fn get_owner_name(db: State<'_, DbState>) -> Result<Option<String>, String> {
+    with_db(db, move |db| Ok(db.meta_get("owner_name")?)).await
+}
+
+#[tauri::command]
+async fn set_owner_name(db: State<'_, DbState>, name: String) -> Result<(), String> {
+    with_db(db, move |db| {
+        let trimmed = name.trim();
+        db.meta_set("owner_name", trimmed)?;
+        log::info!("owner: masthead name {}", if trimmed.is_empty() { "cleared" } else { "set" });
+        Ok(())
+    })
+    .await
+}
+
 #[tauri::command]
 async fn sync_set_config(db: State<'_, DbState>, config: SyncConfig) -> Result<(), String> {
     with_db(db, move |db| db.sync_set_config(&config)).await
@@ -877,19 +896,14 @@ pub fn run() {
             log::info!("DayApp starting (version {})", app.package_info().version);
             let db_path = db_path(app.handle());
             log::debug!("db path: {}", db_path.display());
-            // First run (no real db yet): open straight into the demo tour —
-            // the demo db is seeded and swapped in, and "Exit Demo Mode" is
-            // the on-ramp to a clean, empty real db. Checked before open,
-            // which creates the file. This is the only path that ever starts
-            // a launch in demo mode; demo mode never persists otherwise.
             let first_run = !db_path.exists();
             let db = Db::open(&db_path)?;
+            if first_run {
+                log::info!("first run: clean db created — demo mode stays a ⌘P action");
+            }
             // Launch sweeps: today → Backlog fall, done-today retirement,
             // expired-hide restore, reminder promotion. Idempotent.
             db.launch_sweeps()?;
-            if first_run {
-                db.enter_demo()?;
-            }
             let db = Arc::new(db);
             // One-way export loop: push tasks.json once a minute when it
             // changed. A plain sleeping thread is enough (single user, one
@@ -948,6 +962,7 @@ pub fn run() {
             demo_mode, enter_demo_mode, exit_demo_mode, reset_demo_data,
             self_update,
             update_source_available, update_check, update_install,
+            get_owner_name, set_owner_name,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DayApp");

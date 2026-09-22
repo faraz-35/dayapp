@@ -39,6 +39,7 @@ interface ExportItem {
 interface ExportDoc {
   exportedAt: string;
   today: string;
+  owner: string;
   projects: { id: string; name: string }[];
   items: ExportItem[];
 }
@@ -192,7 +193,7 @@ export default function MobileView() {
   return (
     <div className="mobile">
       <header className="mobile-header">
-        <span className="mobile-brand">Live @ Faraz</span>
+        <span className="mobile-brand">Live @ {doc?.owner || "DayApp"}</span>
         <div className="mobile-header-right">
           {syncedAt && (
             <span className="mobile-synced" title={doc ? `exported ${doc.exportedAt}` : ""}>
@@ -382,7 +383,7 @@ function Setup({ onConnect }: { onConnect: (cfg: MobileConfig) => void }) {
 
   return (
     <div className="mobile-setup">
-      <div className="mobile-brand">Live @ Faraz</div>
+      <div className="mobile-brand">Live @ DayApp</div>
       <div className="mobile-setup-sub">Connect to your private sync repo</div>
       <input className="menu-input" value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="owner/dayapp-sync" spellCheck={false} />
       <input className="menu-input" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="branch (main)" spellCheck={false} />

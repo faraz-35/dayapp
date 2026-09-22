@@ -107,6 +107,7 @@ struct ExportDoc {
     generator: String,
     exported_at: String,
     today: String,
+    owner: String,
     projects: Vec<ExportProject>,
     items: Vec<ExportItem>,
 }
@@ -216,6 +217,7 @@ pub fn build_export(db: &Db) -> anyhow::Result<(String, usize)> {
         generator: "dayapp".into(),
         exported_at: now_iso(),
         today: today_iso(),
+        owner: db.meta_get("owner_name")?.unwrap_or_default(),
         projects,
         items,
     };

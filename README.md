@@ -70,7 +70,7 @@ A read-only mirror + capture inbox over a private GitHub repo — the Mac stays 
 
 ## Demo mode
 
-⌘P → Enter Demo Mode swaps to a disposable sample database, so anyone can try everything without touching your data. A first run opens in demo mode as the tour.
+⌘P → Enter Demo Mode swaps to a disposable sample database, so anyone can try everything without touching your data. A first run starts on a clean, empty list — it asks your name once (for the "Live @ you" header) and Demo Mode is always a ⌘P away.
 
 ## Keyboard
 
