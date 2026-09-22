@@ -1359,7 +1359,7 @@ mechanics (detached swap helper, LaunchServices re-registration).
 Publishing a release is one command, and it ships everywhere:
 
 ```bash
-npm run release patch        # or minor | major; add --dry-run to build + verify only
+npm run release patch        # or minor | major; append `dry` to build + verify without publishing
 ```
 
 Stages: guards (clean main, synced) → bump `tauri.conf.json` (the version
@@ -1370,7 +1370,7 @@ activates the update channel) → cask version + sha256 in the tapped
 homebrew-tap, push, `brew audit` + livecheck must agree → site download link,
 push, `vercel --prod` (retries the Not-authorized quirk), live fetch must
 serve the new link → receipt. Every stage checks current state first, so
-re-running after a failure resumes where it stopped. `--dry-run` runs guards,
+re-running after a failure resumes where it stopped. `dry` runs guards,
 build (version overridden inline — no repo edits), and all verify gates
 without publishing anything. The signing key is read from the macOS keychain
 (service `dayapp-updater-key`); the script imports it from

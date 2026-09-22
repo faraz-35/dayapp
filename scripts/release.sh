@@ -3,7 +3,7 @@
 # release.sh — the opinionated release. One command ships everywhere:
 #
 #   npm run release <patch|minor|major>            # full release
-#   npm run release <patch|minor|major> --dry-run  # build + verify only
+#   npm run release <patch|minor|major> dry         # build + verify only
 #
 # Stages (each checks current state first, so re-running after a failure
 # skips what's done and resumes where it stopped):
@@ -26,7 +26,7 @@
 # The signing key lives in the macOS keychain (service dayapp-updater-key).
 # First run imports it from the legacy file ~/.tauri/dayapp-updater.key; after
 # that the keychain is the source of truth and the loose file can be lost
-# without losing the channel. --dry-run never writes to any repo and never
+# without losing the channel. `dry` never writes to any repo and never
 # publishes; it builds with the next version overridden and runs every gate.
 
 set -euo pipefail
@@ -35,14 +35,16 @@ set -euo pipefail
 
 MODE=""
 DRY_RUN=0
+# `dry` (bare word) is the documented spelling: `--dry-run` is a valid npm
+# flag, so `npm run release patch --dry-run` never reaches this script.
 for arg in "$@"; do
   case "$arg" in
-    --dry-run) DRY_RUN=1 ;;
+    dry|dry-run|--dry-run) DRY_RUN=1 ;;
     patch|minor|major) MODE="$arg" ;;
-    *) echo "usage: npm run release <patch|minor|major> [--dry-run]" >&2; exit 1 ;;
+    *) echo "usage: npm run release <patch|minor|major> [dry]" >&2; exit 1 ;;
   esac
 done
-[ -n "$MODE" ] || { echo "usage: npm run release <patch|minor|major> [--dry-run]" >&2; exit 1; }
+[ -n "$MODE" ] || { echo "usage: npm run release <patch|minor|major> [dry]" >&2; exit 1; }
 
 cd "$(dirname "$0")/.."
 
@@ -135,7 +137,7 @@ printf '%s' "$KEY" > "$KEYFILE"
 chmod 600 "$KEYFILE"
 
 BUNDLE="src-tauri/target/release/bundle"
-DMG="$BUNDLE/dmg/macos/DayApp_${NEXT}_aarch64.dmg"
+DMG="$BUNDLE/dmg/DayApp_${NEXT}_aarch64.dmg"
 TARGZ="$BUNDLE/macos/DayApp.app.tar.gz"
 SIG="$TARGZ.sig"
 LATEST="$BUNDLE/latest.json"

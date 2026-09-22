@@ -821,7 +821,7 @@ async fn update_check(app: AppHandle) -> Result<Option<String>, String> {
 async fn update_install(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_updater::UpdaterExt;
     log::info!("update: downloading release update");
-    let mut update = app
+    let update = app
         .updater()
         .map_err(|e| format!("{e:#}"))?
         .check()
