@@ -95,6 +95,71 @@ const settleBacklogDrop = (spliced: Item[], movedId: string, fullIndex: number) 
   return sortBacklog(seq.map((i, idx) => (i.sortOrder === idx ? i : { ...i, sortOrder: idx })));
 };
 
+// The three header view doors + their shared close state, drawn as SVG rather
+// than the ≡ / ¶ / ❝ / ✕ unicode they replaced — those ride the font's metrics
+// (different baselines and optical sizes per glyph, the reason ItemRow's
+// chevron and arrow are drawn too). All four share one 16-box, stroke 1.7
+// round like ItemRow's glyphs, and tint through currentColor with .icon-btn.
+// Analytics is the chart (vertical bars), Journal the prose lines (last line
+// short — text, not a list), Quotes the filled serif comma pair (the one
+// filled glyph of the set — the quote mark is solid in every other surface).
+
+function AnalyticsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M4.2 12.5V8.6M8 12.5v-9M11.8 12.5V6.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function JournalIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M3 4.5h10M3 8h10M3 11.5h6.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function QuotesIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M7 4.5C4 5.3 2.5 7.5 2.5 10.5v1h3.8V8.3H4.5C4.7 7.1 5.6 6.3 7 5.9ZM13.5 4.5c-3 .8-4.5 3-4.5 6v1h3.8V8.3H11c.2-1.2 1.1-2 2.5-2.4Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="m4.2 4.2 7.6 7.6M11.8 4.2l-7.6 7.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 // Self-update status, accumulated from "update-status" events emitted by the
 // backend's self_update command. `lines` is the streamed build log; `message`
 // is populated only on error.
@@ -1573,11 +1638,11 @@ function DayApp() {
             title={view === "analytics" ? "Back to list" : "View analytics"}
             aria-label="Toggle analytics"
           >
-            {view === "analytics" ? "✕" : "≡"}
+            {view === "analytics" ? <CloseIcon /> : <AnalyticsIcon />}
           </button>
-          {/* ¶ — the Journal view's door (the written word; Analytics keeps
-              the numbers). Same per-button toggle as ≡: the active view's
-              button reads ✕ and returns to the list. */}
+          {/* The Journal view's door (the written word; Analytics keeps the
+              numbers). Same per-button toggle as the analytics door: the
+              active view's button reads the close X and returns to the list. */}
           <button
             className={`icon-btn ${view === "journal" ? "active" : ""}`}
             onClick={() => {
@@ -1588,11 +1653,11 @@ function DayApp() {
             title={view === "journal" ? "Back to list" : "View journal"}
             aria-label="Toggle journal"
           >
-            {view === "journal" ? "✕" : "¶"}
+            {view === "journal" ? <CloseIcon /> : <JournalIcon />}
           </button>
-          {/* ❝ — the Quotes view's door (the ##q pool, browsed and edited;
-              the modal keeps the summoned moment). Same per-button toggle:
-              the active view's button reads ✕ and returns to the list. */}
+          {/* The Quotes view's door (the ##q pool, browsed and edited; the
+              modal keeps the summoned moment). Same per-button toggle: the
+              active view's button reads the close X and returns to the list. */}
           <button
             className={`icon-btn ${view === "quotes" ? "active" : ""}`}
             onClick={() => {
@@ -1603,7 +1668,7 @@ function DayApp() {
             title={view === "quotes" ? "Back to list" : "View quotes"}
             aria-label="Toggle quotes"
           >
-            {view === "quotes" ? "✕" : "❝"}
+            {view === "quotes" ? <CloseIcon /> : <QuotesIcon />}
           </button>
         </div>
       </header>

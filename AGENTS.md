@@ -1107,11 +1107,12 @@ into Notes or edit fields isn't hijacked.
   edit or delete on the Quotes view (2026-09-15) — so the pool always mirrors
   the page).
 
-**Journal & Quotes views (⌘P → View Journal / View Quotes, or the header `¶` / `❝`):**
+**Journal & Quotes views (⌘P → View Journal / View Quotes, or the header
+Journal / Quotes icons):**
 - The written word's two pages over `entries`, one per kind — Journal (##j) and Quotes
   (##q). One component, `EntriesPage.tsx`, parameterized by kind: the masthead reads
-  `Journal`/`Quotes`, and each header button is a per-view toggle like `≡` (the active
-  view's button reads ✕ and returns to the list).
+  `Journal`/`Quotes`, and each header button is a per-view toggle (the active
+  view's button reads the close X and returns to the list).
 - **Days ledger, prose edition**: days newest-first under uppercase day headers
   ("Today" / "Mon, Aug 24"), entries in capture order within a day. Rows are the
   `.item` language minus every axis an entry lacks (no grip/checkbox/bars): single-click
@@ -1125,7 +1126,7 @@ into Notes or edit fields isn't hijacked.
   globally). Self-contained (`EntriesPage.tsx`, the Notes pattern): remounts on every
   view switch so it always renders fresh data; `reloadEpoch` covers demo-mode swaps.
 
-**Analytics view (⌘P → View Analytics, or the header `≡`):**
+**Analytics view (⌘P → View Analytics, or the header chart icon):**
 - The analytics page is **synthesis, never the log**: it answers questions over the
   append-only `actions` history, it does not enumerate events. The raw action log's
   textual home is the CLI (`--journal`); the GUI shows aggregates only. The masthead
