@@ -181,12 +181,13 @@ say "verify"
 [ "$(python3 -c "import json;print(json.load(open('$LATEST'))['version'])")" = "$NEXT" ] \
   || die "latest.json version mismatch"
 python3 - "$LATEST" "$SIG" <<'EOF'
-import json, sys
+import base64, json, sys
 doc = json.load(open(sys.argv[1]))
 mani = doc["platforms"]["darwin-aarch64"]["signature"]
 raw = open(sys.argv[2]).read()
 if mani != raw.strip(): sys.exit("latest.json signature != .sig file")
-if "file:DayApp.app.tar.gz" not in raw: sys.exit(".sig names the wrong file")
+b64 = "".join(line for line in raw.splitlines() if not line.startswith("untrusted comment:"))
+if b"file:DayApp.app.tar.gz" not in base64.b64decode(b64): sys.exit(".sig names the wrong file")
 EOF
 grep -q "v$NEXT/" "$LATEST" || die "latest.json url is not the $TAG release"
 DMG_SHA="$(shasum -a 256 "$DMG" | cut -d' ' -f1)"
