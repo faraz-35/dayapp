@@ -1365,11 +1365,12 @@ npm run release patch        # or minor | major; append `dry` to build + verify 
 Stages: guards (clean main, synced) → bump `tauri.conf.json` (the version
 source; package.json follows) → signed build + `latest.json` + verify gates →
 commit + tag + push → `gh release` (dmg, `.app.tar.gz`, `.sig`,
-`latest.json`; notes auto-generated from commits since the last tag — this
-activates the update channel) → cask version + sha256 in the tapped
-homebrew-tap, push, `brew audit` + livecheck must agree → site download link,
-push, `vercel --prod` (retries the Not-authorized quirk), live fetch must
-serve the new link → receipt. Every stage checks current state first, so
+`latest.json`; notes auto-generated from commits since the last tag) then the
+channel gate — the updater's own endpoint (`releases/latest/download/
+latest.json`) is polled until it serves the new version → cask version +
+sha256 in the tapped homebrew-tap, push, `brew audit` + livecheck must agree
+→ site download link, push, `vercel --prod` (retries the Not-authorized
+quirk), live fetch must serve the new link → receipt. Every stage checks current state first, so
 re-running after a failure resumes where it stopped. `dry` runs guards,
 build (version overridden inline — no repo edits), and all verify gates
 without publishing anything. The signing key is read from the macOS keychain

@@ -230,8 +230,22 @@ if gh release view "$TAG" --repo faraz-35/dayapp > /dev/null 2>&1; then
 else
   gh release create "$TAG" "$DMG" "$TARGZ" "$SIG" "$LATEST" \
     --repo faraz-35/dayapp --title "DayApp $TAG" --notes-file "$NOTESFILE"
-  say "release $TAG created — update channel is live"
+  say "release $TAG created"
 fi
+
+# The gate that matters most: the endpoint every installed app polls must
+# serve the new manifest. This is the updater's own fetch path, end to end —
+# GitHub's asset serving can lag a release by a few seconds, hence the poll.
+say "channel check"
+CHANNEL_OK=0
+for _ in 1 2 3 4 5 6; do
+  CHANNEL_VERSION="$(curl -fsL "https://github.com/faraz-35/dayapp/releases/latest/download/latest.json" 2>/dev/null \
+    | python3 -c "import json, sys; print(json.load(sys.stdin).get('version', ''))" 2>/dev/null || true)"
+  if [ "$CHANNEL_VERSION" = "$NEXT" ]; then CHANNEL_OK=1; break; fi
+  sleep 5
+done
+[ "$CHANNEL_OK" = 1 ] || die "the update channel doesn't serve $NEXT — check the release assets"
+say "update channel serves $NEXT"
 
 # ---- 6. cask ---------------------------------------------------------------
 
@@ -307,7 +321,7 @@ say "live site serves the $NEXT download"
 NOTES_COUNT="$(grep -c '^- ' "$NOTESFILE" 2>/dev/null || echo 0)"
 say "shipped $TAG:"
 say "  release  https://github.com/faraz-35/dayapp/releases/tag/$TAG"
-say "  channel  https://github.com/faraz-35/dayapp/releases/latest/download/latest.json"
+say "  channel  https://github.com/faraz-35/dayapp/releases/latest/download/latest.json (verified: serves $NEXT)"
 say "  cask     dayapp $NEXT (audit + livecheck passed)"
 say "  site     $SITE_URL serves the $NEXT dmg (deployed)"
 say "  dmg sha  $DMG_SHA"
