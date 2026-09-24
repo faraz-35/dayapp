@@ -60,8 +60,9 @@ CUR="$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'
 # Resume rule: a release that died after publishing leaves its bump commit as
 # HEAD, tagged — re-running must finish THAT version. Only when the current
 # version's tag sits on an older commit is CUR the base to bump from.
+RESUME=0
 if [ "$(git rev-parse -q --verify "refs/tags/v$CUR" 2>/dev/null || true)" = "$(git rev-parse HEAD)" ]; then
-  NEXT="$CUR"
+  NEXT="$CUR"; RESUME=1
 else
   NEXT="$(MODE="$MODE" CUR="$CUR" python3 -c 'import os
 c = os.environ["CUR"].split(".")
@@ -141,7 +142,11 @@ TARGZ="$BUNDLE/macos/DayApp.app.tar.gz"
 SIG="$TARGZ.sig"
 LATEST="$BUNDLE/latest.json"
 
-if [ -f "$LATEST" ] && [ -f "$TARGZ" ] && [ -f "$SIG" ] && \
+# Artifact reuse is resume-only: on a resume the source is exactly the tagged
+# state, so present artifacts are the right bytes. A fresh version always
+# builds — otherwise a `dry` run's leftover artifacts would let a later
+# release of the same version ship stale bytes with newer commits inside.
+if [ "$RESUME" = 1 ] && [ -f "$LATEST" ] && [ -f "$TARGZ" ] && [ -f "$SIG" ] && \
    [ "$(python3 -c "import json;print(json.load(open('$LATEST'))['version'])")" = "$NEXT" ]; then
   say "build — artifacts for $NEXT already present, skipping the build"
 else
