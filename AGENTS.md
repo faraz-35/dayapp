@@ -517,7 +517,7 @@ carry the build machine's path, which never exists on a user's Mac)?
   (never commit it; **lose it and the channel is dead** — every installed app
   verifies against the pubkey it shipped with, recovery is manual reinstall).
 - Bump `tauri.conf.json`'s `version` as part of the ritual — the channel's
-  comparison and the cask's bump hang off it. The channel activates on the
+  comparison hangs off it. The channel activates on the
   first release that carries `latest.json` (0.3.0's doesn't — installs of it
   simply never see an icon until the next release).
 
@@ -599,7 +599,7 @@ dayapp/
 ├── icon-source.svg                 ← icon master; regenerate others via `npx tauri icon`
 ├── scripts/
 │   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
-│   └── release.sh                  ← release artifacts: dmg + signed updater bundle + latest.json (npm run release)
+│   └── release.sh                  ← release artifacts: signed updater bundle + latest.json (npm run release)
 ├── src/
 │   ├── App.tsx                     ← shell only: state, effects, the focus grammar (key handler), header, view switching, timer chip
 │   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + goalsApi/parseGoalText + projectColor/formatReminder/formatDuration
@@ -1367,17 +1367,20 @@ npm run release patch        # or minor | major; append `dry` to build + verify 
 ```
 
 Stages: guards (clean main, synced) → bump `tauri.conf.json` (the version
-source; package.json follows) → signed build + `latest.json` + verify gates →
-commit + tag + push → `gh release` (dmg, `.app.tar.gz`, `.sig`,
+source; package.json follows) → signed updater build + `latest.json` + verify
+gates (no dmg — the curl installer and the update channel both live on the
+`.app.tar.gz`) → commit + tag + push → `gh release` (`.app.tar.gz`, `.sig`,
 `latest.json`; notes auto-generated from commits since the last tag) then the
 channel gate — the updater's own endpoint (`releases/latest/download/
-latest.json`) is polled until it serves the new version → cask version +
-sha256 in the tapped homebrew-tap, push, `brew audit` + livecheck must agree
-→ site download link, push, `vercel --prod` (retries the Not-authorized
-quirk), live fetch must serve the new link → receipt. Every stage checks current state first, so
-re-running after a failure resumes where it stopped. `dry` runs guards,
-build (version overridden inline — no repo edits), and all verify gates
-without publishing anything. The signing key is read from the macOS keychain
+latest.json`) is polled until it serves the new version → the install-path
+gate: the site's versionless curl one-liner (`getdayapp.vercel.app/install.sh`
+downloads `releases/latest/download/DayApp.app.tar.gz`) must serve exactly the
+new release's bytes, so a release never edits or deploys the site — the tap's
+cask is no longer maintained (the site dropped brew; curl is the one install
+path) → receipt. Re-running after a failure resumes the same version: a
+tagged bump commit on HEAD means finish that release, not roll the next.
+`dry` runs guards, build (version overridden inline — no repo edits), and all
+verify gates without publishing anything. The signing key is read from the macOS keychain
 (service `dayapp-updater-key`); the script imports it from
 `~/.tauri/dayapp-updater.key` on first run, after which the keychain is the
 source of truth. See "Release updates" under Architecture.
