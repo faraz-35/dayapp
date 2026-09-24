@@ -225,8 +225,11 @@ function DayApp() {
   // universal reset (it hides the goals: the default working view is the plain
   // task list). Show Hidden Tasks/Notes render hidden entries inline (dimmed,
   // ↺/× actions) instead of excluding them; the header ◐ toggles both at once.
+  // Goals alone defaults OFF (the plain task list is the working view; every
+  // other surface defaults on) — stored "1"/"0", so the default only reaches
+  // installs that never toggled it.
   const [goalsVisible, setGoalsVisible] = useState(
-    () => localStorage.getItem("dayapp-goals-visible") !== "0",
+    () => localStorage.getItem("dayapp-goals-visible") === "1",
   );
   const [notesVisible, setNotesVisible] = useState(
     () => localStorage.getItem("dayapp-notes-visible") !== "0",
@@ -465,9 +468,13 @@ function DayApp() {
         setDataEpoch((n) => n + 1);
         setQuotesVersion((n) => n + 1);
         refresh();
-        // The active timer lives in whichever db is now active (a real timer
-        // left running stays honest across the whole demo session).
+        // The active timer and the owner live in whichever db is now active (a
+        // real timer left running stays honest across the whole demo session;
+        // the owner re-read matters on tour exit — the launch tour's mount-time
+        // fetch read the demo db, and the name ask opens off the real db's
+        // answer).
         timersApi.active().then(setActiveTimer).catch((err) => log.warn("active timer load failed", err));
+        api.getOwnerName().then(setOwnerName).catch((err) => log.warn("owner name load failed", err));
       });
     })();
     return () => { unlisten?.(); };
@@ -547,7 +554,8 @@ function DayApp() {
     return () => clearInterval(id);
   }, [funMode, ownerName]);
 
-  // Owner name: fetched once at mount; the first-run ask opens when the db
+  // Owner name: fetched at mount and on every demo-mode swap (a launch tour
+  // starts the app on the demo db); the first-run ask opens when the real db
   // has never answered (null) and demo mode isn't covering the masthead.
   // Saving trims; Esc on the first-run ask stores "" so it never nags again —
   // ⌘P → Set Your Name… is the door back.

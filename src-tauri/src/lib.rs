@@ -952,14 +952,18 @@ pub fn run() {
             log::info!("DayApp starting (version {})", app.package_info().version);
             let db_path = db_path(app.handle());
             log::debug!("db path: {}", db_path.display());
-            let first_run = !db_path.exists();
             let db = Db::open(&db_path)?;
-            if first_run {
-                log::info!("first run: clean db created — demo mode stays a ⌘P action");
-            }
             // Launch sweeps: today → Backlog fall, done-today retirement,
             // expired-hide restore, reminder promotion. Idempotent.
             db.launch_sweeps()?;
+            // A brand-new install (never named, no content — see
+            // first_run_tour) opens straight into the demo tour; enter_demo
+            // re-runs the sweeps against the demo db. The frontend picks the
+            // state up via its launch-time demo_mode query.
+            if db.first_run_tour()? {
+                log::info!("first run: opening in demo mode");
+                db.enter_demo()?;
+            }
             let db = Arc::new(db);
             // One-way export loop: push tasks.json once a minute when it
             // changed. A plain sleeping thread is enough (single user, one

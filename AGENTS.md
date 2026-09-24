@@ -282,8 +282,8 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
   logged; deleting a project nulls it, same as items).
 - The section renders at the very top of the main page, above Notes — the
   identity layer sits over everything; **⌘P → Show/Hide Goals** toggles it
-  completely (persisted in localStorage `dayapp-goals-visible`, default on — a
-  display preference like zoom). **Show Default View hides it** — the default
+  completely (persisted in localStorage `dayapp-goals-visible`, **hidden by
+  default** — a display preference like zoom). **Show Default View hides it** — the default
   working view is the plain task list. Goals don't take part
   in the item visibility/priority/project filters, and there's no DnD — a calm
   static list.
@@ -353,12 +353,14 @@ seeded demo always shows a live-looking week of journal history.
   swap-back is instant, and a real timer left running keeps counting honestly
   across the whole demo session. Entering/exiting runs the launch sweeps
   against the newly-active db (each behaves as if relaunched).
-- **Demo mode is session-only, and launch-gated to the ⌘P action alone.**
-  Every launch opens the real db; the flag never persists. There is **no
-  first-run demo path** (removed 2026-09-22): a first run is the real, empty
-  db greeted by the name ask (see "Owner name" under UI/UX), and Demo Mode is
-  purely a ⌘P action for trying/showing the app. Do not add any other launch
-  path into demo.
+- **A brand-new install launches straight into demo mode** (`first_run_tour`
+  in demo.rs, 2026-09-24): when the real db has never answered the name ask
+  (`owner_name` absent) and holds no content, setup enters demo directly — the
+  first-run experience is the seeded demo, and ⌘P → **Exit Demo Mode** is the
+  on-ramp to the clean, empty real db and its name ask. Answering the ask
+  (Enter or Esc) is what ends the tour; relaunches before that re-enter it,
+  and every launch afterwards opens the real db. Demo mode never persists
+  beyond that first run — otherwise it's the ⌘P action alone.
 - **Demo data persists** across sessions (no auto-reset — deliberate).
   ⌘P → **Reset Demo Data** (demo mode only) re-runs the seed; because seed
   dates are relative to seed day, a reset also freshens an aged demo. A stale
@@ -639,7 +641,7 @@ dayapp/
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
     │   ├── backup.rs               ← db backups: VACUUM INTO snapshot into backups/ + reveal (--backup; demo-gated)
     │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API; demo-gated)
-    │   ├── demo.rs                 ← demo mode: dayapp-demo.db open/seed + enter/exit/reset swap under the conn lock
+    │   ├── demo.rs                 ← demo mode: dayapp-demo.db open/seed + enter/exit/reset swap under the conn lock + the first-run tour gate
     │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--notes/--projects/--add/--complete/--start/--move/--details/--goals/--backup/--deploy/--sync-pull-peek (+ global --demo)
     │   └── main.rs                 ← binary entrypoint (GUI, or cli::run when given flags)
     ├── schema.sql                  ← items + actions + meta + notes + projects + goals + sessions + entries
@@ -786,9 +788,10 @@ mechanics; Demo Mode still overrides the whole line with "Live @ Demo". It is al
 shows only a pulse + elapsed (task name in its tooltip) so the two coexist on the 480px
 window; below 455px of width a media query hides the masthead.
 
-**Owner name (the masthead's home word):** asked once, on the first launch —
-a floating `NamePrompt` card ("What's your name?") over the clean, empty db a
-first run now opens on (there is no first-run demo tour). Enter saves the
+**Owner name (the masthead's home word):** asked once, when the user first
+lands on the real db — a first run opens in demo mode (see above), and the
+floating `NamePrompt` card ("What's your name?") takes over the clean, empty
+real db the moment the user exits the demo. Enter saves the
 trimmed name; Esc stores `""` (skip) so the ask never repeats; ⌘P → **Set
 Your Name…** is the permanent door (hidden in demo mode — the write would
 land in the demo db's meta, and the masthead reads "Live @ Demo" there
@@ -1116,7 +1119,8 @@ into Notes or edit fields isn't hijacked.
   Short/long rows carry a checkbox (achieve / unachieve, month-granular date on the
   achieved row); timeless rows show ∞ in that slot and can only be edited or deleted (×).
   Single-click enters edit; hover reveals # project assign + × delete — the same
-  `ProjectMenu` items use. ⌘P → Show/Hide Goals toggles the whole section (persisted).
+  `ProjectMenu` items use. ⌘P → Show/Hide Goals toggles the whole section (persisted,
+  hidden by default).
   Every mutation is logged to `actions` (goal_* values) — see the data model.
 
 **Quote modal (the screensaver's moment):**
