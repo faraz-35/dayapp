@@ -676,9 +676,23 @@ async fn reset_demo_data(app: AppHandle, db: State<'_, DbState>) -> Result<(), S
 //   { phase: "restarting" }          — build OK, about to exit
 //   { phase: "error", message }      — build failed; app stays running
 //
-// npm is invoked with stdbuf to line-buffer, and every line is emitted as it
-// arrives so the user sees live compiler output. `npm run tauri build` returns
-// non-zero on any failure, which we surface as an error event and stay alive.
+// npm is run through the user's login shell (see login_shell_command), and
+// every output line is emitted as it arrives so the user sees live compiler
+// output. `npm run tauri build` returns non-zero on any failure, which we
+// surface as an error event and stay alive.
+
+/// A command spawned through the user's login shell. A GUI process gets only
+/// the bare system PATH (/usr/bin:/bin:…), where brew installs and
+/// ~/.local/bin don't exist — `npm`, `gh`, and `aerospace` all spawn-fail with
+/// ENOENT (the "Update failed: No such file or directory" bug, 2026-09-24).
+/// A LOGIN shell sources ~/.zprofile — the user's real PATH — without the
+/// interactive .zshrc and its output noise. The whole command line goes in the
+/// string (quote arguments containing spaces yourself).
+pub(crate) fn login_shell_command(line: &str) -> std::process::Command {
+    let mut cmd = std::process::Command::new("/bin/zsh");
+    cmd.args(["-l", "-c", line]);
+    cmd
+}
 
 #[tauri::command]
 async fn self_update(app: AppHandle) -> Result<(), String> {
@@ -698,8 +712,7 @@ async fn self_update(app: AppHandle) -> Result<(), String> {
 
     // Run `npm run tauri build`, streaming every line to the UI as it arrives.
     // stdout+stderr are merged (piped together) so ordering matches a terminal.
-    let mut child = Command::new("npm")
-        .args(["run", "tauri", "build"])
+    let mut child = login_shell_command("npm run tauri build")
         .current_dir(repo_root)
         .env("FORCE_COLOR", "0")
         .stdout(Stdio::piped())
@@ -895,9 +908,10 @@ fn aerospace_fullscreen() {
     std::thread::spawn(move || {
         for delay_ms in [400u64, 1200, 2500, 5000] {
             std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-            let Ok(out) = std::process::Command::new("aerospace")
-                .args(["list-windows", "--all", "--format", "%{window-id} %{app-pid} %{app-name}"])
-                .output()
+            let Ok(out) = login_shell_command(
+                "aerospace list-windows --all --format '%{window-id} %{app-pid} %{app-name}'",
+            )
+            .output()
             else {
                 return; // no aerospace binary — nothing to ask
             };
@@ -909,8 +923,7 @@ fn aerospace_fullscreen() {
             let Some(wid) = our_window.and_then(|l| l.split_whitespace().next()) else {
                 continue; // window not attached to the tree yet
             };
-            let fullscreen = std::process::Command::new("aerospace")
-                .args(["fullscreen", "--window-id", wid, "on"])
+            let fullscreen = login_shell_command(&format!("aerospace fullscreen --window-id {wid} on"))
                 .output()
                 .is_ok_and(|o| o.status.success());
             if fullscreen {

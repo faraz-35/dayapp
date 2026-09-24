@@ -337,9 +337,10 @@ fn resolve_token(cfg: &SyncConfig) -> anyhow::Result<String> {
         return Ok(t.trim().to_string());
     }
     // Zero-config fallback: reuse the local gh CLI's token. Stays on this
-    // machine (keyring) and is only used in-memory for the API calls.
-    let out = std::process::Command::new("gh")
-        .args(["auth", "token"])
+    // machine (keyring) and is only used in-memory for the API calls. The gh
+    // binary is brew-installed — invisible to the GUI's bare PATH, hence the
+    // login shell (see login_shell_command in lib.rs).
+    let out = crate::login_shell_command("gh auth token")
         .output()
         .map_err(|_| anyhow::anyhow!("no PAT configured and the gh CLI wasn't found"))?;
     if !out.status.success() {
