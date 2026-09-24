@@ -57,11 +57,24 @@ SITE_URL="https://getdayapp.vercel.app"
 # ---- resolve the version ---------------------------------------------------
 
 CUR="$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")"
-# Resume rule: a release that died after publishing leaves its bump commit as
-# HEAD, tagged — re-running must finish THAT version. Only when the current
-# version's tag sits on an older commit is CUR the base to bump from.
+# Resume rule: a release that died mid-publish leaves its bump commit as HEAD,
+# tagged — re-running must finish THAT version. But a FULLY SHIPPED release
+# (tag on HEAD, gh release live, channel serving it) that gets re-run is a
+# request for the NEXT one, not a resume — without this, the first re-run
+# after any successful release would re-ship the same version forever.
+TAG_ON_HEAD=0
 RESUME=0
 if [ "$(git rev-parse -q --verify "refs/tags/v$CUR" 2>/dev/null || true)" = "$(git rev-parse HEAD)" ]; then
+  TAG_ON_HEAD=1
+fi
+SHIPPED=0
+if [ "$TAG_ON_HEAD" = 1 ] \
+   && gh release view "v$CUR" --repo faraz-35/dayapp > /dev/null 2>&1 \
+   && [ "$(curl -fsL "https://github.com/faraz-35/dayapp/releases/latest/download/latest.json" 2>/dev/null \
+        | python3 -c "import json, sys; print(json.load(sys.stdin).get('version', ''))" 2>/dev/null || true)" = "$CUR" ]; then
+  SHIPPED=1
+fi
+if [ "$TAG_ON_HEAD" = 1 ] && [ "$SHIPPED" = 0 ]; then
   NEXT="$CUR"; RESUME=1
 else
   NEXT="$(MODE="$MODE" CUR="$CUR" python3 -c 'import os
