@@ -1,11 +1,26 @@
+<div align="center">
+
+<img src="src-tauri/icons/icon.png" width="120" alt="DayApp icon" />
+
 # DayApp
 
-A native macOS "live today list" with auto-journaling. Today, Daily, and Backlog — and every action you take is logged, so the journal writes itself.
+**A minimal, local-first task list for macOS.**
 
-**On the web:** [getdayapp.vercel.app](https://getdayapp.vercel.app)
+Keep today's tasks, notes, and goals in one fast window — every action you take is logged, so the journal writes itself.
+
+<a href="https://github.com/faraz-35/dayapp/releases/latest"><img src="https://img.shields.io/badge/macOS-native-7b8cff?style=for-the-badge&logo=apple&logoColor=white&labelColor=0e0f11" alt="macOS"></a>
+<a href="https://github.com/faraz-35/dayapp-mobile/releases/latest"><img src="https://img.shields.io/badge/Android-companion-7b8cff?style=for-the-badge&logo=android&logoColor=white&labelColor=0e0f11" alt="Android companion app"></a>
+<img src="https://img.shields.io/badge/Tauri-2-7b8cff?style=for-the-badge&logo=tauri&logoColor=white&labelColor=0e0f11" alt="Tauri 2">
+<img src="https://img.shields.io/badge/React-19-7b8cff?style=for-the-badge&logo=react&logoColor=white&labelColor=0e0f11" alt="React 19">
+<img src="https://img.shields.io/badge/SQLite-local-7b8cff?style=for-the-badge&logo=sqlite&logoColor=white&labelColor=0e0f11" alt="SQLite">
+<a href="LICENSE"><img src="https://img.shields.io/github/license/faraz-35/dayapp?style=for-the-badge&labelColor=0e0f11&color=7b8cff" alt="MIT license"></a>
+<a href="https://github.com/faraz-35/dayapp/releases/latest"><img src="https://img.shields.io/github/v/release/faraz-35/dayapp?style=for-the-badge&labelColor=0e0f11&color=7b8cff" alt="Latest release"></a>
+
+[Website](https://getdayapp.vercel.app) · [Download for macOS](https://github.com/faraz-35/dayapp/releases/latest) · [Android APK](https://github.com/faraz-35/dayapp-mobile/releases/latest)
+
+</div>
 
 <p align="center">
-
 
 
 
