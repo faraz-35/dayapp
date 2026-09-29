@@ -234,6 +234,11 @@ function DayApp() {
   const [notesVisible, setNotesVisible] = useState(
     () => localStorage.getItem("dayapp-notes-visible") !== "0",
   );
+  // Tasks — the whole area in one toggle: the capture input plus all three
+  // sections. The per-section toggles below refine inside it.
+  const [tasksVisible, setTasksVisible] = useState(
+    () => localStorage.getItem("dayapp-tasks-visible") !== "0",
+  );
   const [sectionsVisible, setSectionsVisible] = useState<Record<Section, boolean>>(() => ({
     today: localStorage.getItem("dayapp-sec-today") !== "0",
     daily: localStorage.getItem("dayapp-sec-daily") !== "0",
@@ -516,6 +521,7 @@ function DayApp() {
   useEffect(() => {
     localStorage.setItem("dayapp-goals-visible", goalsVisible ? "1" : "0");
     localStorage.setItem("dayapp-notes-visible", notesVisible ? "1" : "0");
+    localStorage.setItem("dayapp-tasks-visible", tasksVisible ? "1" : "0");
     localStorage.setItem("dayapp-sec-today", sectionsVisible.today ? "1" : "0");
     localStorage.setItem("dayapp-sec-daily", sectionsVisible.daily ? "1" : "0");
     localStorage.setItem("dayapp-sec-backlog", sectionsVisible.backlog ? "1" : "0");
@@ -532,7 +538,7 @@ function DayApp() {
     // it's read at mount, never rewritten.)
     localStorage.removeItem("dayapp-priority");
     localStorage.removeItem("dayapp-quotes-visible");
-  }, [goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -642,12 +648,14 @@ function DayApp() {
 
   // displayItems narrowed to the visible sections — a toggled-off section's
   // rows aren't rendered, searchable, keyboard-navigable, or totaled (they
-  // stay in state; only the view skips them).
+  // stay in state; only the view skips them). Tasks hidden takes the whole
+  // area out: every section empties, so the grammar (t1/b11 addresses, j/k,
+  // Enter, the digit verbs) and ⌘F can't act on rows that aren't on screen.
   const renderItems = useMemo<Record<Section, Item[]>>(() => ({
-    today: sectionsVisible.today ? displayItems.today : [],
-    daily: sectionsVisible.daily ? displayItems.daily : [],
-    backlog: sectionsVisible.backlog ? displayItems.backlog : [],
-  }), [displayItems, sectionsVisible]);
+    today: tasksVisible && sectionsVisible.today ? displayItems.today : [],
+    daily: tasksVisible && sectionsVisible.daily ? displayItems.daily : [],
+    backlog: tasksVisible && sectionsVisible.backlog ? displayItems.backlog : [],
+  }), [displayItems, sectionsVisible, tasksVisible]);
 
   // All currently-visible item ids — drives the per-row cumulative totals fetch.
   const allIds = useMemo(
@@ -780,6 +788,7 @@ function DayApp() {
         setAgentTasksVisible(true);
         setAgentFilter(null);
         setSectionsVisible({ today: true, daily: true, backlog: true });
+        setTasksVisible(true);
         setNotesVisible(true);
         setGoalsVisible(false);
       },
@@ -799,6 +808,12 @@ function DayApp() {
       label: notesVisible ? "Hide Notes" : "Show Notes",
       hint: "the notes section",
       run: () => { setView("list"); setNotesVisible((v) => !v); },
+    },
+    {
+      id: "toggle-tasks",
+      label: tasksVisible ? "Hide Tasks" : "Show Tasks",
+      hint: "capture + all three sections",
+      run: () => { setView("list"); setTasksVisible((v) => !v); },
     },
     ...(["today", "daily", "backlog"] as const).map((s) => ({
       id: `toggle-${s}`,
@@ -1008,7 +1023,7 @@ function DayApp() {
           },
         ]
       : []),
-  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, demoMode, devlogOn, syncConfigured]);
+  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, demoMode, devlogOn, syncConfigured]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1861,7 +1876,7 @@ function DayApp() {
                 onEntryRouted={handleEntryRouted}
               />
             )}
-            {(hiddenPriorities.length > 0 || projectFilter !== null || agentFilter !== null) && allVisible.length === 0 && (
+            {(hiddenPriorities.length > 0 || projectFilter !== null || agentFilter !== null) && tasksVisible && allVisible.length === 0 && (
               <div className="empty">
                 {projectFilter
                   ? `No tasks in ${projects.find((p) => p.id === projectFilter)?.name ?? "project"}.`
@@ -1872,41 +1887,43 @@ function DayApp() {
                       : "No tasks at the shown priorities."}
               </div>
             )}
-            <SectionList
-              items={renderItems}
-              /* Fun Mode removes Daily entirely — an emptied section must
-                 not leave its header behind (the toggle's semantics,
-                 composed with the lens; sectionsVisible itself is untouched).
-                 Today stays but only shows its P3/unmarked rows (displayItems). */
-              visible={{
-                today: sectionsVisible.today,
-                daily: sectionsVisible.daily && !funMode,
-                backlog: sectionsVisible.backlog,
-              }}
-              projects={projects}
-              selectedId={selectedId}
-              editingId={editingId}
-              detailsOpenId={detailsOpenId}
-              onSelect={setSelectedId}
-              onComplete={handleComplete}
-              onDelete={handleDelete}
-              onCommitEdit={handleCommitEdit}
-              onStartEdit={setEditingId}
-              onQuickAdd={handleCreate}
-              onHide={handleHide}
-              onUnhide={handleUnhide}
-              onSetProject={handleSetProject}
-              onCreateProject={handleCreateProject}
-              onSetReminder={handleSetReminder}
-              onToggleDetails={handleToggleDetails}
-              onSetDetails={handleSetDetails}
-              onMoveItem={handleMoveItem}
-              onPromote={handlePromote}
-              activeTimerId={activeTimer?.itemId ?? null}
-              liveElapsed={liveElapsed}
-              timeTotals={timeTotals}
-              onToggleTimer={handleToggleTimer}
-            />
+            {tasksVisible && (
+              <SectionList
+                items={renderItems}
+                /* Fun Mode removes Daily entirely — an emptied section must
+                   not leave its header behind (the toggle's semantics,
+                   composed with the lens; sectionsVisible itself is untouched).
+                   Today stays but only shows its P3/unmarked rows (displayItems). */
+                visible={{
+                  today: sectionsVisible.today,
+                  daily: sectionsVisible.daily && !funMode,
+                  backlog: sectionsVisible.backlog,
+                }}
+                projects={projects}
+                selectedId={selectedId}
+                editingId={editingId}
+                detailsOpenId={detailsOpenId}
+                onSelect={setSelectedId}
+                onComplete={handleComplete}
+                onDelete={handleDelete}
+                onCommitEdit={handleCommitEdit}
+                onStartEdit={setEditingId}
+                onQuickAdd={handleCreate}
+                onHide={handleHide}
+                onUnhide={handleUnhide}
+                onSetProject={handleSetProject}
+                onCreateProject={handleCreateProject}
+                onSetReminder={handleSetReminder}
+                onToggleDetails={handleToggleDetails}
+                onSetDetails={handleSetDetails}
+                onMoveItem={handleMoveItem}
+                onPromote={handlePromote}
+                activeTimerId={activeTimer?.itemId ?? null}
+                liveElapsed={liveElapsed}
+                timeTotals={timeTotals}
+                onToggleTimer={handleToggleTimer}
+              />
+            )}
           </>
         ) : view === "analytics" ? (
           <AnalyticsView />

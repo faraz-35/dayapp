@@ -974,7 +974,10 @@ Do not reintroduce bare single-letter verbs that collide with the address
 prefixes `n`/`t`/`d`/`b`/`g`.
 
 **Show/Hide toggles (⌘P):** every layout surface is an independent, persisted toggle
-whose label reflects its state — `Goals`, `Notes`, `Today`/`Daily`/`Backlog` sections,
+whose label reflects its state — `Goals`, `Notes`, `Tasks` (the whole tasks area in one
+toggle: the capture input plus all three sections — the per-section toggles refine inside
+it; while hidden, no task row is rendered, searchable, keyboard-navigable, or totaled),
+`Today`/`Daily`/`Backlog` sections,
 `Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
 dimmed, ↺/× actions), the per-tier `Priority 1/2/3 Tasks` toggles, the notes' own
 `Priority 1/2/3 Notes` toggles (independent of the task tiers, like Hidden Notes ≠
@@ -1040,7 +1043,7 @@ same `displayItems` pipeline.
 **Show Default View is the universal reset:** hidden entries excluded, priority tiers
 (tasks + notes), project and agent filters cleared, agent tasks shown, focus + fun
 mode off,
-all three sections + Notes shown —
+Tasks (capture + all three sections) and Notes shown —
 and Goals hidden (the default working view is the plain task list). One command
 always restores it.
 
