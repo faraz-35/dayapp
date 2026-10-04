@@ -70,7 +70,8 @@ pub fn run(args: Vec<String>) -> i32 {
         "--move" => move_item(&db, &rest),
         "--details" => details(&db, &rest),
         "--search" => search(&db, &rest),
-        "--journal" => journal(&db, rest.first().map(|s| s.as_str())),
+        "--journal" => journal_entries(&db, rest.first().map(|s| s.as_str())),
+        "--analytics" => analytics(&db, &rest),
         "--notes" => notes(&db, &rest),
         "--projects" => projects(&db),
         "--goals" => goals(&db),
@@ -119,6 +120,10 @@ usage: dayapp [--demo] <command> [args]
   --details <query> <body>       replace a task's details body (\"\" clears)
   --deploy                       force-push tasks.json now
   --sync-pull-peek               print the phone's pending captures
+  --analytics [range] [--from D --to D] [--created] [--agent|--mine]
+                                 [--project <name>] — the analytics dashboard:
+                                 stats, splits, day ledger, the action log
+  --journal [range]              the actual journal entries (##j), by day
   --settings [get <key> | set <key> <val>]   the settings store (no args: summary)
   --themes                        themes: id, name, colors, active marker
   --theme-create <name> k=hex...  create a theme (bg= elev= soft= hover= border=
@@ -528,6 +533,59 @@ fn view_delete(rest: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// `--journal [today|week|month|all|YYYY-MM-DD]` — the ACTUAL journal: the
+/// ##j lines he wrote (the entries table, the Journal view's content),
+/// grouped by day newest-first. Not the action log — that's `--analytics`.
+fn journal_entries(db: &Db, range: Option<&str>) -> anyhow::Result<()> {
+    use chrono::{Duration, NaiveDate};
+    let today = NaiveDate::parse_from_str(&crate::db::today_iso(), "%Y-%m-%d")?;
+    let tomorrow = today + Duration::days(1);
+    let (since, until): (Option<NaiveDate>, Option<NaiveDate>) = match range {
+        None | Some("today") => (Some(today), Some(tomorrow)),
+        Some("week") => (Some(today - Duration::days(6)), Some(tomorrow)),
+        Some("month") => (Some(today - Duration::days(29)), Some(tomorrow)),
+        Some("all") => (None, None),
+        Some(day) => {
+            let d = NaiveDate::parse_from_str(day, "%Y-%m-%d")
+                .map_err(|_| anyhow::anyhow!("unknown range \"{day}\" (today | week | month | all | YYYY-MM-DD)"))?;
+            (Some(d), Some(d + Duration::days(1)))
+        }
+    };
+    let in_range = |day: &str| -> bool {
+        let Ok(d) = NaiveDate::parse_from_str(day, "%Y-%m-%d") else { return false };
+        since.map_or(true, |s| d >= s) && until.map_or(true, |u| d < u)
+    };
+
+    let mut entries: Vec<crate::journal::Entry> = db
+        .list_entries()?
+        .into_iter()
+        .filter(|e| e.kind == "journal" && in_range(&e.day))
+        .collect();
+    if entries.is_empty() {
+        println!("no journal entries in this range.");
+        return Ok(());
+    }
+    // Day groups newest-first, entries in capture order within a day (the
+    // Journal view's shape).
+    entries.sort_by(|a, b| b.day.cmp(&a.day).then_with(|| a.created_at.cmp(&b.created_at)));
+    let mut current: Option<String> = None;
+    for e in &entries {
+        if current.as_deref() != Some(e.day.as_str()) {
+            current = Some(e.day.clone());
+            let label = if e.day == crate::db::today_iso() {
+                "Today".to_string()
+            } else {
+                NaiveDate::parse_from_str(&e.day, "%Y-%m-%d")
+                    .map(|d| d.format("%a, %b %-d").to_string())
+                    .unwrap_or_else(|_| e.day.clone())
+            };
+            println!("{label}");
+        }
+        println!("  {}", e.text);
+    }
+    Ok(())
+}
+
 /// Snapshot the real db into backups/ (see backup.rs). Refuses while --demo is
 /// active. Prints the new file's path so a remote session can scp it off the
 /// machine — the GUI's ⌘P capture is this same code path.
@@ -661,31 +719,105 @@ fn search_agent(db: &Db, mode: &str) -> anyhow::Result<()> {
 /// layered in. Each day header carries its done/missed. The range mirrors the
 /// GUI's pills (default Today); a YYYY-MM-DD is the date jump. Time is a
 /// separate dimension from the action filter pills, so both always print.
-fn journal(db: &Db, range: Option<&str>) -> anyhow::Result<()> {
+fn analytics(db: &Db, rest: &[String]) -> anyhow::Result<()> {
     use chrono::{Duration, NaiveDate};
     use std::collections::BTreeSet;
+    // Flags first, then an optional preset range. --from/--to win when given
+    // (the GUI's custom window); a preset names the window otherwise.
+    let mut range: Option<&str> = None;
+    let mut from: Option<&str> = None;
+    let mut to: Option<&str> = None;
+    let mut created = false;
+    let mut agent: Option<bool> = None;
+    let mut project: Option<String> = None;
+    let mut it = rest.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--created" => created = true,
+            "--agent" => agent = Some(true),
+            "--mine" => agent = Some(false),
+            "--project" => {
+                project = Some(
+                    it.next()
+                        .ok_or_else(|| anyhow::anyhow!("--project needs a name"))?
+                        .clone(),
+                );
+            }
+            "--from" => from = Some(it.next().ok_or_else(|| anyhow::anyhow!("--from needs a date"))?),
+            "--to" => to = Some(it.next().ok_or_else(|| anyhow::anyhow!("--to needs a date"))?),
+            other => {
+                if range.is_some() {
+                    return Err(anyhow::anyhow!("unexpected argument {other:?}"));
+                }
+                range = Some(other);
+            }
+        }
+    }
     // The app's day runs 6am→6am — `today_iso()` is the logical today, so a
     // late-night session still reads as "today" at 1am.
     let today = NaiveDate::parse_from_str(&crate::db::today_iso(), "%Y-%m-%d")?;
     let tomorrow = today + Duration::days(1);
-    let (since, until): (Option<NaiveDate>, Option<NaiveDate>) = match range {
-        None | Some("today") => (Some(today), Some(tomorrow)),
-        Some("week") => (Some(today - Duration::days(6)), Some(tomorrow)),
-        Some("month") => (Some(today - Duration::days(29)), Some(tomorrow)),
-        Some("all") => (None, None),
-        Some(day) => {
-            let d = NaiveDate::parse_from_str(day, "%Y-%m-%d")
-                .map_err(|_| anyhow::anyhow!("unknown range \"{day}\" (today | week | month | all | YYYY-MM-DD)"))?;
-            (Some(d), Some(d + Duration::days(1)))
-        }
+    let parse_day = |d: &str| {
+        NaiveDate::parse_from_str(d, "%Y-%m-%d")
+            .map_err(|_| anyhow::anyhow!("{d} is not a YYYY-MM-DD date"))
+    };
+    let (since, until): (Option<NaiveDate>, Option<NaiveDate>) = match (from, to) {
+        (Some(f), Some(t)) => (Some(parse_day(f)?), Some(parse_day(t)? + Duration::days(1))),
+        (Some(f), None) => (Some(parse_day(f)?), None),
+        (None, Some(t)) => (None, Some(parse_day(t)? + Duration::days(1))),
+        (None, None) => match range {
+            None | Some("today") => (Some(today), Some(tomorrow)),
+            Some("week") => (Some(today - Duration::days(6)), Some(tomorrow)),
+            Some("month") => (Some(today - Duration::days(29)), Some(tomorrow)),
+            Some("all") => (None, None),
+            Some(day) => {
+                let d = parse_day(day)?;
+                (Some(d), Some(d + Duration::days(1)))
+            }
+        },
     };
     let iso = |d: Option<NaiveDate>| d.map(|x| x.format("%Y-%m-%d").to_string());
-    let dash =
-        db.journal_dashboard(iso(since).as_deref(), iso(until).as_deref(), &Default::default(), crate::dashboard::Subject::Done)?;
-    println!(
-        "done {} · daily missed {} · today missed {}",
-        dash.totals.count, dash.totals.daily_missed, dash.totals.today_missed
+
+    // The agent axis reads the items' current flags — assignments are
+    // unlogged, the one "currently" read (see dashboard.rs).
+    let filter = crate::dashboard::ScopeFilter {
+        projects: project.as_ref().map(|_| vec![project.clone()]),
+        priorities: None,
+        agent,
+    };
+    let subject = if created {
+        crate::dashboard::Subject::Created
+    } else {
+        crate::dashboard::Subject::Done
+    };
+    let dash = db.journal_dashboard(
+        iso(since).as_deref(),
+        iso(until).as_deref(),
+        &filter,
+        subject,
+    )?;
+    let noun = if created { "created" } else { "done" };
+    let days = dash.days.len().max(1);
+    let window = match (iso(since), iso(until)) {
+        (Some(a), Some(b)) => format!("{} → {}", a, b),
+        (Some(a), None) => format!("{a} → open"),
+        (None, Some(b)) => format!("start → {b}"),
+        (None, None) => "all time".into(),
+    };
+    println!("analytics · {noun} · {window}");
+    let mut stats = format!(
+        "{} {noun} · avg/day {:.1} · streak {}",
+        dash.totals.count,
+        dash.totals.count as f64 / days as f64,
+        dash.totals.streak
     );
+    if !created {
+        stats.push_str(&format!(
+            " · daily missed {} · today missed {}",
+            dash.totals.daily_missed, dash.totals.today_missed
+        ));
+    }
+    println!("{stats}");
     if !dash.projects.is_empty() {
         let parts: Vec<String> = dash
             .projects
@@ -706,6 +838,16 @@ fn journal(db: &Db, range: Option<&str>) -> anyhow::Result<()> {
         })
         .collect();
     println!("priority: {}", tiers.join(" · "));
+    let owner = db
+        .meta_get("owner_name")
+        .ok()
+        .flatten()
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| "Mine".to_string());
+    println!(
+        "delegation: agent {} · {} {}",
+        dash.agents.agent, owner, dash.agents.mine
+    );
     println!();
 
     let actions = db.list_actions(None, iso(since).as_deref(), iso(until).as_deref())?;

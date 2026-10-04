@@ -49,7 +49,7 @@ import {
 import { log } from "./log";
 import { trace } from "./devlog";
 
-type Range = "today" | "week" | "month" | "all";
+type Range = "today" | "week" | "month" | "all" | "custom";
 
 const level = (done: number): number =>
   done === 0 ? 0 : done >= 7 ? 4 : done >= 4 ? 3 : done >= 2 ? 2 : 1;
@@ -321,17 +321,46 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
     });
   };
 
+  // The custom window (the from–to fields): empty side = open-ended. Editing
+  // either field switches the toolbar to the Custom range; the pills remain
+  // one-click presets whose windows refill the fields.
+  const [custom, setCustom] = useState({ from: "", to: "" });
+  const enterCustom = (from: string, to: string) => {
+    setCustom({ from, to });
+    setRange("custom");
+    trace("analytics.range", { custom: true, from, to });
+  };
+
   // Resolve the half-open [since, until) window from the active range, over
   // the app's logical days (6am→6am). `until` is the day *after* the target
   // so a day boundary is inclusive.
+  const dayBefore = (d: string) => {
+    const t = new Date(d + "T00:00:00");
+    t.setDate(t.getDate() - 1);
+    return localDateStr(t);
+  };
+
   const bounds = useMemo(() => {
     switch (range) {
       case "today": return { since: todayStr(), until: todayOffset(1) };
       case "week":  return { since: todayOffset(-6), until: todayOffset(1) };
       case "month": return { since: todayOffset(-29), until: todayOffset(1) };
       case "all":   return { since: undefined, until: undefined };
+      case "custom": {
+        const dayAfter = (d: string) => {
+          const t = new Date(d + "T00:00:00");
+          t.setDate(t.getDate() + 1);
+          return localDateStr(t);
+        };
+        let { from, to } = custom;
+        if (from && to && from > to) [from, to] = [to, from]; // dragged backwards
+        return {
+          since: from || undefined,
+          until: to ? dayAfter(to) : undefined,
+        };
+      }
     }
-  }, [range]);
+  }, [range, custom]);
 
   useEffect(() => {
     journalApi.dashboard({ since: bounds.since, until: bounds.until, filter, subject })
@@ -519,13 +548,35 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
             }}
           >{r.label}</button>
         ))}
-        <input
-          type="date"
-          className={`date-jump${pickedDay ? " active" : ""}`}
-          value={pickedDay ?? today}
-          onChange={(e) => e.target.value && pickDay(e.target.value)}
-          title="Pick a day to see its tasks"
-        />
+        {(() => {
+          // The fields always show the EFFECTIVE window (a pill's window
+          // included); editing either switches to the Custom range with the
+          // other side seeded from what was on screen.
+          const dispFrom = bounds.since ?? "";
+          const dispTo = bounds.until ? dayBefore(bounds.until) : "";
+          const cls = `date-jump${range === "custom" ? " active" : ""}`;
+          return (
+            <>
+              <input
+                type="date"
+                className={cls}
+                value={dispFrom}
+                max={dispTo || undefined}
+                onChange={(e) => e.target.value && enterCustom(e.target.value, dispTo)}
+                title="Range start"
+              />
+              <span className="an-range-sep">–</span>
+              <input
+                type="date"
+                className={cls}
+                value={dispTo}
+                min={dispFrom || undefined}
+                onChange={(e) => e.target.value && enterCustom(dispFrom, e.target.value)}
+                title="Range end"
+              />
+            </>
+          );
+        })()}
         <span className="anf">
           <span className="anf-wrap" ref={projMenuRef}>
             <button

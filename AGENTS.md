@@ -1278,6 +1278,11 @@ Journal / Quotes icons):**
   view switch so it always renders fresh data; `reloadEpoch` covers demo-mode swaps.
 
 **Analytics view (⌘P → View Analytics, or the header chart icon):**
+- The toolbar's date selector is a FROM–TO pair (2026-10-05, replacing the single
+  date jump): the fields always show the effective window (a pill's included), and
+  editing either switches to a session-only Custom range — empty side = open-ended,
+  from>to auto-swaps. The pills stay one-click presets whose windows refill the
+  fields; the picked-day card flow is unchanged (ledger rows and calendar cells).
 - The analytics page is **synthesis, never the log**: it answers questions over the
   append-only `actions` history, it does not enumerate events. The raw action log's
   textual home is the CLI (`--journal`); the GUI shows aggregates only. The masthead
