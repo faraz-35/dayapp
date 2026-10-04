@@ -146,6 +146,11 @@ export default function Goals({
         className={`item goal-row${achieved ? " done" : ""}${focusedId === goal.id ? " focused" : ""}`}
         onClick={() => { if (!editing) setEditingId(goal.id); }}
       >
+        {/* Task rows' leading grip slot, mirrored so the circle and text
+            columns line up across both surfaces. Goals have no DnD — the
+            glyph never reveals, not even on hover: a spacer, never a
+            handle (the details-body precedent). */}
+        <span className="grip" aria-hidden="true">⠿</span>
         {goal.horizon === "timeless" ? (
           <span
             className="goal-eternal"

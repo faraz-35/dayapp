@@ -1697,6 +1697,15 @@ button {
   flex-shrink: 0;
 }
 
+/* Goal rows mirror the task rows' leading grip slot so circle and text
+   columns line up across the two surfaces — but goals have no DnD, so the
+   glyph never reveals, not even on hover/focus: a spacer, never a handle
+   (the details-body precedent). */
+.item.goal-row .grip {
+  opacity: 0;
+  cursor: default;
+}
+
 /* ---- Quote modal (the screensaver's moment) --- */
 /* The ##q moment: one quote on a dim backdrop, nothing else — no card, no
    close button, no countdown chrome. The backdrop is what creates the pause

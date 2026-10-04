@@ -1140,7 +1140,9 @@ into Notes or edit fields isn't hijacked.
 - Capture is line-only like the section inputs (no placeholder); it takes a leading
   horizon word (`timeless be a better person`, `long better entrepreneur #hustle`),
   plain text defaulting to short. Same parse on edit — no word leaves the tier alone.
-- Rows are the `.item` language minus the grip: no DnD, no timer, no hide, no priority.
+- Rows are the `.item` language minus the grip's function: the leading grip slot is
+  mirrored (invisible at every state — a spacer aligning the circle/text columns with
+  task rows, never a handle), and there's no DnD, no timer, no hide, no priority.
   Short/long rows carry a checkbox (achieve / unachieve, month-granular date on the
   achieved row); timeless rows show ∞ in that slot and can only be edited or deleted (×).
   Single-click enters edit; hover reveals # project assign + × delete — the same
