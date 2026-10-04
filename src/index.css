@@ -5,10 +5,10 @@
   --bg-elev: #16181c;
   --bg-soft: #121417;   /* --bg → --bg-elev midpoint: elevated, one step quieter */
   --bg-hover: #1c1f24;
-  --border: #23262d;
+  --border: #30343c;    /* hairlines, capture underlines — bright enough to read as lines */
   --text: #e6e7ea;
-  --text-dim: #8a8f98;
-  --text-faint: #5c6068;
+  --text-dim: #a2a7b1;  /* secondary text + every section/tier header (one shade) */
+  --text-faint: #7b7f88; /* the quietest text: placeholders, hints, disabled */
   --accent: #7b8cff;
   --done: #3a3f48;
   --danger: #e5484d;
@@ -275,14 +275,9 @@ button {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-/* Tasks and Notes label whole capture surfaces — one step brighter than the
-   Today/Daily/Backlog names, which label subsections of the task stack. */
-.section-name.surface-name {
   color: var(--text-dim);
 }
+
 /* The Tasks head isn't wrapped in a padded section like Notes' (whose head
    sits 16px in: the section's 8px + its own 8px), so it carries the full
    inset itself. The top margin gives the Notes→Tasks seam the sections' 36px
@@ -293,7 +288,8 @@ button {
 }
 /* Today/Daily/Backlog label subsections of the task stack — centered, so
    they read as a level below the left-aligned surface labels (Tasks, Notes)
-   that carry their own inset edge. */
+   that carry their own inset edge. Same shade and size as the surface
+   names: alignment alone carries the hierarchy (2026-10-04 contrast pass). */
 .section-head.stack-head {
   justify-content: center;
 }
@@ -591,7 +587,7 @@ button {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: var(--text-dim);
   margin-bottom: 14px;
 }
 .an-card-title .hint {
@@ -1675,14 +1671,14 @@ button {
   margin-bottom: 16px;
 }
 
-/* Divider label — sub-header level, quieter than .section-name, the same role
-   the signal bars play in the Backlog's tier dividers. */
+/* Divider label — sub-header level: same shade and size as the section
+   names (one header treatment app-wide), hierarchy by centering alone. */
 .tier-label {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: var(--text-dim);
   white-space: nowrap;
 }
 
@@ -1766,7 +1762,7 @@ button {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: var(--text-dim);
   margin: 14px 8px 2px;
 }
 

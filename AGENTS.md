@@ -768,10 +768,10 @@ keyboard-first.** Every choice below is intentional.
 | `--bg` | `#0e0f11` | app background, window bg |
 | `--bg-elev` | `#16181c` | cards, inputs, elevated surfaces (floating modals, notes) |
 | `--bg-hover` | `#1c1f24` | row hover, button hover |
-| `--border` | `#23262d` | dividers, input borders |
+| `--border` | `#30343c` | dividers, input borders |
 | `--text` | `#e6e7ea` | primary text |
-| `--text-dim` | `#8a8f98` | secondary text |
-| `--text-faint` | `#5c6068` | hints, empty states, disabled |
+| `--text-dim` | `#a2a7b1` | secondary text + every section/tier header (one shade) |
+| `--text-faint` | `#7b7f88` | the quietest text: hints, placeholders, empty states, disabled |
 | `--accent` | `#7b8cff` | the ONE accent: done/selected/focus/links |
 | `--done` | `#3a3f48` | greyed-out completed daily rows |
 | `--danger` | `#e5484d` | delete only |
