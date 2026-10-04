@@ -935,8 +935,10 @@ focus entirely, and at that bottom rung digits are
 inert — a stray `1-6` can't do anything unseen. That bottom rung ("free mode")
 is a reading mode: `j`/`k`/`↑`/`↓` scroll the one `.scroll` container (120px,
 smooth — a view-only verb, so it can't act on anything unseen; it works in
-every view, Analytics included, where nothing is ever focused). While a row is
-focused, `j`/`k` walk the rows and clamp at the ends — they never drop focus;
+every view, Analytics included, where nothing is ever focused). While a row or
+note is focused, `j`/`k` walk the page's rows — notes first (visual order),
+then tasks, crossing the two surfaces freely — and clamp at the ends; they
+never drop focus;
 Esc or a new address is the only way out. The focused thing **shows its hover
 buttons** (focus mirrors hover exactly: same tint, same revealed actions, same
 metadata fades), so the digits' targets are visible on screen. An open popover
@@ -961,8 +963,8 @@ its digit share the one real onClick handler).
 | `1`–`4` (note) | ⌃/⌄ expand · ⬇ download .txt · ◐ hide · × delete — ⬇ and × need content (hidden notes: `3` = ↺, `4` = ×) |
 | `1`–`3` (goal) | ✓ achieve · # project · × delete |
 | `↑`/`↓` + `Enter` (popover open) | move the highlight · pick — # project routes typing to its create field; the date input stays native (Tab reaches it) |
-| `j` / `↓` | select next — clamped at the last row; never drops focus |
-| `k` / `↑` | select previous — clamped at the first row |
+| `j` / `↓` | select next — the walk spans the page's rows in visual order (notes first, then tasks); clamped at the ends; never drops focus |
+| `k` / `↑` | select previous — same walk, clamped at the first note |
 | `j`/`k`/`↑`/`↓` (nothing focused) | scroll the page (120px, smooth) — free mode, every view |
 | `Enter` | complete focused task (toggles a crossed Today row or a done Daily back to active) |
 | `e` | edit the focused thing (task input / note textarea / goal row) |

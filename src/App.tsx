@@ -1786,8 +1786,6 @@ function DayApp() {
             behavior: "smooth",
           });
         } else {
-          setFocusNoteId(null);
-          setFocusGoalId(null);
           moveSelection(down ? 1 : -1);
         }
         return;
@@ -1856,16 +1854,29 @@ function DayApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allVisible, selectedId, focusNoteId, focusGoalId, view, helpOpen, syncSettingsOpen, paletteOpen, searchOpen, quoteOpen, updateStatus, renderItems, activeTimer]);
 
+  // The j/k walk spans the page's addressable rows in visual order — notes
+  // first (DOM order; Notes owns the list, so exactly the visible notes),
+  // then the task rows. A focused note and a focused row are one walk:
+  // focus crosses the two surfaces and clamps at the page's ends, never
+  // dropping. Goals aren't walk members — walking from one enters at the
+  // nearest end (down → first note, up → last row).
   const moveSelection = (delta: number) => {
-    const idx = allVisible.findIndex((i) => i.id === selectedId);
-    const next = idx === -1 ? 0 : Math.min(allVisible.length - 1, Math.max(0, idx + delta));
-    const id = allVisible[next]?.id ?? null;
-    // Only real moves trace — a held key clamped at the end is one position,
+    const noteIds = Array.from(document.querySelectorAll("[data-note-id]"))
+      .map((el) => el.getAttribute("data-note-id") ?? "")
+      .filter(Boolean);
+    const walk = [...noteIds, ...allVisible.map((i) => i.id)];
+    const cur = focusNoteId ?? selectedId;
+    const idx = walk.indexOf(cur ?? "");
+    const next = idx === -1
+      ? (delta > 0 ? 0 : walk.length - 1)
+      : Math.min(walk.length - 1, Math.max(0, idx + delta));
+    const id = walk[next] ?? null;
+    // Only real moves act — a held key clamped at an end is one position,
     // not a stream of no-ops.
-    if (id !== selectedId) {
-      trace("focus.step", { to: id, dir: delta > 0 ? "next" : "prev" });
-      setSelectedId(id);
-    }
+    if (!id || id === cur) return;
+    trace("focus.step", { to: id, dir: delta > 0 ? "next" : "prev" });
+    if (noteIds.includes(id)) focusNote(id);
+    else focusItem(id);
   };
 
   // ---- Render ----------------------------------------------------------
