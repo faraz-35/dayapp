@@ -105,7 +105,10 @@ export default function SettingsView({
   onCreateTheme: (theme: Theme) => void;
   onDeleteTheme: (id: string) => void;
 }) {
-  const [creating, setCreating] = useState(false);
+  // Two independent create-forms — one state for both made "+ New Theme"
+  // open the Views form too (2026-10-05). The theme form's gate is its draft
+  // (null = closed), so only the Views form needs a boolean.
+  const [creatingView, setCreatingView] = useState(false);
   const [name, setName] = useState("");
   const [priorities, setPriorities] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
   const [agent, setAgent] = useState<CustomView["agent"]>("all");
@@ -156,7 +159,7 @@ export default function SettingsView({
       notePriorities: [...notePriorities],
     });
     resetDraft();
-    setCreating(false);
+    setCreatingView(false);
   };
 
   const toggleTier = (
@@ -290,14 +293,13 @@ export default function SettingsView({
               </div>
             );
           })}
-          {!creating && (
+          {!draft && (
             <div className="settings-row">
               <button
                 className="settings-main"
                 onClick={() => {
                   const base = [...BUILT_IN_THEMES, ...customThemes].find((t) => t.id === themeId);
                   setDraft({ name: "", colors: { ...(base ?? BUILT_IN_THEMES[0]).colors } });
-                  setCreating(true);
                 }}
               >
                 <span className="settings-name">+ New Theme</span>
@@ -305,7 +307,7 @@ export default function SettingsView({
               </button>
             </div>
           )}
-          {creating && draft && (
+          {draft && (
             <div className="settings-form">
               <input
                 className="settings-name-input"
@@ -383,15 +385,15 @@ export default function SettingsView({
               </div>
             );
           })}
-          {!creating && (
+          {!creatingView && (
             <div className="settings-row">
-              <button className="settings-main" onClick={() => setCreating(true)}>
+              <button className="settings-main" onClick={() => setCreatingView(true)}>
                 <span className="settings-name">+ New View</span>
                 <span className="settings-hint">combine priorities, agent, project, notes</span>
               </button>
             </div>
           )}
-          {creating && (
+          {creatingView && (
             <div className="settings-form">
               <input
                 className="settings-name-input"
@@ -402,7 +404,7 @@ export default function SettingsView({
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") { e.preventDefault(); create(); }
-                  else if (e.key === "Escape") { e.preventDefault(); setCreating(false); resetDraft(); }
+                  else if (e.key === "Escape") { e.preventDefault(); setCreatingView(false); resetDraft(); }
                 }}
               />
               <div className="settings-field">
@@ -457,7 +459,7 @@ export default function SettingsView({
                 </div>
               )}
               <div className="settings-form-actions">
-                <button className="pill" onClick={() => { setCreating(false); resetDraft(); }}>Cancel</button>
+                <button className="pill" onClick={() => { setCreatingView(false); resetDraft(); }}>Cancel</button>
                 <button className="settings-save" disabled={!name.trim()} onClick={create}>Create View</button>
               </div>
             </div>
