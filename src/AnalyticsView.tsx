@@ -64,12 +64,13 @@ const LEVEL_BG = [
 ];
 
 /** Priority's segment colors — intensity steps of the one accent, the same
- *  scale language as the calendar (P1 carries the most weight). */
+ *  scale language as the calendar (P1 carries the most weight). The alphas
+ *  ride --accent-rgb so every theme tints its own accent. */
 const TIER_BG: Record<string, string> = {
   "1": "var(--accent)",
-  "2": "rgba(123, 140, 255, 0.62)",
-  "3": "rgba(123, 140, 255, 0.36)",
-  none: "rgba(123, 140, 255, 0.16)",
+  "2": "rgba(var(--accent-rgb), 0.62)",
+  "3": "rgba(var(--accent-rgb), 0.36)",
+  none: "rgba(var(--accent-rgb), 0.16)",
 };
 
 type Cell = {
@@ -196,7 +197,7 @@ function Chevron({ open = false, className = "" }: { open?: boolean; className?:
   );
 }
 
-export default function AnalyticsView() {
+export default function AnalyticsView({ ownerName }: { ownerName?: string | null }) {
   const [dash, setDash] = useState<DashboardStats | null>(null);
   const [times, setTimes] = useState<DayTaskTime[]>([]);
   const [detail, setDetail] = useState<DayDetail | null>(null);
@@ -216,6 +217,10 @@ export default function AnalyticsView() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selProjects, setSelProjects] = useState<Set<string>>(new Set());
   const [selTiers, setSelTiers] = useState<Set<number>>(new Set());
+  // The delegation axis: "agent" = 🤖 rows only, "mine" = Faraz's own, null =
+  // all. One axis, two chips — the active chip clears on re-click (the tier
+  // toggle rule); switching chips switches the filter.
+  const [selAgent, setSelAgent] = useState<"agent" | "mine" | null>(null);
   const [projMenu, setProjMenu] = useState(false);
   const projMenuRef = useRef<HTMLSpanElement>(null);
 
@@ -286,14 +291,16 @@ export default function AnalyticsView() {
       priorities: selTiers.size
         ? [...selTiers].map((t) => (t === 0 ? null : t))
         : null,
+      agent: selAgent === "agent" ? true : selAgent === "mine" ? false : null,
     }),
-    [selProjects, selTiers],
+    [selProjects, selTiers, selAgent],
   );
-  const hasFilter = selProjects.size > 0 || selTiers.size > 0;
+  const hasFilter = selProjects.size > 0 || selTiers.size > 0 || selAgent !== null;
   const clearFilter = () => {
     trace("analytics.filter.clear");
     setSelProjects(new Set());
     setSelTiers(new Set());
+    setSelAgent(null);
   };
 
   const toggleProject = (name: string) => {
@@ -400,6 +407,8 @@ export default function AnalyticsView() {
   });
   const maxProject = Math.max(1, ...(dash?.projects ?? []).map((p) => p.count));
   const maxTier = Math.max(1, ...(dash?.priorities ?? []).map((t) => t.count));
+  const agentTotal = (dash?.agents.agent ?? 0) + (dash?.agents.mine ?? 0);
+  const ownerLabel = ownerName?.trim() ? ownerName.trim() : "Mine";
   // Zero-count projects (roster rows with nothing in the range) hide until
   // the card head's chevron opens them.
   const zeroProjects = (dash?.projects ?? []).some((p) => p.count === 0);
@@ -547,6 +556,19 @@ export default function AnalyticsView() {
               <PriorityBars priority={t === 0 ? null : t} />
             </button>
           ))}
+          {(["agent", "mine"] as const).map((a) => (
+            <button
+              key={a}
+              className={`pill anf-agent${selAgent === a ? " active" : ""}`}
+              onClick={() => {
+                trace("analytics.filter", { agent: a, on: selAgent !== a });
+                setSelAgent((cur) => (cur === a ? null : a));
+              }}
+              title={a === "agent" ? "Scope to agent-delegated tasks" : "Scope to your own tasks"}
+            >
+              {a === "agent" ? "🤖" : "Mine"}
+            </button>
+          ))}
           {hasFilter && (
             <button className="pill anf-clear" onClick={clearFilter} title="Clear the scope filters">
               Clear
@@ -661,7 +683,34 @@ export default function AnalyticsView() {
                 </section>
               )}
 
-              {!filter.priorities && <PriorityCard tiers={dash.priorities} max={maxTier} />}
+              {/* The third grid column stacks Priority over the Agent vs Mine
+                  comparison — half height each. The comparison hides while the
+                  agent axis itself is filtered (the standing split-card rule:
+                  a filtered view can't compare against itself). */}
+              {(!filter.priorities || !filter.agent) && (
+                <div className="an-stack">
+                  {!filter.priorities && <PriorityCard tiers={dash.priorities} max={maxTier} />}
+                  {!filter.agent && (
+                    <section className="an-card">
+                      <div className="an-card-title">Delegation</div>
+                      <div className="an-segbar">
+                        <span
+                          className="seg"
+                          style={{ width: agentTotal > 0 ? `${(dash.agents.agent / agentTotal) * 100}%` : "0%", background: TIER_BG["1"] }}
+                        />
+                        <span
+                          className="seg"
+                          style={{ width: agentTotal > 0 ? `${(dash.agents.mine / agentTotal) * 100}%` : "0%", background: TIER_BG["3"] }}
+                        />
+                      </div>
+                      <div className="an-seg-legend">
+                        <span className="leg">🤖 {dash.agents.agent}</span>
+                        <span className="leg">{ownerLabel} {dash.agents.mine}</span>
+                      </div>
+                    </section>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Selecting a day swaps the ledger for that day's card — back

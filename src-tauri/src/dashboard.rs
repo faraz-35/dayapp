@@ -58,6 +58,12 @@ const HEATMAP_LOOKBACK_DAYS: i64 = 380;
 pub struct ScopeFilter {
     pub projects: Option<Vec<Option<String>>>,
     pub priorities: Option<Vec<Option<i64>>>,
+    /// The delegation axis: Some(true) = 🤖 rows only, Some(false) = Faraz's
+    /// own. Not a snapshot — assignments are unlogged — so this reads the
+    /// item's CURRENT flag (the same "currently" exception the miss-replay
+    /// population uses); a deleted subject can't answer the axis and drops
+    /// out while the filter is on.
+    pub agent: Option<bool>,
 }
 
 /// The filter normalized for matching: each axis is None = allow all, or the
@@ -66,6 +72,7 @@ pub struct ScopeFilter {
 pub struct Scope {
     projects: Option<HashSet<Option<String>>>,
     priorities: Option<HashSet<Option<i64>>>,
+    agent: Option<bool>,
 }
 
 impl ScopeFilter {
@@ -73,6 +80,7 @@ impl ScopeFilter {
         Scope {
             projects: self.projects.as_ref().map(|v| v.iter().cloned().collect()),
             priorities: self.priorities.as_ref().map(|v| v.iter().cloned().collect()),
+            agent: self.agent,
         }
     }
 }
@@ -92,14 +100,21 @@ impl Scope {
         self.priorities.as_ref().map_or(true, |s| s.contains(p))
     }
 
+    fn allows_agent(&self, agent: bool) -> bool {
+        self.agent.map_or(true, |a| a == agent)
+    }
+
     fn is_empty(&self) -> bool {
-        self.projects.is_none() && self.priorities.is_none()
+        self.projects.is_none() && self.priorities.is_none() && self.agent.is_none()
     }
 
     /// The SQL half of the filter: predicates over the `project`/`priority`
     /// snapshot columns, appended to a dynamically built query (fell counts,
     /// sessions). Unfiltered axes append nothing, so unfiltered queries are
-    /// byte-identical to what they were before the filter existed.
+    /// byte-identical to what they were before the filter existed. The agent
+    /// axis has no snapshot column — it reads the item's current flag through
+    /// a correlated subselect; a deleted subject's NULL coalesces to "mine",
+    /// so agent-filtered views exclude history whose row is gone.
     pub fn push_sql(
         &self,
         sql: &mut String,
@@ -107,6 +122,12 @@ impl Scope {
     ) {
         push_axis_pred("project", self.projects.as_ref(), sql, pv);
         push_axis_pred("priority", self.priorities.as_ref(), sql, pv);
+        if let Some(a) = self.agent {
+            sql.push_str(
+                " AND COALESCE((SELECT assigned_to_agent FROM items WHERE id = actions.item_id), 0) = ?",
+            );
+            pv.push(Box::new(a));
+        }
     }
 }
 
@@ -211,7 +232,19 @@ pub struct DashboardStats {
     pub heatmap: Vec<HeatDay>,
     pub projects: Vec<ProjectCount>,
     pub priorities: Vec<TierCount>,
+    /// The delegation split of the range's rows (Agent vs Mine card). Rows
+    /// passing the project/priority axes, spanning BOTH agent values — the
+    /// card hides while the agent axis itself is filtered, so the split is
+    /// always the full two-side picture.
+    pub agents: AgentCounts,
     pub totals: Totals,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCounts {
+    pub agent: i64,
+    pub mine: i64,
 }
 
 /// One task in a day's expanded detail — the subject's row (a completion
@@ -276,6 +309,8 @@ struct Effective {
     from_section: Option<String>,
     project: Option<String>,
     priority: Option<i64>,
+    /// Current-axis read (assignments are unlogged) — the Agent vs Mine split.
+    agent: bool,
 }
 
 // ---- The daily-miss replay -------------------------------------------------
@@ -341,10 +376,25 @@ fn fetch_life_events(conn: &rusqlite::Connection) -> anyhow::Result<Vec<LifeEv>>
 /// population under a scope filter. Assignments are unlogged, so "currently"
 /// is the best the log can say. Deleted habits fall back to their folded
 /// life-event snapshots.
+/// The delegation axis as it stands right now. Assignments are unlogged, so —
+/// the same "currently" exception as fetch_item_axes — the agent scope filter
+/// reads the live rows, never history.
+fn fetch_agent_flags(conn: &rusqlite::Connection) -> anyhow::Result<HashMap<String, bool>> {
+    let mut stmt = conn.prepare("SELECT id, assigned_to_agent FROM items")?;
+    let rows = stmt.query_map([], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, bool>(1)?))
+    })?;
+    let mut out = HashMap::new();
+    for r in rows {
+        let (id, agent) = r?;
+        out.insert(id, agent);
+    }
+    Ok(out)
+}
+
 fn fetch_item_axes(
     conn: &rusqlite::Connection,
-) -> anyhow::Result<HashMap<String, (Option<String>, Option<i64>)>> {
-    let mut stmt = conn.prepare(
+) -> anyhow::Result<HashMap<String, (Option<String>, Option<i64>)>> {    let mut stmt = conn.prepare(
         "SELECT i.id, p.name, i.priority
          FROM items i LEFT JOIN projects p ON p.id = i.project_id",
     )?;
@@ -394,6 +444,7 @@ fn missed_habits(
     live: &HashMap<String, LiveItem>,
     done_daily: &HashSet<String>,
     axes: &HashMap<String, (Option<String>, Option<i64>)>,
+    agent_flags: &HashMap<String, bool>,
     scope: &Scope,
 ) -> Vec<MissedHabit> {
     live.iter()
@@ -406,7 +457,8 @@ fn missed_habits(
                 && it.section.as_deref() == Some("daily")
                 && !it.paused
                 && !done_daily.contains(id.as_str())
-                && scope.allows(&project, &priority))
+                && scope.allows(&project, &priority)
+                && scope.allows_agent(*agent_flags.get(id.as_str()).unwrap_or(&false)))
                 .then(|| MissedHabit { text: it.text.clone(), project, priority })
         })
         .collect()
@@ -544,7 +596,8 @@ impl Db {
             };
             let scan_lo = if scan_start.is_empty() { scan_start } else { day_start_prefix(&scan_start) };
             let mut stmt = conn.prepare(
-                "SELECT timestamp, item_id, action, from_section, project, priority
+                "SELECT timestamp, item_id, action, from_section, project, priority,
+                        COALESCE((SELECT assigned_to_agent FROM items WHERE id = actions.item_id), 0)
                  FROM actions
                  WHERE item_id IS NOT NULL AND action IN ('completed','uncompleted')
                    AND timestamp >= ?1 AND timestamp < ?2
@@ -558,10 +611,11 @@ impl Db {
                     r.get::<_, Option<String>>(3)?,
                     r.get::<_, Option<String>>(4)?,
                     r.get::<_, Option<i64>>(5)?,
+                    r.get::<_, i64>(6)?,
                 ))
             })?;
             for row in rows {
-                let (ts, item, action, from_section, project, priority) = row?;
+                let (ts, item, action, from_section, project, priority, agent) = row?;
                 let Some(day) = day_key_of_ts(&ts) else { continue };
                 let slot = done_all_by_day
                     .entry(day.clone())
@@ -573,14 +627,16 @@ impl Db {
                     slot.from_section = from_section.clone();
                     slot.project = project.clone();
                     slot.priority = priority;
+                    slot.agent = agent != 0;
                 } else {
                     slot.done = false;
                 }
-                // The scoped fold: only completions whose snapshot axes match
-                // enter; uncompletions always flip any existing entry false,
-                // so the effective (last-event-wins) semantics survive.
+                // The scoped fold: only completions whose snapshot axes — and
+                // whose item's current delegation flag — match enter;
+                // uncompletions always flip any existing entry false, so the
+                // effective (last-event-wins) semantics survive.
                 if action == "completed" {
-                    if scope.allows(&project, &priority) {
+                    if scope.allows(&project, &priority) && scope.allows_agent(agent != 0) {
                         let slot = done_by_day
                             .entry(day)
                             .or_default()
@@ -590,6 +646,7 @@ impl Db {
                         slot.from_section = from_section;
                         slot.project = project;
                         slot.priority = priority;
+                        slot.agent = agent != 0;
                     }
                 } else {
                     let slot = done_by_day
@@ -637,6 +694,11 @@ impl Db {
         } else {
             fetch_item_axes(&conn)?
         };
+        let agent_flags = if scope.agent.is_some() {
+            fetch_agent_flags(&conn)?
+        } else {
+            HashMap::new()
+        };
 
         let (start_d, end_d) = day_span(&conn, since, until, today_d)?;
 
@@ -676,7 +738,7 @@ impl Db {
                         .collect()
                 });
                 daily_missed =
-                    missed_habits(&live, &done_daily, &axes, &scope).len() as i64;
+                    missed_habits(&live, &done_daily, &axes, &agent_flags, &scope).len() as i64;
             }
             let today_missed = fell_by_day.get(&day).copied().unwrap_or(0);
 
@@ -714,6 +776,7 @@ impl Db {
         let range_end = end_d.format("%Y-%m-%d").to_string();
         let mut proj_counts: HashMap<Option<String>, i64> = HashMap::new();
         let mut tier_counts: HashMap<Option<i64>, i64> = HashMap::new();
+        let mut agent_counts = AgentCounts { agent: 0, mine: 0 };
         for (day, m) in &done_by_day {
             if day.as_str() < range_start.as_str() || day.as_str() > range_end.as_str() {
                 continue;
@@ -724,12 +787,13 @@ impl Db {
                 }
                 *proj_counts.entry(e.project.clone()).or_insert(0) += 1;
                 *tier_counts.entry(e.priority).or_insert(0) += 1;
+                if e.agent { agent_counts.agent += 1 } else { agent_counts.mine += 1 }
             }
         }
         let projects = finish_projects(&conn, proj_counts)?;
         let priorities = finish_priorities(tier_counts);
 
-        Ok(DashboardStats { days, heatmap, projects, priorities, totals })
+        Ok(DashboardStats { days, heatmap, projects, priorities, agents: agent_counts, totals })
     }
 
     /// The Created dashboard: one pass over `created` actions — each row is
@@ -760,9 +824,12 @@ impl Db {
         let mut per_day: BTreeMap<String, i64> = BTreeMap::new();
         let mut proj_counts: HashMap<Option<String>, i64> = HashMap::new();
         let mut tier_counts: HashMap<Option<i64>, i64> = HashMap::new();
+        let mut agent_counts = AgentCounts { agent: 0, mine: 0 };
         {
             let mut sql = String::from(
-                "SELECT timestamp, project, priority FROM actions
+                "SELECT timestamp, project, priority,
+                        COALESCE((SELECT assigned_to_agent FROM items WHERE id = actions.item_id), 0)
+                 FROM actions
                  WHERE item_id IS NOT NULL AND action = 'created'
                    AND timestamp >= ? AND timestamp < ?",
             );
@@ -776,15 +843,17 @@ impl Db {
                     r.get::<_, String>(0)?,
                     r.get::<_, Option<String>>(1)?,
                     r.get::<_, Option<i64>>(2)?,
+                    r.get::<_, i64>(3)?,
                 ))
             })?;
             for row in rows {
-                let (ts, project, priority) = row?;
+                let (ts, project, priority, agent) = row?;
                 let Some(day) = day_key_of_ts(&ts) else { continue };
                 *per_day.entry(day.clone()).or_insert(0) += 1;
                 if day.as_str() >= range_start.as_str() && day.as_str() <= range_end.as_str() {
                     *proj_counts.entry(project).or_insert(0) += 1;
                     *tier_counts.entry(priority).or_insert(0) += 1;
+                    if agent != 0 { agent_counts.agent += 1 } else { agent_counts.mine += 1 }
                 }
             }
         }
@@ -803,7 +872,7 @@ impl Db {
         let heatmap = heat_days(&per_day, &heat_start, &today);
         let projects = finish_projects(&conn, proj_counts)?;
         let priorities = finish_priorities(tier_counts);
-        Ok(DashboardStats { days, heatmap, projects, priorities, totals })
+        Ok(DashboardStats { days, heatmap, projects, priorities, agents: agent_counts, totals })
     }
 
     /// One day at task level — what the ledger's expanded row renders, for
@@ -837,7 +906,8 @@ impl Db {
         let mut done_sections: HashMap<String, Option<String>> = HashMap::new();
         {
             let mut stmt = conn.prepare(
-                "SELECT item_id, item_text, action, timestamp, from_section, project, priority
+                "SELECT item_id, item_text, action, timestamp, from_section, project, priority,
+                        COALESCE((SELECT assigned_to_agent FROM items WHERE id = actions.item_id), 0)
                  FROM actions
                  WHERE item_id IS NOT NULL AND action IN ('completed','uncompleted')
                    AND timestamp >= ?1 AND timestamp < ?2
@@ -852,13 +922,14 @@ impl Db {
                     r.get::<_, Option<String>>(4)?,
                     r.get::<_, Option<String>>(5)?,
                     r.get::<_, Option<i64>>(6)?,
+                    r.get::<_, i64>(7)?,
                 ))
             })?;
             for row in rows {
-                let (item, text, action, ts, from_section, project, priority) = row?;
+                let (item, text, action, ts, from_section, project, priority, agent) = row?;
                 if action == "completed" {
                     done_sections.insert(item.clone(), from_section);
-                    if scope.allows(&project, &priority) {
+                    if scope.allows(&project, &priority) && scope.allows_agent(agent != 0) {
                         slots.insert(
                             item.clone(),
                             TaskDetail {
@@ -927,12 +998,18 @@ impl Db {
             } else {
                 fetch_item_axes(&conn)?
             };
+            let agent_flags = if scope.agent.is_some() {
+                fetch_agent_flags(&conn)?
+            } else {
+                HashMap::new()
+            };
             let done_daily: HashSet<String> = done_sections
                 .iter()
                 .filter(|(_, sec)| sec.as_deref() == Some("daily"))
                 .map(|(id, _)| id.clone())
                 .collect();
-            daily_missed = missed_habits(&live, &done_daily, &axes, &scope);        }
+            daily_missed = missed_habits(&live, &done_daily, &axes, &agent_flags, &scope);
+        }
 
         Ok(DayDetail { date: date.to_string(), tasks, fell, daily_missed })
     }

@@ -265,10 +265,13 @@ export const timersApi = {
 export interface DashboardFilter {
   projects: (string | null)[] | null;
   priorities: (number | null)[] | null;
+  /** The delegation axis: true = 🤖 rows only, false = Faraz's own, null =
+   *  all. Not a snapshot — reads the item's current flag (see dashboard.rs). */
+  agent: boolean | null;
 }
 
 /** The unfiltered scope — what the CLI and pre-filter callers see. */
-export const NO_SCOPE: DashboardFilter = { projects: null, priorities: null };
+export const NO_SCOPE: DashboardFilter = { projects: null, priorities: null, agent: null };
 
 /** What the analytics page counts: effective completions (done) or the
  *  tasks that entered the list (created). Session-only, like the range. */
@@ -306,6 +309,8 @@ export interface DashboardStats {
   heatmap: HeatDay[];
   projects: ProjectCount[];
   priorities: TierCount[];
+  /** The delegation split of the range's rows (the Agent vs Mine card). */
+  agents: { agent: number; mine: number };
   totals: {
     count: number;
     dailyMissed: number;

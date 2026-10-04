@@ -2539,3 +2539,13 @@ button {
   background: none;
   cursor: pointer;
 }
+/* The third grid column stacks Priority over the Agent vs Mine comparison —
+   the grid stretches the stack to its siblings' height, the two cards split
+   it equally (Priority takes half, per Faraz's layout ask). */
+.an-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+.an-stack > .an-card { flex: 1; }

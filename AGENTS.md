@@ -1281,9 +1281,10 @@ Journal / Quotes icons):**
   expanded day lists the creations with a `+` mark. The dashboard fields are neutral
   (`count`/`tasks`) for exactly this reason. The CLI's `--journal` stays Done-only.
 - **Axis scope filters (the toolbar's right end, session-only like the range)**: a `#`
-  project picker (multi-select popover, color dots, "No project" as a value) and four
-  tier chips (the PriorityBars glyphs, empty track = unmarked) + Clear. OR within an
-  axis, AND across the two. Every derivation follows (`journal_dashboard` /
+  project picker (multi-select popover, color dots, "No project" as a value), four
+  tier chips (the PriorityBars glyphs, empty track = unmarked), and the delegation
+  pair — 🤖 and Mine (one axis: the active chip filters to agent-only or own-only,
+  re-click clears; 2026-10-05) + Clear. OR within an axis, AND across the axes. Every derivation follows (`journal_dashboard` /
   `journal_day_detail` take a `ScopeFilter` over the `actions` write-time snapshots, so
   filtered history stays deletion-proof): done/streak/avg, heatmap intensities, splits,
   ledger counts, day-detail rows, and the miss replay — a habit outside the filter is
@@ -1319,7 +1320,14 @@ Journal / Quotes icons):**
   unmounts its split card and frees the track) can't stretch the squares across the
   row — the cap is on the calendar, never the card: an auto-margin grid item sizes to
   fit-content and collapses the cells (the 2026-09-21 oval-cells regression).
-- **Splits**: every project's share of the range's completions as label/bar/count rows
+- **Splits**: an **Agent vs Mine** card stacked under Priority in the third column
+  (Priority takes half height — 2026-10-05), rendered in the priority card's own
+  shape (one segmented accent-intensity bar + a count legend: `🤖 N · <owner> N`,
+  the masthead's name). It splits the range's rows across the delegation axis read
+  at the item's CURRENT flag — assignments are unlogged, the same "currently"
+  exception as the miss-replay population; a deleted subject can't answer the axis
+  and drops out while filtered — and, per the split-card rule, hides while the
+  agent axis chip is active. Every project's share of the range's completions as label/bar/count rows
   (zero-filled from the roster, but zero-count rows hide by default — the chevron in
   the card head reveals the whole roster; a trailing "none" bucket when unprojected
   work exists), and the priority card — one segmented bar (tier

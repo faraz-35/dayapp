@@ -2239,7 +2239,7 @@ function DayApp() {
             )}
           </>
         ) : view === "analytics" ? (
-          <AnalyticsView />
+          <AnalyticsView ownerName={ownerName} />
         ) : view === "settings" ? (
           <SettingsView
             features={{
