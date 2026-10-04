@@ -9,6 +9,7 @@ mod goals;
 mod journal;
 mod notes;
 mod projects;
+mod settings;
 mod sync;
 mod timers;
 pub mod cli;
@@ -484,6 +485,19 @@ async fn time_totals(
     db: State<'_, DbState>, item_ids: Vec<String>,
 ) -> Result<std::collections::HashMap<String, i64>, String> {
     with_db(db, move |db| db.time_totals(&item_ids)).await
+}
+
+#[tauri::command]
+fn settings_get(app: AppHandle) -> Result<std::collections::HashMap<String, String>, String> {
+    settings::read(&db_path(&app)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn settings_set(
+    app: AppHandle,
+    entries: std::collections::HashMap<String, String>,
+) -> Result<(), String> {
+    settings::set_many(&db_path(&app), entries).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1035,6 +1049,7 @@ pub fn run() {
             list_goals, create_goal, edit_goal, set_goal_project,
             achieve_goal, unachieve_goal, delete_goal,
             start_timer, stop_timer, discard_timer, get_active_timer,
+            settings_get, settings_set,
             time_totals, today_totals, session_time_by_day,
             sync_get_config, sync_set_config, sync_deploy,
             sync_pull_captures, sync_mark_ingested, sync_status,

@@ -81,16 +81,15 @@ type Cell = {
   isToday: boolean;
 };
 
-/** The current calendar month as a Monday-first grid: `lead` blanks, then
- *  one cell per day (intensity = that day's count of the active subject).
- *  Anchored on the app's logical today (6am→6am), so a 1am session fills
- *  yesterday's cell. Trailing blanks aren't needed — the CSS grid just ends
- *  the last row short. */
-function monthCalendar(map: Map<string, number>): (Cell | null)[] {
+/** The viewed month as a Monday-first grid: `lead` blanks, then one cell
+ *  per day (intensity = that day's count of the active subject). Anchored on
+ *  the app's logical today (6am→6am), so a 1am session fills yesterday's
+ *  cell. Trailing blanks aren't needed — the CSS grid just ends the last row
+ *  short. */
+function monthCalendar(map: Map<string, number>, view: { y: number; m: number }): (Cell | null)[] {
   const today = todayStr();
-  const t = new Date(today + "T00:00:00");
-  const year = t.getFullYear();
-  const month = t.getMonth();
+  const year = view.y;
+  const month = view.m;
   const lead = (new Date(year, month, 1).getDay() + 6) % 7; // days before Monday
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells: (Cell | null)[] = [];
@@ -400,11 +399,27 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
   ];
 
   const heat = useMemo(() => new Map((dash?.heatmap ?? []).map((h) => [h.date, h.count])), [dash]);
-  const cells = useMemo(() => monthCalendar(heat), [heat]);
-  const monthLabel = new Date(todayStr() + "T00:00:00").toLocaleDateString(undefined, {
+  // The viewed month — today's by default; the title arrows page it. Bounded
+  // by data: back stops at the oldest month the heatmap actually covers,
+  // forward at the current month (no future).
+  const t0 = new Date(todayStr() + "T00:00:00");
+  const [viewMonth, setViewMonth] = useState({ y: t0.getFullYear(), m: t0.getMonth() });
+  const cells = useMemo(() => monthCalendar(heat, viewMonth), [heat, viewMonth]);
+  const monthLabel = new Date(viewMonth.y, viewMonth.m, 1).toLocaleDateString(undefined, {
     month: "long",
     year: "numeric",
   });
+  const isCurrentMonth = viewMonth.y === t0.getFullYear() && viewMonth.m === t0.getMonth();
+  const heatOldest = dash?.heatmap?.[0]?.date;
+  const minMonth = heatOldest
+    ? (() => { const d = new Date(heatOldest + "T00:00:00"); return { y: d.getFullYear(), m: d.getMonth() }; })()
+    : { y: t0.getFullYear(), m: t0.getMonth() };
+  const isOldestMonth = viewMonth.y === minMonth.y && viewMonth.m === minMonth.m;
+  const shiftMonth = (delta: number) =>
+    setViewMonth((v) => {
+      const d = new Date(v.y, v.m + delta, 1);
+      return { y: d.getFullYear(), m: d.getMonth() };
+    });
   const maxProject = Math.max(1, ...(dash?.projects ?? []).map((p) => p.count));
   const maxTier = Math.max(1, ...(dash?.priorities ?? []).map((t) => t.count));
   const agentTotal = (dash?.agents.agent ?? 0) + (dash?.agents.mine ?? 0);
@@ -605,8 +620,27 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
                 }`}
               >
                 <div className="an-card-title">
-                  Activity
-                  <span className="hint">{monthLabel}</span>
+                  <span className="an-cal-nav">
+                    <button
+                      className="an-back"
+                      onClick={() => shiftMonth(-1)}
+                      disabled={isOldestMonth}
+                      title={isOldestMonth ? "Oldest month with data" : "Previous month"}
+                      aria-label="Previous month"
+                    >
+                      <Chevron className="left" />
+                    </button>
+                    {monthLabel}
+                    <button
+                      className="an-back"
+                      onClick={() => shiftMonth(1)}
+                      disabled={isCurrentMonth}
+                      title={isCurrentMonth ? "Current month" : "Next month"}
+                      aria-label="Next month"
+                    >
+                      <Chevron />
+                    </button>
+                  </span>
                 </div>
                 <div className="cal">
                   <div className="cal-head">

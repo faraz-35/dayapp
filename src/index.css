@@ -2549,3 +2549,11 @@ button {
   min-height: 0;
 }
 .an-stack > .an-card { flex: 1; }
+/* The Activity title's month pager: name centered between the ‹ › arrows
+   (the day card's back-arrow glyph, reused). Disabled = out of data. */
+.an-cal-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.an-cal-nav .an-back:disabled { opacity: 0.25; cursor: default; }

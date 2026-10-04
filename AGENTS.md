@@ -395,7 +395,9 @@ seeded demo always shows a live-looking week of journal history.
 The binary doubles as a headless CLI (`--list`, `--task`, `--search`, `--journal`, `--notes`,
 `--projects`, `--add`, `--complete`, `--start`, `--move`, `--details`, `--goals`, `--backup`,
 `--deploy`,
-`--sync-pull-peek`, plus the global `--demo` modifier) for
+`--sync-pull-peek`, the settings family — `--settings`, `--themes`, `--theme-create`,
+`--theme`, `--views`, `--view-create`, `--view-enter`, `--view-exit`, `--view-delete` —
+plus the global `--demo` modifier) for
 SSH/zcode sessions — see `cli.rs`. It opens the
 same db the GUI holds: WAL + `busy_timeout(5s)` make the two processes safe together,
 and the GUI's 60s deploy loop picks up CLI writes. `--add` stores text **raw** (token
@@ -1010,6 +1012,16 @@ The single-key `t` (timer), `d` (details), and `⌫` (delete) verbs are retired
 Do not reintroduce bare single-letter verbs that collide with the address
 prefixes `n`/`t`/`d`/`b`/`g`.
 
+**The settings store (2026-10-05):** every persisted preference — features, toggles,
+themes, views — lives in `settings.json` beside the databases (`settings.rs`), NOT in
+webview localStorage (only zoom and the notes-collapse set stayed local — machine
+minutiae). One file, two writers: the GUI's persist effects and the CLI's
+`--settings`/theme/view verbs, so an agent manages configuration over SSH; the GUI's
+60s tick diffs the file and reloads itself when an external write lands (the one path
+that re-initializes every settings-backed hook). App-level by position — outside both
+databases, so demo-mode swaps never touch it. First launch after the migration seeded
+the store from localStorage once and removed the old keys.
+
 **Settings (⌘P → Settings):** the settings page owns what exists at all and the custom
 views. **Features** are EXISTENCE switches — `Tasks` (the whole tasks area in one
 toggle: the capture input plus all three sections — the section toggles refine inside
@@ -1310,7 +1322,9 @@ Journal / Quotes icons):**
   day never shows
   daily misses — a live day has no verdict), and **Today missed** (`fell_to_backlog` —
   the sweep's own record of a today task the day ended without).
-- **Activity**: the current month as a Monday-first calendar heatmap — one square per
+- **Activity**: a Monday-first calendar heatmap, paged by ‹ › arrows in the card
+  title — back through past months (bounded by the heatmap's data window), forward
+  disabled on the current month (2026-10-05). The current month as the default view: — one square per
   day (aspect-ratio cells, so one shape serves every window width), intensity steps of
   the one accent = that day's completions, the day number top-left, the count
   bottom-right, today ringed, a Less→More legend. Clicking a cell opens that day's

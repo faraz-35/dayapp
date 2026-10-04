@@ -39,6 +39,9 @@
 
 use crate::db::{Db, HiddenFilter, Item};
 use crate::demo;
+use crate::settings;
+use std::path::PathBuf;
+use rusqlite::{params, OptionalExtension};
 use crate::goals::{Goal, HORIZONS};
 use crate::sync::{self, DeployOutcome};
 
@@ -74,6 +77,15 @@ pub fn run(args: Vec<String>) -> i32 {
         "--backup" => backup_cmd(&db),
         "--deploy" => sync::deploy(&db, true).map(|o| println!("{}", o.describe())),
         "--sync-pull-peek" => peek(&db),
+        "--settings" => settings_cmd(&rest),
+        "--themes" => themes_cmd(),
+        "--theme-create" => theme_create(&rest),
+        "--theme" => theme_activate(&rest),
+        "--views" => views_cmd(),
+        "--view-create" => view_create(&db, &rest),
+        "--view-enter" => view_set_active(&rest, true),
+        "--view-exit" => view_set_active(&rest, false),
+        "--view-delete" => view_delete(&rest),
         "--help" | "-h" => {
             println!("{USAGE}");
             Ok(())
@@ -107,11 +119,413 @@ usage: dayapp [--demo] <command> [args]
   --details <query> <body>       replace a task's details body (\"\" clears)
   --deploy                       force-push tasks.json now
   --sync-pull-peek               print the phone's pending captures
+  --settings [get <key> | set <key> <val>]   the settings store (no args: summary)
+  --themes                        themes: id, name, colors, active marker
+  --theme-create <name> k=hex...  create a theme (bg= elev= soft= hover= border=
+                                  text= dim= faint= accent= done= danger=;
+                                  missing shades come from the active theme)
+  --theme <id|name>               activate a theme
+  --views                         views: name, axes, active marker
+  --view-create <name> k=v...     create a view (prio=1,2,3 agent=all|agent|mine
+                                  project=<name|none> notes=on|off noteprio=…)
+  --view-enter <name>             enter a view (the GUI follows on its next sync)
+  --view-exit                     exit the active view
+  --view-delete <name>            delete a view
   --demo                         run against the demo db (global modifier)";
 
 fn usage() -> i32 {
     eprintln!("{USAGE}");
     1
+}
+
+
+// ---- Settings store (settings.json; app-level, not db-level) --------------
+//
+// The GUI's persisted preferences live in one JSON file beside the databases
+// (see settings.rs) — these verbs are the agent's door into it: create
+// themes and views, activate them, flip toggles. The GUI picks external
+// writes up on its next 60s sync and re-skins/re-scopes live.
+
+/// The settings store map, anchored at the REAL db's directory (settings are
+/// the app's — `--demo` never redirects them, the same machine-level rule as
+/// `CLI: Enable`).
+fn store() -> anyhow::Result<std::collections::HashMap<String, String>> {
+    settings::read(
+        real_db_path()
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("cannot resolve the app directory"))?,
+    )
+}
+
+fn store_set(key: &str, value: &str) -> anyhow::Result<()> {
+    settings::set(
+        real_db_path()
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("cannot resolve the app directory"))?,
+        key,
+        value,
+    )
+}
+
+/// `--settings` / `--settings get <key>` / `--settings set <key> <value>`.
+/// Bare, the interesting keys print grouped with their live values; get
+/// prints one raw value; set writes any store key (the summary doubles as
+/// the key reference).
+fn settings_cmd(rest: &[String]) -> anyhow::Result<()> {
+    let map = store()?;
+    match rest.first().map(String::as_str) {
+        None => {
+            let get = |k: &str| map.get(k).cloned();
+            let on = |k: &str| match get(k).as_deref() {
+                Some("0") => "off",
+                _ => "on",
+            };
+            println!("features:");
+            for (k, label) in [
+                ("dayapp-tasks-enabled", "tasks"),
+                ("dayapp-sec-today-enabled", "today"),
+                ("dayapp-sec-daily-enabled", "daily"),
+                ("dayapp-sec-backlog-enabled", "backlog"),
+                ("dayapp-notes-enabled", "notes"),
+                ("dayapp-goals-enabled", "goals"),
+                ("dayapp-journal-enabled", "journal"),
+                ("dayapp-quotes-enabled", "quotes"),
+            ] {
+                println!("  {label:<10} {}", on(k));
+            }
+            println!("ui:");
+            println!("  notes-bg   {}", on("dayapp-notes-card"));
+            println!("  tasks-bg   {}", on("dayapp-tasks-card"));
+            println!("  header     {}", get("dayapp-header-buttons").unwrap_or_else(|| "{}".into()));
+            println!("theme:      {}", get("dayapp-theme").unwrap_or_else(|| "dark".into()));
+            let views = get("dayapp-views").unwrap_or_else(|| "[]".into());
+            let active = get("dayapp-active-view").unwrap_or_default();
+            let n = serde_json::from_str::<serde_json::Value>(&views)
+                .ok()
+                .and_then(|v| v.as_array().cloned())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            println!("views:      {n} (active: {})", if active.is_empty() { "none" } else { &active });
+            println!("\nset any key: dayapp --settings set <key> <value>");
+        }
+        Some("get") => {
+            let key = rest.get(1).ok_or_else(|| anyhow::anyhow!("--settings get needs a <key>"))?;
+            println!("{}", map.get(key).ok_or_else(|| anyhow::anyhow!("no value for {key}"))?);
+        }
+        Some("set") => {
+            let key = rest.get(1).ok_or_else(|| anyhow::anyhow!("--settings set needs <key> <value>"))?;
+            let value = rest.get(2).ok_or_else(|| anyhow::anyhow!("--settings set needs <key> <value>"))?;
+            store_set(key, value)?;
+            println!("set {key}");
+        }
+        _ => return Err(anyhow::anyhow!("usage: --settings [get <key> | set <key> <value>]")),
+    }
+    Ok(())
+}
+
+/// The theme JSON shape the GUI stores (dayapp-themes array entries).
+const THEME_SHADES: [&str; 11] = [
+    "bg", "bgElev", "bgSoft", "bgHover", "border", "text", "textDim", "textFaint",
+    "accent", "done", "danger",
+];
+
+fn read_themes(map: &std::collections::HashMap<String, String>) -> anyhow::Result<Vec<serde_json::Value>> {
+    let raw = map.get("dayapp-themes").map(String::as_str).unwrap_or("[]");
+    Ok(serde_json::from_str(raw)?)
+}
+
+fn write_themes(themes: &[serde_json::Value]) -> anyhow::Result<()> {
+    store_set("dayapp-themes", &serde_json::to_string(themes)?)
+}
+
+/// The active theme's colors as a serde object — the base a --theme-create
+/// starts from (missing shades inherit).
+fn active_theme_colors(
+    map: &std::collections::HashMap<String, String>,
+) -> anyhow::Result<serde_json::Map<String, serde_json::Value>> {
+    let active_id = map.get("dayapp-theme").map(String::as_str).unwrap_or("dark");
+    let themes = read_themes(map)?;
+    let mut all: Vec<serde_json::Value> = vec![
+        serde_json::json!({ "id": "dark", "name": "Dark",
+          "colors": { "bg": "#0e0f11", "bgElev": "#16181c", "bgSoft": "#121417", "bgHover": "#1c1f24",
+                      "border": "#30343c", "text": "#d2d5da", "textDim": "#a2a7b1", "textFaint": "#7b7f88",
+                      "accent": "#7b8cff", "done": "#3a3f48", "danger": "#e5484d" } }),
+        serde_json::json!({ "id": "light", "name": "Light",
+          "colors": { "bg": "#f7f7f8", "bgElev": "#ffffff", "bgSoft": "#f0f0f2", "bgHover": "#e9e9ed",
+                      "border": "#d9dade", "text": "#212327", "textDim": "#5d6167", "textFaint": "#90949b",
+                      "accent": "#5061f5", "done": "#b3b7bf", "danger": "#d7383f" } }),
+    ];
+    all.extend(themes);
+    let found = all
+        .iter()
+        .find(|t| t["id"].as_str() == Some(active_id))
+        .or_else(|| all.first());
+    let colors = found
+        .ok_or_else(|| anyhow::anyhow!("no theme to inherit from"))?
+        .get("colors")
+        .cloned()
+        .unwrap_or_default();
+    Ok(colors.as_object().cloned().unwrap_or_default())
+}
+
+fn themes_cmd() -> anyhow::Result<()> {
+    let map = store()?;
+    let active = map.get("dayapp-theme").map(String::as_str).unwrap_or("dark");
+    let mut all: Vec<serde_json::Value> = vec![
+        serde_json::json!({ "id": "dark", "name": "Dark" }),
+        serde_json::json!({ "id": "light", "name": "Light" }),
+    ];
+    all.extend(read_themes(&map)?);
+    all.sort_by_key(|t| t["id"].as_str() != Some(active));
+    for t in &all {
+        let id = t["id"].as_str().unwrap_or("?");
+        let name = t["name"].as_str().unwrap_or("?");
+        let mark = if id == active { " ←active" } else { "" };
+        if let Some(colors) = t.get("colors").and_then(|c| c.as_object()) {
+            let shades: Vec<String> = THEME_SHADES
+                .iter()
+                .filter_map(|k| colors.get(*k).and_then(|v| v.as_str()).map(|v| format!("{k}={v}")))
+                .collect();
+            println!("{id:<14} {name}{mark}\n  {}", shades.join(" "));
+        } else {
+            println!("{id:<14} {name} (built-in){mark}");
+        }
+    }
+    Ok(())
+}
+
+fn theme_create(rest: &[String]) -> anyhow::Result<()> {
+    let name = rest
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("--theme-create needs a <name> then shade=hex pairs"))?;
+    let mut map = store()?;
+    let mut colors = active_theme_colors(&map)?;
+    for arg in &rest[1..] {
+        let (k, v) = arg
+            .split_once('=')
+            .ok_or_else(|| anyhow::anyhow!("shades are key=value ({arg:?})"))?;
+        if !THEME_SHADES.contains(&k) {
+            return Err(anyhow::anyhow!("unknown shade {k:?} — one of {}", THEME_SHADES.join(" ")));
+        }
+        let v = v.to_lowercase();
+        let ok = (v.len() == 7 || v.len() == 4)
+            && v.starts_with('#')
+            && v[1..].chars().all(|c| c.is_ascii_hexdigit());
+        if !ok {
+            return Err(anyhow::anyhow!("{k}={v} is not a hex color"));
+        }
+        colors.insert(k.to_string(), serde_json::Value::String(v));
+    }
+    let id = format!("{}-{}", name.to_lowercase().replace(' ', "-"), ulid::Ulid::new().to_string().to_lowercase());
+    let theme = serde_json::json!({ "id": id, "name": name, "colors": colors });
+    let mut themes = read_themes(&map)?;
+    themes.push(theme);
+    write_themes(&themes)?;
+    // Creating implies activating — the GUI's New Theme flow does the same.
+    store_set("dayapp-theme", &id)?;
+    println!("created + activated {id}");
+    Ok(())
+}
+
+fn theme_activate(rest: &[String]) -> anyhow::Result<()> {
+    let q = rest.first().ok_or_else(|| anyhow::anyhow!("--theme needs an id or name"))?;
+    let map = store()?;
+    let q_lower = q.to_lowercase();
+    let mut all: Vec<serde_json::Value> = vec![
+        serde_json::json!({ "id": "dark", "name": "Dark" }),
+        serde_json::json!({ "id": "light", "name": "Light" }),
+    ];
+    all.extend(read_themes(&map)?);
+    let hit = all
+        .iter()
+        .find(|t| t["id"].as_str() == Some(q.as_str()))
+        .or_else(|| {
+            all.iter()
+                .find(|t| t["name"].as_str().map(|n| n.to_lowercase()) == Some(q_lower.clone()))
+        })
+        .or_else(|| {
+            all.iter().find(|t| {
+                t["name"]
+                    .as_str()
+                    .map(|n| n.to_lowercase().contains(&q_lower))
+                    .unwrap_or(false)
+            })
+        });
+    let id = hit
+        .and_then(|t| t["id"].as_str())
+        .ok_or_else(|| anyhow::anyhow!("no theme matching {q:?}"))?
+        .to_string();
+    store_set("dayapp-theme", &id)?;
+    println!("theme set to {id} — the GUI follows on its next sync");
+    Ok(())
+}
+
+/// The custom views array (dayapp-views), shaped exactly like the GUI's
+/// CustomView in SettingsView.tsx.
+fn read_views(map: &std::collections::HashMap<String, String>) -> anyhow::Result<Vec<serde_json::Value>> {
+    let raw = map.get("dayapp-views").map(String::as_str).unwrap_or("[]");
+    Ok(serde_json::from_str(raw)?)
+}
+
+fn write_views(views: &[serde_json::Value]) -> anyhow::Result<()> {
+    store_set("dayapp-views", &serde_json::to_string(views)?)
+}
+
+fn views_cmd() -> anyhow::Result<()> {
+    let map = store()?;
+    let active = map.get("dayapp-active-view").map(String::as_str).unwrap_or("");
+    for v in read_views(&map)? {
+        let id = v["id"].as_str().unwrap_or("?");
+        let name = v["name"].as_str().unwrap_or("?");
+        let mark = if id == active { " ←active" } else { "" };
+        let prios: Vec<String> = v["priorities"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|p| p.as_i64()).map(|p| p.to_string()).collect())
+            .unwrap_or_default();
+        let np: Vec<String> = v["notePriorities"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|p| p.as_i64()).map(|p| p.to_string()).collect())
+            .unwrap_or_default();
+        println!(
+            "{name}{mark}\n  prio={} agent={} project={} notes={} noteprio={}",
+            if prios.is_empty() { "none".into() } else { prios.join(",") },
+            v["agent"].as_str().unwrap_or("all"),
+            v["projectId"].as_str().unwrap_or("any"),
+            if v["notes"].as_bool().unwrap_or(true) { "on" } else { "off" },
+            if np.is_empty() { "none".into() } else { np.join(",") },
+        );
+    }
+    Ok(())
+}
+
+fn view_create(db: &Db, rest: &[String]) -> anyhow::Result<()> {
+    let name = rest
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("--view-create needs a <name> then key=value axes"))?;
+    let (mut prios, mut agent, mut project, mut notes, mut np): (Vec<i64>, String, Option<String>, bool, Vec<i64>) =
+        (vec![1, 2, 3], "all".into(), None, true, vec![1, 2, 3]);
+    for arg in &rest[1..] {
+        let (k, v) = arg
+            .split_once('=')
+            .ok_or_else(|| anyhow::anyhow!("axes are key=value ({arg:?})"))?;
+        match k {
+            "prio" | "priorities" => prios = parse_tiers(v)?,
+            "noteprio" | "notepriorities" => np = parse_tiers(v)?,
+            "agent" => match v {
+                "all" | "agent" | "mine" => agent = v.to_string(),
+                other => return Err(anyhow::anyhow!("agent is all|agent|mine, not {other:?}")),
+            },
+            "project" => {
+                project = if v.eq_ignore_ascii_case("none") || v.eq_ignore_ascii_case("any") {
+                    None
+                } else {
+                    let pid: String = db
+                        .conn
+                        .lock()
+                        .unwrap()
+                        .query_row(
+                            "SELECT id FROM projects WHERE lower(name) = lower(?1)",
+                            params![v],
+                            |r| r.get::<_, String>(0),
+                        )
+                        .optional()?
+                        .ok_or_else(|| anyhow::anyhow!("no project named {v:?}"))?;
+                    Some(pid)
+                };
+            }
+            "notes" => match v {
+                "on" | "off" => notes = v == "on",
+                other => return Err(anyhow::anyhow!("notes is on|off, not {other:?}")),
+            },
+            other => return Err(anyhow::anyhow!("unknown axis {other:?} — prio agent project notes noteprio")),
+        }
+    }
+    let id = format!("{}-{}", name.to_lowercase().replace(' ', "-"), ulid::Ulid::new().to_string().to_lowercase());
+    let mut map = store()?;
+    let mut views = read_views(&map)?;
+    views.push(serde_json::json!({
+        "id": id, "name": name,
+        "priorities": prios, "agent": agent,
+        "projectId": project, "notes": notes, "notePriorities": np,
+    }));
+    write_views(&views)?;
+    println!("created view {id} — enter it with --view-enter {name:?}");
+    Ok(())
+}
+
+fn parse_tiers(v: &str) -> anyhow::Result<Vec<i64>> {
+    let mut out = Vec::new();
+    for part in v.split(',') {
+        let t: i64 = part.trim().parse()?;
+        if !(1..=3).contains(&t) {
+            return Err(anyhow::anyhow!("tiers are 1..3, not {t}"));
+        }
+        if !out.contains(&t) {
+            out.push(t);
+        }
+    }
+    Ok(out)
+}
+
+/// `--view-enter <name>` / `--view-exit`: the active-view id in the store —
+/// the GUI's next sync re-scopes to it (or out of any view).
+fn view_set_active(rest: &[String], enter: bool) -> anyhow::Result<()> {
+    if !enter {
+        store_set("dayapp-active-view", "")?;
+        println!("view exited — the GUI follows on its next sync");
+        return Ok(());
+    }
+    let q = rest.first().ok_or_else(|| anyhow::anyhow!("--view-enter needs a view name"))?;
+    let map = store()?;
+    let q_lower = q.to_lowercase();
+    let views = read_views(&map)?;
+    let hit = views
+        .iter()
+        .find(|v| {
+            v["name"].as_str().map(|n| n.to_lowercase()) == Some(q_lower.clone())
+                || v["id"].as_str() == Some(q.as_str())
+        })
+        .or_else(|| {
+            views.iter().find(|v| {
+                v["name"]
+                    .as_str()
+                    .map(|n| n.to_lowercase().contains(&q_lower))
+                    .unwrap_or(false)
+            })
+        });
+    let id = hit
+        .and_then(|v| v["id"].as_str())
+        .ok_or_else(|| anyhow::anyhow!("no view matching {q:?}"))?
+        .to_string();
+    store_set("dayapp-active-view", &id)?;
+    println!("entered {id} — the GUI follows on its next sync");
+    Ok(())
+}
+
+fn view_delete(rest: &[String]) -> anyhow::Result<()> {
+    let q = rest.first().ok_or_else(|| anyhow::anyhow!("--view-delete needs a view name"))?;
+    let mut map = store()?;
+    let q_lower = q.to_lowercase();
+    let views = read_views(&map)?;
+    let keep: Vec<serde_json::Value> = views
+        .iter()
+        .filter(|v| {
+            let name_hit = v["name"].as_str().map(|n| n.to_lowercase()) == Some(q_lower.clone());
+            let id_hit = v["id"].as_str() == Some(q.as_str());
+            !(name_hit || id_hit)
+        })
+        .cloned()
+        .collect();
+    if keep.len() == views.len() {
+        return Err(anyhow::anyhow!("no view matching {q:?}"));
+    }
+    let active = map.get("dayapp-active-view").cloned().unwrap_or_default();
+    write_views(&keep)?;
+    if keep.iter().all(|v| v["id"].as_str() != Some(active.as_str())) {
+        store_set("dayapp-active-view", "")?;
+    }
+    println!("deleted");
+    Ok(())
 }
 
 /// Snapshot the real db into backups/ (see backup.rs). Refuses while --demo is
@@ -465,18 +879,24 @@ fn peek(db: &Db) -> anyhow::Result<()> {
 /// <identifier>; older installs may have used the product name, so accept both.
 /// With `demo`, opens the sibling demo db instead (created + seeded on first
 /// use — the same dataset as ⌘P → Enter Demo Mode).
-fn open_db(demo_mode: bool) -> Option<Db> {
+fn real_db_path() -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
     let base = std::path::PathBuf::from(home).join("Library/Application Support");
     let candidates = [
         base.join("com.farazshah.dayapp").join("dayapp.db"),
         base.join("DayApp").join("dayapp.db"),
     ];
-    let real = candidates
-        .iter()
-        .find(|p| p.exists())
-        .cloned()
-        .unwrap_or_else(|| candidates[0].clone());
+    Some(
+        candidates
+            .iter()
+            .find(|p| p.exists())
+            .cloned()
+            .unwrap_or_else(|| candidates[0].clone()),
+    )
+}
+
+fn open_db(demo_mode: bool) -> Option<Db> {
+    let real = real_db_path()?;
     let (path, result) = if demo_mode {
         let p = demo::demo_db_path(&real);
         (p.clone(), Db::open_demo(&real))

@@ -27,6 +27,7 @@ import KeyboardHelp from "./KeyboardHelp";
 import NamePrompt from "./NamePrompt";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, popoverOpen, scrollIntoViewEl } from "./focusNav";
 import { BUILT_IN_THEMES, applyTheme, loadCustomThemes, resolveTheme, saveCustomThemes, type Theme } from "./themes";
+import { MIGRATED_KEYS, externallyChanged, initSettings, sget, sset, ssetMany } from "./settings";
 
 type View = "list" | "analytics" | "journal" | "quotes" | "settings";
 
@@ -220,6 +221,36 @@ export default function App() {
 }
 
 function DayApp() {
+  // The settings store must be in the cache before the app's state
+  // initializers read it — this wrapper gates on the (few-ms) fetch and
+  // mounts the real app once, so every hook below sees a populated cache.
+  const [settingsReady, setSettingsReady] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const wasEmpty = await initSettings();
+      // One-time upgrade seed: an existing install's localStorage prefs move
+      // into the store; the local keys die either way (the store is the one
+      // source now).
+      const moved: Record<string, string> = {};
+      for (const k of MIGRATED_KEYS) {
+        const v = localStorage.getItem(k);
+        if (v !== null) {
+          if (wasEmpty) moved[k] = v;
+          localStorage.removeItem(k);
+        }
+      }
+      if (Object.keys(moved).length > 0) ssetMany(moved);
+      setSettingsReady(true);
+    })().catch((e) => {
+      console.error("[dayapp] settings load failed", e);
+      setSettingsReady(true); // defaults still render — never a blank app
+    });
+  }, []);
+  if (!settingsReady) return null;
+  return <DayAppBody />;
+}
+
+function DayAppBody() {
   const [items, setItems] = useState<Record<Section, Item[]>>({
     today: [],
     daily: [],
@@ -239,7 +270,7 @@ function DayApp() {
   const [view, setView] = useState<View>("list");
   // ---- Show/Hide toggles (⌘P) ---------------------------------------------
   // Every layout surface is an independent toggle whose palette label reflects
-  // its state ("Show X" / "Hide X"). All persist in localStorage — display
+  // its state ("Show X" / "Hide X"). All persist in the settings store —
   // preferences like zoom, not session filters; Show Default View is the one
   // universal reset (it hides the goals: the default working view is the plain
   // task list). Show Hidden Tasks/Notes render hidden entries inline (dimmed,
@@ -248,20 +279,20 @@ function DayApp() {
   // other surface defaults on) — stored "1"/"0", so the default only reaches
   // installs that never toggled it.
   const [goalsVisible, setGoalsVisible] = useState(
-    () => localStorage.getItem("dayapp-goals-visible") === "1",
+    () => sget("dayapp-goals-visible", "0") === "1",
   );
   const [notesVisible, setNotesVisible] = useState(
-    () => localStorage.getItem("dayapp-notes-visible") !== "0",
+    () => sget("dayapp-notes-visible", "1") !== "0",
   );
   // Tasks — the whole area in one toggle: the capture input plus all three
   // sections. The per-section toggles below refine inside it.
   const [tasksVisible, setTasksVisible] = useState(
-    () => localStorage.getItem("dayapp-tasks-visible") !== "0",
+    () => sget("dayapp-tasks-visible", "1") !== "0",
   );
   const [sectionsVisible, setSectionsVisible] = useState<Record<Section, boolean>>(() => ({
-    today: localStorage.getItem("dayapp-sec-today") !== "0",
-    daily: localStorage.getItem("dayapp-sec-daily") !== "0",
-    backlog: localStorage.getItem("dayapp-sec-backlog") !== "0",
+    today: sget("dayapp-sec-today", "1") !== "0",
+    daily: sget("dayapp-sec-daily", "1") !== "0",
+    backlog: sget("dayapp-sec-backlog", "1") !== "0",
   }));
   // Existence (Settings) vs visibility (⌘P) — two layers per surface. The
   // enabled flags below say the app HAS the surface at all (the Settings
@@ -273,28 +304,28 @@ function DayApp() {
   // its data moves: the rows stay in the db; Analytics, the CLI, and the
   // phone mirror read them regardless.
   const [goalsEnabled, setGoalsEnabled] = useState(
-    () => localStorage.getItem("dayapp-goals-enabled") !== "0",
+    () => sget("dayapp-goals-enabled", "1") !== "0",
   );
   const [notesEnabled, setNotesEnabled] = useState(
-    () => localStorage.getItem("dayapp-notes-enabled") !== "0",
+    () => sget("dayapp-notes-enabled", "1") !== "0",
   );
   const [tasksEnabled, setTasksEnabled] = useState(
-    () => localStorage.getItem("dayapp-tasks-enabled") !== "0",
+    () => sget("dayapp-tasks-enabled", "1") !== "0",
   );
   const [sectionsEnabled, setSectionsEnabled] = useState<Record<Section, boolean>>(() => ({
-    today: localStorage.getItem("dayapp-sec-today-enabled") !== "0",
-    daily: localStorage.getItem("dayapp-sec-daily-enabled") !== "0",
-    backlog: localStorage.getItem("dayapp-sec-backlog-enabled") !== "0",
+    today: sget("dayapp-sec-today-enabled", "1") !== "0",
+    daily: sget("dayapp-sec-daily-enabled", "1") !== "0",
+    backlog: sget("dayapp-sec-backlog-enabled", "1") !== "0",
   }));
   // UI style (the Settings page's UI group): whether notes and task rows
   // carry the soft card fill. Notes default ON (the cards), tasks default
   // OFF (bare rows) — today's looks. The bare side is the row language:
   // hover/focus tint instead of a resting fill, everything else unchanged.
   const [notesCard, setNotesCard] = useState(
-    () => localStorage.getItem("dayapp-notes-card") !== "0",
+    () => sget("dayapp-notes-card", "1") !== "0",
   );
   const [tasksCard, setTasksCard] = useState(
-    () => localStorage.getItem("dayapp-tasks-card") === "1",
+    () => sget("dayapp-tasks-card", "0") === "1",
   );
   // Which header icon buttons show (Settings → Header). All default on —
   // today's header. Off hides only the button; the view stays in ⌘P. The
@@ -302,7 +333,7 @@ function DayApp() {
   // conditions.
   const [headerBtns, setHeaderBtns] = useState<Record<HeaderBtn, boolean>>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem("dayapp-header-buttons") ?? "{}");
+      const raw = JSON.parse(sget("dayapp-header-buttons", "{}"));
       return {
         hidden: raw.hidden !== false,
         analytics: raw.analytics !== false,
@@ -320,34 +351,34 @@ function DayApp() {
   // family disappears; the entries table itself is untouched (existence, not
   // deletion — the data comes back with the toggle).
   const [journalEnabled, setJournalEnabled] = useState(
-    () => localStorage.getItem("dayapp-journal-enabled") !== "0",
+    () => sget("dayapp-journal-enabled", "1") !== "0",
   );
   const [quotesEnabled, setQuotesEnabled] = useState(
-    () => localStorage.getItem("dayapp-quotes-enabled") !== "0",
+    () => sget("dayapp-quotes-enabled", "1") !== "0",
   );
   // Theme (Settings → Appearance): the active id resolves against the
   // built-ins plus the user's custom themes; the apply effect writes the
   // token ladder onto <html> — the whole app re-skins in one paint. App-level
   // like zoom (one set across demo/real).
-  const [themeId, setThemeId] = useState(() => localStorage.getItem("dayapp-theme") || "dark");
+  const [themeId, setThemeId] = useState(() => sget("dayapp-theme", "dark"));
   const [customThemes, setCustomThemes] = useState<Theme[]>(loadCustomThemes);
   useEffect(() => {
     const theme = resolveTheme(themeId, customThemes);
     applyTheme(theme);
-    localStorage.setItem("dayapp-theme", theme.id);
+    sset("dayapp-theme", theme.id);
   }, [themeId, customThemes]);
   const [showHiddenItems, setShowHiddenItems] = useState(
-    () => localStorage.getItem("dayapp-hidden-items") === "1",
+    () => sget("dayapp-hidden-items", "0") === "1",
   );
   const [showHiddenNotes, setShowHiddenNotes] = useState(
-    () => localStorage.getItem("dayapp-hidden-notes") === "1",
+    () => sget("dayapp-hidden-notes", "0") === "1",
   );
   // ⌘P "Show/Hide Priority N" — three independent per-tier toggles; a tier in
   // this list is hidden from the main list. Unmarked rows are never touched,
   // and toggling one tier leaves the others alone.
   const [hiddenPriorities, setHiddenPriorities] = useState<(1 | 2 | 3)[]>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem("dayapp-hidden-priorities") ?? "[]");
+      const raw = JSON.parse(sget("dayapp-hidden-priorities", "[]"));
       return [1, 2, 3].filter((n) => raw.includes(n)) as (1 | 2 | 3)[];
     } catch {
       return [];
@@ -359,7 +390,7 @@ function DayApp() {
   // drops that group (and its divider).
   const [hiddenNotePriorities, setHiddenNotePriorities] = useState<(1 | 2 | 3)[]>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem("dayapp-hidden-note-priorities") ?? "[]");
+      const raw = JSON.parse(sget("dayapp-hidden-note-priorities", "[]"));
       return [1, 2, 3].filter((n) => raw.includes(n)) as (1 | 2 | 3)[];
     } catch {
       return [];
@@ -371,7 +402,7 @@ function DayApp() {
   // whatever the toggles were. Persisted like every layout surface; Show
   // Default View exits it.
   const [focusMode, setFocusMode] = useState(
-    () => localStorage.getItem("dayapp-focus-mode") === "1",
+    () => sget("dayapp-focus-mode", "0") === "1",
   );
   // ⌘P "Enter/Exit Fun Mode" — the unwind lens, Focus Mode's inverse: Daily
   // hidden, and P1/P2 rows drop everywhere (Today keeps only P3/unmarked;
@@ -379,7 +410,7 @@ function DayApp() {
   // lens contract — exiting restores the toggles untouched; persisted like
   // Focus Mode, Show Default View exits it.
   const [funMode, setFunMode] = useState(
-    () => localStorage.getItem("dayapp-fun-mode") === "1",
+    () => sget("dayapp-fun-mode", "0") === "1",
   );
   // Custom views (the Settings page): named lenses over the display axes —
   // priority tiers, the delegation axis, project, notes + their tiers. The
@@ -388,26 +419,26 @@ function DayApp() {
   // Focus Mode contract). Persisted like every layout preference.
   const [views, setViews] = useState<CustomView[]>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem("dayapp-views") ?? "[]");
+      const raw = JSON.parse(sget("dayapp-views", "[]"));
       return Array.isArray(raw) ? (raw as CustomView[]) : [];
     } catch {
       return [];
     }
   });
   const [activeViewId, setActiveViewId] = useState<string | null>(
-    () => localStorage.getItem("dayapp-active-view") || null,
+    () => sget("dayapp-active-view", "") || null,
   );
   // ⌘P "Show/Hide Agent Tasks" — hide the 🤖-marked rows to focus on the ones
   // that are Faraz's own. Persisted like the other layout toggles; default on
   // (agent rows are normal tasks until he says otherwise).
   const [agentTasksVisible, setAgentTasksVisible] = useState(
-    () => localStorage.getItem("dayapp-agent-tasks-visible") !== "0",
+    () => sget("dayapp-agent-tasks-visible", "1") !== "0",
   );
   // The quote screensaver — two minutes of focused stillness summons the
   // quote modal (the idle watcher below). Default on; no palette entry since
-  // 2026-09-15 — `dayapp-quote-screensaver=0` in localStorage is the off
+  // 2026-09-15 — `dayapp-quote-screensaver=0` in the settings store is the off
   // switch, read once at mount. With an empty pool it can't fire.
-  const quoteScreensaver = localStorage.getItem("dayapp-quote-screensaver") !== "0";
+  const quoteScreensaver = sget("dayapp-quote-screensaver", "1") !== "0";
   // The quote moment: App owns the open boolean (the floating-surface gate in
   // the key handler needs it) and the pool size (Quotes reports it up; the
   // idle watcher won't fire on an empty pool). Quotes.tsx owns the rest —
@@ -546,6 +577,18 @@ function DayApp() {
     // mode, where the phone's inbox waits (its captures belong to the real db).
     const tick = setInterval(() => {
       api.runSweep().then(refresh).catch((e) => log.warn("sweep tick failed", e));
+      // An agent's settings writes land in the store file; a snapshot
+      // mismatch means this webview is stale — reload to re-initialize
+      // every settings-backed hook cleanly. The GUI's own writes refresh
+      // the snapshot, so they never self-trigger.
+      externallyChanged()
+        .then((changed) => {
+          if (changed) {
+            log.info("settings: changed externally — reloading");
+            location.reload();
+          }
+        })
+        .catch(() => {});
       // The open session row is the timer's source of truth — reconcile the
       // chip with CLI writes (--start/--complete from an SSH session) that the
       // GUI's state never saw.
@@ -631,38 +674,36 @@ function DayApp() {
   }, [zoom]);
 
   useEffect(() => {
-    localStorage.setItem("dayapp-goals-visible", goalsVisible ? "1" : "0");
-    localStorage.setItem("dayapp-notes-visible", notesVisible ? "1" : "0");
-    localStorage.setItem("dayapp-tasks-visible", tasksVisible ? "1" : "0");
-    localStorage.setItem("dayapp-sec-today", sectionsVisible.today ? "1" : "0");
-    localStorage.setItem("dayapp-sec-daily", sectionsVisible.daily ? "1" : "0");
-    localStorage.setItem("dayapp-sec-backlog", sectionsVisible.backlog ? "1" : "0");
-    localStorage.setItem("dayapp-hidden-items", showHiddenItems ? "1" : "0");
-    localStorage.setItem("dayapp-hidden-notes", showHiddenNotes ? "1" : "0");
-    localStorage.setItem("dayapp-hidden-priorities", JSON.stringify(hiddenPriorities));
-    localStorage.setItem("dayapp-hidden-note-priorities", JSON.stringify(hiddenNotePriorities));
-    localStorage.setItem("dayapp-focus-mode", focusMode ? "1" : "0");
-    localStorage.setItem("dayapp-fun-mode", funMode ? "1" : "0");
-    localStorage.setItem("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
-    localStorage.setItem("dayapp-goals-enabled", goalsEnabled ? "1" : "0");
-    localStorage.setItem("dayapp-notes-enabled", notesEnabled ? "1" : "0");
-    localStorage.setItem("dayapp-tasks-enabled", tasksEnabled ? "1" : "0");
-    localStorage.setItem("dayapp-sec-today-enabled", sectionsEnabled.today ? "1" : "0");
-    localStorage.setItem("dayapp-sec-daily-enabled", sectionsEnabled.daily ? "1" : "0");
-    localStorage.setItem("dayapp-sec-backlog-enabled", sectionsEnabled.backlog ? "1" : "0");
-    localStorage.setItem("dayapp-notes-card", notesCard ? "1" : "0");
-    localStorage.setItem("dayapp-tasks-card", tasksCard ? "1" : "0");
-    localStorage.setItem("dayapp-header-buttons", JSON.stringify(headerBtns));
-    localStorage.setItem("dayapp-journal-enabled", journalEnabled ? "1" : "0");
-    localStorage.setItem("dayapp-quotes-enabled", quotesEnabled ? "1" : "0");
-    localStorage.setItem("dayapp-views", JSON.stringify(views));
-    localStorage.setItem("dayapp-active-view", activeViewId ?? "");
+    sset("dayapp-goals-visible", goalsVisible ? "1" : "0");
+    sset("dayapp-notes-visible", notesVisible ? "1" : "0");
+    sset("dayapp-tasks-visible", tasksVisible ? "1" : "0");
+    sset("dayapp-sec-today", sectionsVisible.today ? "1" : "0");
+    sset("dayapp-sec-daily", sectionsVisible.daily ? "1" : "0");
+    sset("dayapp-sec-backlog", sectionsVisible.backlog ? "1" : "0");
+    sset("dayapp-hidden-items", showHiddenItems ? "1" : "0");
+    sset("dayapp-hidden-notes", showHiddenNotes ? "1" : "0");
+    sset("dayapp-hidden-priorities", JSON.stringify(hiddenPriorities));
+    sset("dayapp-hidden-note-priorities", JSON.stringify(hiddenNotePriorities));
+    sset("dayapp-focus-mode", focusMode ? "1" : "0");
+    sset("dayapp-fun-mode", funMode ? "1" : "0");
+    sset("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
+    sset("dayapp-goals-enabled", goalsEnabled ? "1" : "0");
+    sset("dayapp-notes-enabled", notesEnabled ? "1" : "0");
+    sset("dayapp-tasks-enabled", tasksEnabled ? "1" : "0");
+    sset("dayapp-sec-today-enabled", sectionsEnabled.today ? "1" : "0");
+    sset("dayapp-sec-daily-enabled", sectionsEnabled.daily ? "1" : "0");
+    sset("dayapp-sec-backlog-enabled", sectionsEnabled.backlog ? "1" : "0");
+    sset("dayapp-notes-card", notesCard ? "1" : "0");
+    sset("dayapp-tasks-card", tasksCard ? "1" : "0");
+    sset("dayapp-header-buttons", JSON.stringify(headerBtns));
+    sset("dayapp-journal-enabled", journalEnabled ? "1" : "0");
+    sset("dayapp-quotes-enabled", quotesEnabled ? "1" : "0");
+    sset("dayapp-views", JSON.stringify(views));
+    sset("dayapp-active-view", activeViewId ?? "");
     // Retired keys: the single-tier "only" filter era, and the rotating
     // quote line the modal replaced — one-time cleanups. (The quote
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.)
-    localStorage.removeItem("dayapp-priority");
-    localStorage.removeItem("dayapp-quotes-visible");
   }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, headerBtns, journalEnabled, quotesEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
