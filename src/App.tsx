@@ -17,7 +17,7 @@ import Quotes from "./Quotes";
 import EntriesPage from "./EntriesPage";
 import SectionList from "./components/SectionList";
 import AnalyticsView from "./AnalyticsView";
-import SettingsView, { viewSummary, type CustomView, type FeatureKey } from "./SettingsView";
+import SettingsView, { viewSummary, type CustomView, type FeatureKey, type HeaderBtn } from "./SettingsView";
 import CommandPalette, { type Command } from "./CommandPalette";
 import SearchMenu, { type SearchHit } from "./components/SearchMenu";
 import UpdateOverlay from "./UpdateOverlay";
@@ -278,6 +278,23 @@ function DayApp() {
   const [tasksCard, setTasksCard] = useState(
     () => localStorage.getItem("dayapp-tasks-card") === "1",
   );
+  // Which header icon buttons show (Settings → Header). All default on —
+  // today's header. Off hides only the button; the view stays in ⌘P. The
+  // update icon and the timer chip aren't choices — they mount on their own
+  // conditions.
+  const [headerBtns, setHeaderBtns] = useState<Record<HeaderBtn, boolean>>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem("dayapp-header-buttons") ?? "{}");
+      return {
+        hidden: raw.hidden !== false,
+        analytics: raw.analytics !== false,
+        journal: raw.journal !== false,
+        quotes: raw.quotes !== false,
+      };
+    } catch {
+      return { hidden: true, analytics: true, journal: true, quotes: true };
+    }
+  });
   const [showHiddenItems, setShowHiddenItems] = useState(
     () => localStorage.getItem("dayapp-hidden-items") === "1",
   );
@@ -590,6 +607,7 @@ function DayApp() {
     localStorage.setItem("dayapp-sec-backlog-enabled", sectionsEnabled.backlog ? "1" : "0");
     localStorage.setItem("dayapp-notes-card", notesCard ? "1" : "0");
     localStorage.setItem("dayapp-tasks-card", tasksCard ? "1" : "0");
+    localStorage.setItem("dayapp-header-buttons", JSON.stringify(headerBtns));
     localStorage.setItem("dayapp-views", JSON.stringify(views));
     localStorage.setItem("dayapp-active-view", activeViewId ?? "");
     // Retired keys: the single-tier "only" filter era, and the rotating
@@ -598,7 +616,7 @@ function DayApp() {
     // it's read at mount, never rewritten.)
     localStorage.removeItem("dayapp-priority");
     localStorage.removeItem("dayapp-quotes-visible");
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, headerBtns, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -1571,6 +1589,9 @@ function DayApp() {
     if (surface === "notes") setNotesCard(card);
     else setTasksCard(card);
   }, []);
+  const toggleHeaderBtn = useCallback((btn: HeaderBtn) => {
+    setHeaderBtns((b) => ({ ...b, [btn]: !b[btn] }));
+  }, []);
   const createView = useCallback((v: CustomView) => {
     setViews((vs) => [...vs, v]);
   }, []);
@@ -1923,60 +1944,69 @@ function DayApp() {
             </div>
           )}
           {/* ◐ toggles both hidden surfaces (tasks + notes) at once — the
-              one-click archive peek over the ⌘P per-surface toggles. */}
-          <button
-            className={`icon-btn ${showHiddenItems || showHiddenNotes ? "active" : ""}`}
-            onClick={() => {
-              const next = !(showHiddenItems || showHiddenNotes);
-              trace("toggle.hidden", { show: next });
-              setShowHiddenItems(next);
-              setShowHiddenNotes(next);
-            }}
-            title={showHiddenItems || showHiddenNotes ? "Hide hidden entries" : "Show hidden entries inline"}
-            aria-label="Toggle hidden entries"
-          >◐</button>
-          <button
-            className={`icon-btn ${view === "analytics" ? "active" : ""}`}
-            onClick={() => {
-              const next = view === "analytics" ? "list" : "analytics";
-              trace("view.switch", { view: next });
-              setView(next);
-            }}
-            title={view === "analytics" ? "Back to list" : "View analytics"}
-            aria-label="Toggle analytics"
-          >
-            {view === "analytics" ? <CloseIcon /> : <AnalyticsIcon />}
-          </button>
+              one-click archive peek over the ⌘P per-surface toggles.
+              Settings → Header picks which icon buttons mount at all. */}
+          {headerBtns.hidden && (
+            <button
+              className={`icon-btn ${showHiddenItems || showHiddenNotes ? "active" : ""}`}
+              onClick={() => {
+                const next = !(showHiddenItems || showHiddenNotes);
+                trace("toggle.hidden", { show: next });
+                setShowHiddenItems(next);
+                setShowHiddenNotes(next);
+              }}
+              title={showHiddenItems || showHiddenNotes ? "Hide hidden entries" : "Show hidden entries inline"}
+              aria-label="Toggle hidden entries"
+            >◐</button>
+          )}
+          {headerBtns.analytics && (
+            <button
+              className={`icon-btn ${view === "analytics" ? "active" : ""}`}
+              onClick={() => {
+                const next = view === "analytics" ? "list" : "analytics";
+                trace("view.switch", { view: next });
+                setView(next);
+              }}
+              title={view === "analytics" ? "Back to list" : "View analytics"}
+              aria-label="Toggle analytics"
+            >
+              {view === "analytics" ? <CloseIcon /> : <AnalyticsIcon />}
+            </button>
+          )}
           {/* The Journal view's door (the written word; Analytics keeps the
               numbers). Same per-button toggle as the analytics door: the
               active view's button reads the close X and returns to the list. */}
-          <button
-            className={`icon-btn ${view === "journal" ? "active" : ""}`}
-            onClick={() => {
-              const next = view === "journal" ? "list" : "journal";
-              trace("view.switch", { view: next });
-              setView(next);
-            }}
-            title={view === "journal" ? "Back to list" : "View journal"}
-            aria-label="Toggle journal"
-          >
-            {view === "journal" ? <CloseIcon /> : <JournalIcon />}
-          </button>
+          {headerBtns.journal && (
+            <button
+              className={`icon-btn ${view === "journal" ? "active" : ""}`}
+              onClick={() => {
+                const next = view === "journal" ? "list" : "journal";
+                trace("view.switch", { view: next });
+                setView(next);
+              }}
+              title={view === "journal" ? "Back to list" : "View journal"}
+              aria-label="Toggle journal"
+            >
+              {view === "journal" ? <CloseIcon /> : <JournalIcon />}
+            </button>
+          )}
           {/* The Quotes view's door (the ##q pool, browsed and edited; the
               modal keeps the summoned moment). Same per-button toggle: the
               active view's button reads the close X and returns to the list. */}
-          <button
-            className={`icon-btn ${view === "quotes" ? "active" : ""}`}
-            onClick={() => {
-              const next = view === "quotes" ? "list" : "quotes";
-              trace("view.switch", { view: next });
-              setView(next);
-            }}
-            title={view === "quotes" ? "Back to list" : "View quotes"}
-            aria-label="Toggle quotes"
-          >
-            {view === "quotes" ? <CloseIcon /> : <QuotesIcon />}
-          </button>
+          {headerBtns.quotes && (
+            <button
+              className={`icon-btn ${view === "quotes" ? "active" : ""}`}
+              onClick={() => {
+                const next = view === "quotes" ? "list" : "quotes";
+                trace("view.switch", { view: next });
+                setView(next);
+              }}
+              title={view === "quotes" ? "Back to list" : "View quotes"}
+              aria-label="Toggle quotes"
+            >
+              {view === "quotes" ? <CloseIcon /> : <QuotesIcon />}
+            </button>
+          )}
           {/* The release-update door (release installs only — source
               checkouts use ⌘P → Update App Locally instead): mounts only
               while a newer release exists on the channel; one click
@@ -2103,6 +2133,8 @@ function DayApp() {
             notesCard={notesCard}
             tasksCard={tasksCard}
             onSetCard={setCardStyle}
+            headerBtns={headerBtns}
+            onToggleHeaderBtn={toggleHeaderBtn}
             views={views}
             activeViewId={activeViewId}
             onToggleViewActive={toggleViewActive}

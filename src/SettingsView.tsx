@@ -22,6 +22,16 @@ import { clip, trace } from "./devlog";
 
 export type FeatureKey = "tasks" | "today" | "daily" | "backlog" | "notes" | "goals";
 
+// The header's icon buttons — each an On/Off choice in the Header group.
+export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes";
+
+const HEADER_BUTTONS: { key: HeaderBtn; label: string; hint: string }[] = [
+  { key: "hidden", label: "Hidden entries", hint: "the ◐ archive peek" },
+  { key: "analytics", label: "Analytics", hint: "the chart icon" },
+  { key: "journal", label: "Journal", hint: "the prose icon" },
+  { key: "quotes", label: "Quotes", hint: "the quote icon" },
+];
+
 export interface CustomView {
   id: string;
   name: string;
@@ -69,7 +79,7 @@ const FEATURES: { key: FeatureKey; label: string; hint: string }[] = [
 export default function SettingsView({
   features, onToggleFeature, projects, views, activeViewId,
   onToggleViewActive, onCreateView, onDeleteView,
-  notesCard, tasksCard, onSetCard,
+  notesCard, tasksCard, onSetCard, headerBtns, onToggleHeaderBtn,
 }: {
   features: Record<FeatureKey, boolean>;
   onToggleFeature: (key: FeatureKey) => void;
@@ -82,6 +92,8 @@ export default function SettingsView({
   notesCard: boolean;
   tasksCard: boolean;
   onSetCard: (surface: "notes" | "tasks", card: boolean) => void;
+  headerBtns: Record<HeaderBtn, boolean>;
+  onToggleHeaderBtn: (btn: HeaderBtn) => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -179,6 +191,32 @@ export default function SettingsView({
               );
             },
           )}
+        </div>
+      </div>
+
+      <div className="an-card">
+        <div className="an-card-title">
+          Header
+          <span className="hint">icon buttons top-right — the views stay in ⌘P</span>
+        </div>
+        <div className="settings-rows">
+          {HEADER_BUTTONS.map(({ key, label, hint }) => (
+            <div className="settings-row" key={key}>
+              <button
+                className="settings-main"
+                onClick={() => {
+                  trace("toggle.header", { btn: key, to: !headerBtns[key] });
+                  onToggleHeaderBtn(key);
+                }}
+              >
+                <span className="settings-name">{label}</span>
+                <span className="settings-hint">{hint}</span>
+              </button>
+              <span className={`settings-state${headerBtns[key] ? " on" : ""}`}>
+                {headerBtns[key] ? "On" : "Off"}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 

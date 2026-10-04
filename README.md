@@ -69,7 +69,7 @@ Direction at three horizons: Timeless (∞, can't be achieved), Long term, Short
 
 ## Settings
 
-⌘P → Settings decides what the app has at all: Tasks (or just Daily or Backlog), Notes, Goals. Nothing is deleted — a switched-off surface's tasks stay in the database, Analytics, and the CLI. Everything that's on keeps its ⌘P options: Show/Hide toggles for each surface, plus hidden and priority-tier reveals. Settings → UI picks the resting look of notes and task rows — the soft card, or bare with a hover tint. You can also create named views that combine what you see — priority tiers, agent or your own tasks, one project, notes. Enter a view from ⌘P; exit it the same way, with Esc, or with Show Default View.
+⌘P → Settings decides what the app has at all: Tasks (or just Daily or Backlog), Notes, Goals. Nothing is deleted — a switched-off surface's tasks stay in the database, Analytics, and the CLI. Everything that's on keeps its ⌘P options: Show/Hide toggles for each surface, plus hidden and priority-tier reveals. Settings → UI picks the resting look of notes and task rows — the soft card, or bare with a hover tint — and which header icons show. You can also create named views that combine what you see — priority tiers, agent or your own tasks, one project, notes. Enter a view from ⌘P; exit it the same way, with Esc, or with Show Default View.
 
 ## Delegating to the agent
 
