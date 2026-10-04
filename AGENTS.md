@@ -282,8 +282,9 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
   logged; deleting a project nulls it, same as items).
 - The section renders at the very top of the main page, above Notes — the
   identity layer sits over everything; the **Settings page's Goals toggle**
-  toggles it
-  completely (persisted in localStorage `dayapp-goals-visible`, **hidden by
+  decides whether the layer exists at all, and **⌘P → Show/Hide Goals**
+  (present while it exists) shows/hides it
+  (persisted in localStorage `dayapp-goals-visible`, **hidden by
   default** — a display preference like zoom). **Show Default View hides it** — the default
   working view is the plain task list. Goals don't take part
   in the item visibility/priority/project filters, and there's no DnD — a calm
@@ -977,12 +978,14 @@ Do not reintroduce bare single-letter verbs that collide with the address
 prefixes `n`/`t`/`d`/`b`/`g`.
 
 **Settings (⌘P → Settings):** the settings page owns what exists at all and the custom
-views — the six surface toggles were the ⌘P Show/Hide entries until 2026-10-04, when
-they retired into the page. **Features:** `Tasks` (the whole tasks area in one toggle:
-the capture input plus all three sections — the section toggles refine inside it; while
-hidden, no task row is rendered, searchable, keyboard-navigable, or totaled),
-`Today`/`Daily`/`Backlog` sections, `Notes`, `Goals` — the same persisted localStorage
-flags as before, now with a page instead of palette entries. **Views:** custom lenses
+views. **Features** are EXISTENCE switches — `Tasks` (the whole tasks area in one
+toggle: the capture input plus all three sections — the section toggles refine inside
+it), `Today`/`Daily`/`Backlog` sections, `Notes`, `Goals` — persisted in the
+`dayapp-*-enabled` keys (default on; 2026-10-04, two layers after Faraz's correction:
+Settings is high-level configuration, ⌘P is the working door). A disabled surface
+renders nothing, isn't searchable or keyboard-navigable, and its whole ⌘P option family
+disappears with it — and none of its data moves: the rows stay in the db; Analytics,
+the CLI, and the phone mirror read them regardless. **Views:** custom lenses
 like Focus/Fun Mode — a named combination of priority tiers, the delegation axis
 (agent/mine/all), one project, notes + their tiers, built from pill chips on the page
 (no edit yet — delete + recreate). `Enter/Exit <name> View` rides ⌘P and the page;
@@ -992,8 +995,11 @@ and never mutates the toggles or filters: exiting restores everything (the Focus
 contract). Persisted in localStorage (`dayapp-views`, active id `dayapp-active-view`);
 Show Default View exits the active view.
 
-**Show/Hide toggles (⌘P):** the transient surfaces stay in the palette: `Hidden Tasks`
-and `Hidden Notes` (both render hidden entries inline where they live,
+**Show/Hide toggles (⌘P):** every enabled surface keeps its state-aware Show/Hide
+entry here (`Goals`, `Notes`, `Tasks` + the per-section toggles — each appears only
+while its feature is ON in Settings, so the "Show" state is reachable and a disabled
+feature has nothing to toggle), plus the per-feature options, under the same gate:
+`Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
 dimmed, ↺/× actions), the per-tier `Priority 1/2/3 Tasks` toggles, the notes' own
 `Priority 1/2/3 Notes` toggles (independent of the task tiers, like Hidden Notes ≠
 Hidden Tasks), and `Agent Tasks` (hides the 🤖-marked rows — the "what's actually mine"
@@ -1060,7 +1066,8 @@ same `displayItems` pipeline.
 mode off, any active view exited,
 Tasks (capture + all three sections) and Notes shown —
 and Goals hidden (the default working view is the plain task list). One command
-always restores it.
+always restores it. The Settings existence switches are NOT touched — that's
+configuration, not view state.
 
 The keyboard handler **ignores events when an `<input>`/`<textarea>` is focused** so typing
 into Notes or edit fields isn't hijacked.

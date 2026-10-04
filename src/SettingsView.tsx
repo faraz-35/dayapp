@@ -122,7 +122,10 @@ export default function SettingsView({
   return (
     <div className="settings">
       <div className="an-card">
-        <div className="an-card-title">Features</div>
+        <div className="an-card-title">
+          Features
+          <span className="hint">what exists at all — show/hide stays in ⌘P</span>
+        </div>
         <div className="settings-rows">
           {FEATURES.map(({ key, label, hint }) => (
             <div className="settings-row" key={key}>

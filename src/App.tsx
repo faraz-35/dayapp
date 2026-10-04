@@ -29,6 +29,11 @@ import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt
 
 type View = "list" | "analytics" | "journal" | "quotes" | "settings";
 
+// Labels for the per-section ⌘P toggles (Show/Hide Today, …).
+const SECTION_LABELS: Record<Section, string> = {
+  today: "Today", daily: "Daily", backlog: "Backlog",
+};
+
 // ⌘+/⌘- zoom bounds and step, in the comfortable-reading range around the 13px
 // base — much beyond it and the fixed 480px window stops fitting a list. The
 // round-to-10th keeps float drift (0.1 + 0.2 style) from wedging the clamps.
@@ -239,6 +244,29 @@ function DayApp() {
     today: localStorage.getItem("dayapp-sec-today") !== "0",
     daily: localStorage.getItem("dayapp-sec-daily") !== "0",
     backlog: localStorage.getItem("dayapp-sec-backlog") !== "0",
+  }));
+  // Existence (Settings) vs visibility (⌘P) — two layers per surface. The
+  // enabled flags below say the app HAS the surface at all (the Settings
+  // page's Features rows; default on, `dayapp-*-enabled`); the visible flags
+  // above say it's on screen right now (the ⌘P Show/Hide toggles — each
+  // exists only while its surface is enabled, so a feature switched off in
+  // Settings takes its whole ⌘P option family with it). A disabled surface
+  // renders nothing and isn't searchable or keyboard-navigable — and none of
+  // its data moves: the rows stay in the db; Analytics, the CLI, and the
+  // phone mirror read them regardless.
+  const [goalsEnabled, setGoalsEnabled] = useState(
+    () => localStorage.getItem("dayapp-goals-enabled") !== "0",
+  );
+  const [notesEnabled, setNotesEnabled] = useState(
+    () => localStorage.getItem("dayapp-notes-enabled") !== "0",
+  );
+  const [tasksEnabled, setTasksEnabled] = useState(
+    () => localStorage.getItem("dayapp-tasks-enabled") !== "0",
+  );
+  const [sectionsEnabled, setSectionsEnabled] = useState<Record<Section, boolean>>(() => ({
+    today: localStorage.getItem("dayapp-sec-today-enabled") !== "0",
+    daily: localStorage.getItem("dayapp-sec-daily-enabled") !== "0",
+    backlog: localStorage.getItem("dayapp-sec-backlog-enabled") !== "0",
   }));
   const [showHiddenItems, setShowHiddenItems] = useState(
     () => localStorage.getItem("dayapp-hidden-items") === "1",
@@ -544,6 +572,12 @@ function DayApp() {
     localStorage.setItem("dayapp-focus-mode", focusMode ? "1" : "0");
     localStorage.setItem("dayapp-fun-mode", funMode ? "1" : "0");
     localStorage.setItem("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
+    localStorage.setItem("dayapp-goals-enabled", goalsEnabled ? "1" : "0");
+    localStorage.setItem("dayapp-notes-enabled", notesEnabled ? "1" : "0");
+    localStorage.setItem("dayapp-tasks-enabled", tasksEnabled ? "1" : "0");
+    localStorage.setItem("dayapp-sec-today-enabled", sectionsEnabled.today ? "1" : "0");
+    localStorage.setItem("dayapp-sec-daily-enabled", sectionsEnabled.daily ? "1" : "0");
+    localStorage.setItem("dayapp-sec-backlog-enabled", sectionsEnabled.backlog ? "1" : "0");
     localStorage.setItem("dayapp-views", JSON.stringify(views));
     localStorage.setItem("dayapp-active-view", activeViewId ?? "");
     // Retired keys: the single-tier "only" filter era, and the rotating
@@ -552,7 +586,7 @@ function DayApp() {
     // it's read at mount, never rewritten.)
     localStorage.removeItem("dayapp-priority");
     localStorage.removeItem("dayapp-quotes-visible");
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -693,10 +727,10 @@ function DayApp() {
   // area out: every section empties, so the grammar (t1/b11 addresses, j/k,
   // Enter, the digit verbs) and ⌘F can't act on rows that aren't on screen.
   const renderItems = useMemo<Record<Section, Item[]>>(() => ({
-    today: tasksVisible && sectionsVisible.today ? displayItems.today : [],
-    daily: tasksVisible && sectionsVisible.daily ? displayItems.daily : [],
-    backlog: tasksVisible && sectionsVisible.backlog ? displayItems.backlog : [],
-  }), [displayItems, sectionsVisible, tasksVisible]);
+    today: tasksEnabled && tasksVisible && sectionsEnabled.today && sectionsVisible.today ? displayItems.today : [],
+    daily: tasksEnabled && tasksVisible && sectionsEnabled.daily && sectionsVisible.daily ? displayItems.daily : [],
+    backlog: tasksEnabled && tasksVisible && sectionsEnabled.backlog && sectionsVisible.backlog ? displayItems.backlog : [],
+  }), [displayItems, sectionsVisible, sectionsEnabled, tasksVisible, tasksEnabled]);
 
   // All currently-visible item ids — drives the per-row cumulative totals fetch.
   const allIds = useMemo(
@@ -817,6 +851,8 @@ function DayApp() {
       // The universal reset: hidden entries excluded, filters cleared, all
       // sections + Notes + agent tasks shown, focus + fun mode off — and
       // Goals hidden (the default working view is the plain task list).
+      // Existence is NOT reset: the Settings flags are configuration, this
+      // is a view reset.
       run: () => {
         setView("list");
         setShowHiddenItems(false);
@@ -838,22 +874,55 @@ function DayApp() {
     // The ##q moment has no palette door anymore (2026-09-15): the Quotes
     // page (❝ / View Quotes) is the deliberate surface, the screensaver the
     // idle one. Both entries — Show a Quote and the screensaver toggle —
-    // retired; the watcher below carries the whole feature. The Goals/Notes/
-    // Tasks/section Show/Hide entries retired the same way (2026-10-04) —
-    // they are the Settings page's Features group now (⌘P → Settings).
-    {
+    // retired; the watcher below carries the whole feature.
+    //
+    // Settings decides what the app HAS; ⌘P is the working door into
+    // everything that exists. Each enabled surface carries its state-aware
+    // Show/Hide toggle here, and its whole option family (hidden, tiers,
+    // agent) rides the same gate — a feature switched off in Settings has
+    // nothing left to toggle.
+    ...(goalsEnabled ? [{
+      id: "toggle-goals",
+      label: goalsVisible ? "Hide Goals" : "Show Goals",
+      hint: "the goals section",
+      run: () => { setView("list"); setGoalsVisible((v) => !v); },
+    }] : []),
+    ...(tasksEnabled ? [{
+      id: "toggle-tasks",
+      label: tasksVisible ? "Hide Tasks" : "Show Tasks",
+      hint: "capture + all three sections",
+      run: () => { setView("list"); setTasksVisible((v) => !v); },
+    }] : []),
+    ...(notesEnabled ? [{
+      id: "toggle-notes",
+      label: notesVisible ? "Hide Notes" : "Show Notes",
+      hint: "the notes section",
+      run: () => { setView("list"); setNotesVisible((v) => !v); },
+    }] : []),
+    ...(["today", "daily", "backlog"] as const)
+      .filter((s) => tasksEnabled && sectionsEnabled[s])
+      .map((s) => ({
+        id: `toggle-${s}`,
+        label: sectionsVisible[s] ? `Hide ${SECTION_LABELS[s]}` : `Show ${SECTION_LABELS[s]}`,
+        hint: "section",
+        run: () => {
+          setView("list");
+          setSectionsVisible((v) => ({ ...v, [s]: !v[s] }));
+        },
+      })),
+    ...(tasksEnabled ? [{
       id: "toggle-hidden-items",
       label: showHiddenItems ? "Hide Hidden Tasks" : "Show Hidden Tasks",
       hint: "inline, dimmed",
       run: () => { setView("list"); setShowHiddenItems((v) => !v); },
-    },
-    {
+    }] : []),
+    ...(notesEnabled ? [{
       id: "toggle-hidden-notes",
       label: showHiddenNotes ? "Hide Hidden Notes" : "Show Hidden Notes",
       hint: "inline, dimmed",
       run: () => { setView("list"); setShowHiddenNotes((v) => !v); },
-    },
-    ...([1, 2, 3] as const).map((n) => ({
+    }] : []),
+    ...(tasksEnabled ? ([1, 2, 3] as const).map((n) => ({
       id: `prio-${n}`,
       // Mirrors the row's signal bars: filled count = urgency (P1 = 3).
       // Independent like the section toggles: flipping one tier never
@@ -867,8 +936,8 @@ function DayApp() {
           h.includes(n) ? h.filter((p) => p !== n) : [...h, n],
         );
       },
-    })),
-    ...([1, 2, 3] as const).map((n) => ({
+    })) : []),
+    ...(notesEnabled ? ([1, 2, 3] as const).map((n) => ({
       id: `notes-prio-${n}`,
       // The notes' own per-tier toggles — Notes groups by tier like the
       // Backlog, and hiding a tier drops that whole group. Independent of the
@@ -881,7 +950,7 @@ function DayApp() {
           h.includes(n) ? h.filter((p) => p !== n) : [...h, n],
         );
       },
-    })),
+    })) : []),
     {
       // Focus Mode — the deep-work lens over the working view: P1 notes,
       // Today, Daily, and P1 Backlog only (Goals hidden too). A lens, not a
@@ -912,7 +981,7 @@ function DayApp() {
         setActiveViewId((cur) => (cur === v.id ? null : v.id));
       },
     })),
-    {
+    ...(tasksEnabled ? [{
       id: "toggle-agent-tasks",
       // The delegation axis: 🤖-marked rows are the agent's queue. Hiding them
       // leaves just the rows that need Faraz — the inverse focus of ⌘F's
@@ -920,7 +989,7 @@ function DayApp() {
       label: agentTasksVisible ? "Hide Agent Tasks" : "Show Agent Tasks",
       hint: "🤖 marked",
       run: () => { setView("list"); setAgentTasksVisible((v) => !v); },
-    },
+    }] : []),
     {
       // Demo mode: the backend swaps to the disposable demo db and emits
       // "demo-mode", which re-pulls everything and swaps the masthead. The
@@ -1054,7 +1123,7 @@ function DayApp() {
           },
         ]
       : []),
-  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects]);
+  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1475,16 +1544,16 @@ function DayApp() {
   }, []);
 
   // ---- Settings: features + custom views ---------------------------------
-  // The six feature toggles live on the Settings page now (their ⌘P entries
-  // retired); the custom views are App state so the palette can list them
-  // and Show Default View can exit the active one.
+  // The Settings page's Features rows write the EXISTENCE flags here; the
+  // custom views are App state so the palette can list them and Show Default
+  // View can exit the active one.
   const toggleFeature = useCallback((key: FeatureKey) => {
-    if (key === "tasks") setTasksVisible((v) => !v);
-    else if (key === "today") setSectionsVisible((s) => ({ ...s, today: !s.today }));
-    else if (key === "daily") setSectionsVisible((s) => ({ ...s, daily: !s.daily }));
-    else if (key === "backlog") setSectionsVisible((s) => ({ ...s, backlog: !s.backlog }));
-    else if (key === "notes") setNotesVisible((v) => !v);
-    else setGoalsVisible((v) => !v);
+    if (key === "tasks") setTasksEnabled((v) => !v);
+    else if (key === "today") setSectionsEnabled((s) => ({ ...s, today: !s.today }));
+    else if (key === "daily") setSectionsEnabled((s) => ({ ...s, daily: !s.daily }));
+    else if (key === "backlog") setSectionsEnabled((s) => ({ ...s, backlog: !s.backlog }));
+    else if (key === "notes") setNotesEnabled((v) => !v);
+    else setGoalsEnabled((v) => !v);
   }, []);
   const createView = useCallback((v: CustomView) => {
     setViews((vs) => [...vs, v]);
@@ -1913,7 +1982,7 @@ function DayApp() {
                 separate surface, shown as-is. Focus Mode hides them too: the
                 lens is stricter than the default working view, and exiting
                 restores whatever the toggle was. */}
-            {goalsVisible && !focusMode && (
+            {goalsEnabled && goalsVisible && !focusMode && (
               <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} reloadEpoch={dataEpoch} />
             )}
             {/* Notes — the lowest-friction capture surface, right under the
@@ -1924,7 +1993,7 @@ function DayApp() {
                 the Backlog (footer tokens `!N`/`#tag` — see Notes.tsx) and
                 narrow under the ⌘F `#` project filter, the ⌘P note-tier
                 toggles, and the Focus/Fun Mode lenses. */}
-            {notesVisible && (!activeView || activeView.notes) && (
+            {notesEnabled && notesVisible && (!activeView || activeView.notes) && (
               <Notes
                 hiddenFilter={showHiddenNotes ? "include" : "exclude"}
                 focusedId={focusNoteId}
@@ -1938,7 +2007,7 @@ function DayApp() {
                 onEntryRouted={handleEntryRouted}
               />
             )}
-            {(effHiddenPriorities.length > 0 || effProjectFilter !== null || effAgentFilter !== null) && tasksVisible && allVisible.length === 0 && (
+            {(effHiddenPriorities.length > 0 || effProjectFilter !== null || effAgentFilter !== null) && tasksEnabled && tasksVisible && allVisible.length === 0 && (
               <div className="empty">
                 {effProjectFilter
                   ? `No tasks in ${projects.find((p) => p.id === effProjectFilter)?.name ?? "project"}.`
@@ -1949,17 +2018,18 @@ function DayApp() {
                       : "No tasks at the shown priorities."}
               </div>
             )}
-            {tasksVisible && (
+            {tasksEnabled && tasksVisible && (
               <SectionList
                 items={renderItems}
                 /* Fun Mode removes Daily entirely — an emptied section must
                    not leave its header behind (the toggle's semantics,
                    composed with the lens; sectionsVisible itself is untouched).
-                   Today stays but only shows its P3/unmarked rows (displayItems). */
+                   Today stays but only shows its P3/unmarked rows (displayItems).
+                   A Settings-disabled section drops its header the same way. */
                 visible={{
-                  today: sectionsVisible.today,
-                  daily: sectionsVisible.daily && !funMode,
-                  backlog: sectionsVisible.backlog,
+                  today: sectionsEnabled.today && sectionsVisible.today,
+                  daily: sectionsEnabled.daily && sectionsVisible.daily && !funMode,
+                  backlog: sectionsEnabled.backlog && sectionsVisible.backlog,
                 }}
                 projects={projects}
                 selectedId={selectedId}
@@ -1992,12 +2062,12 @@ function DayApp() {
         ) : view === "settings" ? (
           <SettingsView
             features={{
-              tasks: tasksVisible,
-              today: sectionsVisible.today,
-              daily: sectionsVisible.daily,
-              backlog: sectionsVisible.backlog,
-              notes: notesVisible,
-              goals: goalsVisible,
+              tasks: tasksEnabled,
+              today: sectionsEnabled.today,
+              daily: sectionsEnabled.daily,
+              backlog: sectionsEnabled.backlog,
+              notes: notesEnabled,
+              goals: goalsEnabled,
             }}
             onToggleFeature={toggleFeature}
             projects={projects}
