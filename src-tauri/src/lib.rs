@@ -487,6 +487,13 @@ async fn time_totals(
 }
 
 #[tauri::command]
+async fn today_totals(
+    db: State<'_, DbState>, item_ids: Vec<String>,
+) -> Result<std::collections::HashMap<String, i64>, String> {
+    with_db(db, move |db| db.today_totals(&item_ids)).await
+}
+
+#[tauri::command]
 async fn session_time_by_day(
     db: State<'_, DbState>, since: Option<String>, until: Option<String>,
 ) -> Result<Vec<DayTaskTime>, String> {
@@ -1028,7 +1035,7 @@ pub fn run() {
             list_goals, create_goal, edit_goal, set_goal_project,
             achieve_goal, unachieve_goal, delete_goal,
             start_timer, stop_timer, discard_timer, get_active_timer,
-            time_totals, session_time_by_day,
+            time_totals, today_totals, session_time_by_day,
             sync_get_config, sync_set_config, sync_deploy,
             sync_pull_captures, sync_mark_ingested, sync_status,
             capture_backup, reveal_backups,

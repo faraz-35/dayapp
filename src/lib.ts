@@ -236,6 +236,10 @@ export const timersApi = {
    *  the running session. Keys are item ids; absent = 0. */
   totals: (itemIds: string[]) =>
     invoke<Record<string, number>>("time_totals", { itemIds }),
+  /** Today's seconds per item (the 6am→6am day) — the Daily row's ⏱: a daily
+   *  habit's tracked time resets with the day, like its completion. */
+  todayTotals: (itemIds: string[]) =>
+    invoke<Record<string, number>>("today_totals", { itemIds }),
   sessionTimeByDay: (opts: { since?: string; until?: string } = {}) =>
     invoke<DayTaskTime[]>("session_time_by_day", {
       since: opts.since ?? null,

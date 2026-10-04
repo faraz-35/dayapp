@@ -14,7 +14,7 @@
 // All methods hang off the shared `Db` struct and touch only the `sessions`
 // table (plus a LEFT JOIN to items for the live text of the active timer).
 
-use crate::db::{now_iso, DAY_START_HOUR, Db};
+use crate::db::{now_iso, today_naive, DAY_START_HOUR, Db};
 use chrono::{NaiveDate, NaiveDateTime};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -141,6 +141,51 @@ impl Db {
                 if let (Some(start), Some(now)) = (parse_ts(&started), parse_ts(&now_iso())) {
                     let elapsed = (now - start).num_seconds().max(0);
                     *out.entry(active_id).or_insert(0) += elapsed;
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Today's seconds per item — the Daily row's ⏱. A daily habit is a
+    /// repeat, so its tracked time resets with the day the same way its
+    /// completion does: each session is split at the 6am→6am boundaries
+    /// (session_day_splits, the analytics splitter) and only today's segments
+    /// count. Today/Backlog rows stay on time_totals (all-time). Includes the
+    /// open session's elapsed-to-now, matching time_totals.
+    pub fn today_totals(&self, item_ids: &[String]) -> anyhow::Result<HashMap<String, i64>> {
+        let conn = self.conn.lock().unwrap();
+        let mut out: HashMap<String, i64> = HashMap::new();
+        if item_ids.is_empty() {
+            return Ok(out);
+        }
+        let today = today_naive();
+        let now = parse_ts(&now_iso());
+        let placeholders = item_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT item_id, started_at, ended_at FROM sessions WHERE item_id IN ({placeholders})"
+        );
+        let mut pv: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        for id in item_ids {
+            pv.push(Box::new(id.clone()));
+        }
+        let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(refs.as_slice(), |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+            ))
+        })?;
+        for r in rows {
+            let (item_id, started, ended) = r?;
+            let Some(start) = parse_ts(&started) else { continue };
+            // An open session runs to "now"; a closed one to its ended_at.
+            let Some(end) = ended.as_deref().and_then(parse_ts).or(now) else { continue };
+            for (day, secs) in session_day_splits(start, end) {
+                if day == today {
+                    *out.entry(item_id.clone()).or_insert(0) += secs;
                 }
             }
         }

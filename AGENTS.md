@@ -462,7 +462,13 @@ logged to `actions` — the Analytics view surfaces time as a separate dimension
 `session_time_by_day`, which splits sessions at the 6am boundary so daily totals are accurate.
 
 - `item_text` is snapshotted at write time (like `actions.item_text`), so the per-task
-  breakdown survives edits and deletions. Sessions deliberately carry **no
+  breakdown survives edits and deletions.
+- **Daily rows' ⏱ resets with the day (2026-10-05):** a Daily item shows TODAY'S
+  tracked time (`today_totals` — each session split at the 6am→6am boundaries by
+  `session_day_splits`, only today's segments count), not all-time — the same reset
+  its completion uses, since a daily habit is a repeat. Today/Backlog rows keep the
+  all-time `time_totals`. The GUI fetches both maps and merges section-aware; the
+  CLI's `--task` prints the same section-aware number. Sessions deliberately carry **no
   project/priority snapshots**: the analytics scope filter covers actions only, not
   tracked time (Faraz's call, 2026-08-25 — see the Analytics view section).
 - The active timer **persists across app restarts** (the open row is the source of truth).

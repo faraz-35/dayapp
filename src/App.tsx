@@ -478,6 +478,10 @@ function DayApp() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null);
   const [timeTotals, setTimeTotals] = useState<Record<string, number>>({});
+  // Today's per-item seconds (the 6am→6am day) — the Daily rows' ⏱ reads this
+  // instead of the all-time total: a daily habit's tracked time resets with
+  // the day, like its completion.
+  const [todayTime, setTodayTime] = useState<Record<string, number>>({});
   // Wall-clock tick; bumped once a second while a timer runs, so the chip and
   // running row's elapsed update live. Idle (no re-render loop) when idle.
   const [now, setNow] = useState(() => Date.now());
@@ -812,13 +816,27 @@ function DayApp() {
   );
 
   const refreshTotals = useCallback(async () => {
-    if (allIds.length === 0) { setTimeTotals({}); return; }
+    if (allIds.length === 0) { setTimeTotals({}); setTodayTime({}); return; }
     try {
-      setTimeTotals(await timersApi.totals(allIds));
+      const [totals, todays] = await Promise.all([
+        timersApi.totals(allIds),
+        timersApi.todayTotals(allIds),
+      ]);
+      setTimeTotals(totals);
+      setTodayTime(todays);
     } catch (e) { log.warn("time totals failed", e); }
   }, [allIds]);
 
   useEffect(() => { refreshTotals(); }, [refreshTotals]);
+
+  // The ⏱ map the rows render: all-time everywhere except Daily, where the
+  // day-reset number replaces it (absent today-time = 0, same as totals).
+  const rowTimeTotals = useMemo<Record<string, number>>(() => {
+    if (Object.keys(todayTime).length === 0) return timeTotals;
+    const out = { ...timeTotals };
+    for (const item of renderItems.daily) out[item.id] = todayTime[item.id] ?? 0;
+    return out;
+  }, [timeTotals, todayTime, renderItems.daily]);
 
   // Tick once a second while a timer runs so the header chip + the running row's
   // elapsed are live. No interval when nothing's timing — no busy work.
@@ -2215,7 +2233,7 @@ function DayApp() {
                 onPromote={handlePromote}
                 activeTimerId={activeTimer?.itemId ?? null}
                 liveElapsed={liveElapsed}
-                timeTotals={timeTotals}
+                timeTotals={rowTimeTotals}
                 onToggleTimer={handleToggleTimer}
               />
             )}

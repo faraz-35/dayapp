@@ -588,7 +588,15 @@ fn task(db: &Db, rest: &[String]) -> anyhow::Result<()> {
     let item = find_item(db, q)?;
     let sec = item.section.as_str();
     println!("{sec:<8} {}", row_meta(&item, &project_names(db)?));
-    if let Ok(totals) = db.time_totals(&[item.id.clone()]) {
+    // A Daily row's ⏱ is today's tracked time (the 6am→6am day, like the
+    // completion reset) — the same number the GUI renders; other sections
+    // keep the all-time total.
+    let totals = if sec == "daily" {
+        db.today_totals(&[item.id.clone()])
+    } else {
+        db.time_totals(&[item.id.clone()])
+    };
+    if let Ok(totals) = totals {
         if let Some(secs) = totals.get(&item.id) {
             if *secs > 0 {
                 println!("  ⏱ {}", fmt_duration(*secs));
