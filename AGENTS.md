@@ -202,6 +202,14 @@ still read the axes off the text.
 entries  id, kind, text, day, created_at
 ```
 
+Existence-gated like every feature (Settings → Features has `Journal` and
+`Quotes`, 2026-10-05): off, the page, its header door and ⌘P entry, the
+`nj`/`nq` addresses, the capture route (the line degrades to an ordinary
+note, token as literal prose — `scanTokens`' granular `entry-journal`/
+`entry-quote` kinds keep the coloring honest), and — for quotes — the idle
+screensaver all disappear together. The entries table itself is untouched;
+the data returns with the toggle.
+
 The notes capture bar is the app's **typed capture bus**: a leading `##j` or `##q` token
 routes the line away from note creation and into the `entries` table — same input, a
 different *kind* of content, stored and displayed differently. The reserved `##` prefix

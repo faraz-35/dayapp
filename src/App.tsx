@@ -313,6 +313,17 @@ function DayApp() {
       return { hidden: true, analytics: true, journal: true, quotes: true, settings: true };
     }
   });
+  // Journal/Quotes existence (Settings → Features): the written-entry pages,
+  // their header doors and ⌘P entries, the ##j/##q capture routes (nj/nq
+  // included), and — for quotes — the idle screensaver moment. Off = the whole
+  // family disappears; the entries table itself is untouched (existence, not
+  // deletion — the data comes back with the toggle).
+  const [journalEnabled, setJournalEnabled] = useState(
+    () => localStorage.getItem("dayapp-journal-enabled") !== "0",
+  );
+  const [quotesEnabled, setQuotesEnabled] = useState(
+    () => localStorage.getItem("dayapp-quotes-enabled") !== "0",
+  );
   const [showHiddenItems, setShowHiddenItems] = useState(
     () => localStorage.getItem("dayapp-hidden-items") === "1",
   );
@@ -626,6 +637,8 @@ function DayApp() {
     localStorage.setItem("dayapp-notes-card", notesCard ? "1" : "0");
     localStorage.setItem("dayapp-tasks-card", tasksCard ? "1" : "0");
     localStorage.setItem("dayapp-header-buttons", JSON.stringify(headerBtns));
+    localStorage.setItem("dayapp-journal-enabled", journalEnabled ? "1" : "0");
+    localStorage.setItem("dayapp-quotes-enabled", quotesEnabled ? "1" : "0");
     localStorage.setItem("dayapp-views", JSON.stringify(views));
     localStorage.setItem("dayapp-active-view", activeViewId ?? "");
     // Retired keys: the single-tier "only" filter era, and the rotating
@@ -634,7 +647,7 @@ function DayApp() {
     // it's read at mount, never rewritten.)
     localStorage.removeItem("dayapp-priority");
     localStorage.removeItem("dayapp-quotes-visible");
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, headerBtns, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, headerBtns, journalEnabled, quotesEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -701,7 +714,7 @@ function DayApp() {
     };
   }, []);
   useEffect(() => {
-    if (!quoteScreensaver) return;
+    if (!quoteScreensaver || !quotesEnabled) return;
     const id = setInterval(() => {
       if (
         quoteOpen || quoteCount === 0 ||
@@ -712,7 +725,7 @@ function DayApp() {
       openQuote();
     }, 5_000);
     return () => clearInterval(id);
-  }, [quoteScreensaver, quoteOpen, quoteCount, paletteOpen, searchOpen, helpOpen, syncSettingsOpen, updateStatus, openQuote]);
+  }, [quoteScreensaver, quoteOpen, quoteCount, paletteOpen, searchOpen, helpOpen, syncSettingsOpen, updateStatus, openQuote, quotesEnabled]);
 
   // What the user sees: items narrowed by the ⌘P hidden priority tiers, the ⌘P
   // agent-tasks toggle, and/or the ⌘F project/agent filters, if any — plus the
@@ -1139,8 +1152,10 @@ function DayApp() {
           .catch((e) => { log.error("cli: enable failed", e); showToast(`CLI enable failed: ${e}`); }),
     },
     { id: "view-analytics", label: "View Analytics", run: () => setView("analytics") },
-    { id: "view-journal", label: "View Journal", run: () => setView("journal") },
-    { id: "view-quotes", label: "View Quotes", run: () => setView("quotes") },
+    // The entry pages are existence-gated (Settings → Features): off, the
+    // pages, doors, and routes all go — nothing left to open.
+    ...(journalEnabled ? [{ id: "view-journal", label: "View Journal", run: () => setView("journal") }] : []),
+    ...(quotesEnabled ? [{ id: "view-quotes", label: "View Quotes", run: () => setView("quotes") }] : []),
     // The settings page: the feature toggles (what exists at all) and the
     // custom views.
     { id: "view-settings", label: view === "settings" ? "Close Settings" : "Open Settings", hint: "features + views", run: () => setView(view === "settings" ? "list" : "settings") },
@@ -1171,7 +1186,7 @@ function DayApp() {
           },
         ]
       : []),
-  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects]);
+  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1601,8 +1616,17 @@ function DayApp() {
     else if (key === "daily") setSectionsEnabled((s) => ({ ...s, daily: !s.daily }));
     else if (key === "backlog") setSectionsEnabled((s) => ({ ...s, backlog: !s.backlog }));
     else if (key === "notes") setNotesEnabled((v) => !v);
-    else setGoalsEnabled((v) => !v);
-  }, []);
+    else if (key === "journal") {
+      // Disabling the surface you're standing on returns to the list — a
+      // view that doesn't exist can't be on screen.
+      setJournalEnabled((v) => !v);
+      if (journalEnabled && view === "journal") setView("list");
+    } else if (key === "quotes") {
+      setQuotesEnabled((v) => !v);
+      setQuoteOpen(false);
+      if (quotesEnabled && view === "quotes") setView("list");
+    } else setGoalsEnabled((v) => !v);
+  }, [journalEnabled, quotesEnabled, view]);
   const setCardStyle = useCallback((surface: "notes" | "tasks", card: boolean) => {
     if (surface === "notes") setNotesCard(card);
     else setTasksCard(card);
@@ -1684,8 +1708,11 @@ function DayApp() {
     const n = Number(a);
     if (p === "n") {
       if (a === "n") { trace("capture.focus", { address: seq, target: "notes" }); focusCapture("notes"); }
-      else if (a === "j") { trace("capture.focus", { address: seq, target: "notes", route: "##j" }); focusCapture("notes", "##j"); }
-      else if (a === "q") { trace("capture.focus", { address: seq, target: "notes", route: "##q" }); focusCapture("notes", "##q"); }
+      // nj/nq only when the destination exists (Settings → Features) — an
+      // address into a switched-off surface is a silent no-op, like t9 into
+      // an empty section.
+      else if (a === "j" && journalEnabled) { trace("capture.focus", { address: seq, target: "notes", route: "##j" }); focusCapture("notes", "##j"); }
+      else if (a === "q" && quotesEnabled) { trace("capture.focus", { address: seq, target: "notes", route: "##q" }); focusCapture("notes", "##q"); }
       else if (a === "t") { trace("capture.focus", { address: seq, target: "tasks", route: "##t" }); focusCapture("tasks", "##t"); }
       else if (a === "d") { trace("capture.focus", { address: seq, target: "tasks", route: "##d" }); focusCapture("tasks", "##d"); }
       else if (a === "b") { trace("capture.focus", { address: seq, target: "tasks", route: "##b" }); focusCapture("tasks", "##b"); }
@@ -1994,7 +2021,7 @@ function DayApp() {
           {/* The Journal view's door (the written word; Analytics keeps the
               numbers). Same per-button toggle as the analytics door: the
               active view's button reads the close X and returns to the list. */}
-          {headerBtns.journal && (
+          {journalEnabled && headerBtns.journal && (
             <button
               className={`icon-btn ${view === "journal" ? "active" : ""}`}
               onClick={() => {
@@ -2011,7 +2038,7 @@ function DayApp() {
           {/* The Quotes view's door (the ##q pool, browsed and edited; the
               modal keeps the summoned moment). Same per-button toggle: the
               active view's button reads the close X and returns to the list. */}
-          {headerBtns.quotes && (
+          {quotesEnabled && headerBtns.quotes && (
             <button
               className={`icon-btn ${view === "quotes" ? "active" : ""}`}
               onClick={() => {
@@ -2088,6 +2115,7 @@ function DayApp() {
               <Notes
                 hiddenFilter={showHiddenNotes ? "include" : "exclude"}
                 cardBg={notesCard}
+                entryRoutes={{ journal: journalEnabled, quotes: quotesEnabled }}
                 focusedId={focusNoteId}
                 reloadEpoch={dataEpoch}
                 projects={projects}
@@ -2161,6 +2189,8 @@ function DayApp() {
               backlog: sectionsEnabled.backlog,
               notes: notesEnabled,
               goals: goalsEnabled,
+              journal: journalEnabled,
+              quotes: quotesEnabled,
             }}
             onToggleFeature={toggleFeature}
             projects={projects}
@@ -2208,14 +2238,17 @@ function DayApp() {
       {/* The quote moment — a floating surface like the palette: dim backdrop,
           centered serif italic, never inline. Its only open path is the
           screensaver; the deliberate surface is the Quotes page. App owns the
-          open flag (the key-handler gate); Quotes owns pick + dismissal. */}
-      <Quotes
-        version={quotesVersion}
-        open={quoteOpen}
-        funMode={funMode}
-        onClose={closeQuote}
-        onCount={setQuoteCount}
-      />
+          open flag (the key-handler gate); Quotes owns pick + dismissal.
+          Quotes off (Settings → Features) unmounts the whole moment. */}
+      {quotesEnabled && (
+        <Quotes
+          version={quotesVersion}
+          open={quoteOpen}
+          funMode={funMode}
+          onClose={closeQuote}
+          onCount={setQuoteCount}
+        />
+      )}
       <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       {namePromptOpen && (
         <NamePrompt

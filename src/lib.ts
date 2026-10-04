@@ -547,7 +547,7 @@ export function parseItemTags(
 // what colors as a token while you type is exactly what processes at Enter —
 // the two can never drift apart.
 
-export type TokenKind = "entry" | "section" | "project" | "priority" | "agent";
+export type TokenKind = "entry" | "entry-journal" | "entry-quote" | "section" | "project" | "priority" | "agent";
 
 /** A matched token. `start`/`end` span the sigil through the token's last
  *  char (the word-boundary space before it stays plain text); `value` is the
@@ -620,9 +620,16 @@ function stripSpans(text: string, spans: SigilSpan[]): string {
  *  grammar keeps scanning past it. A line a surface wouldn't parse stays
  *  plain: the color never lies. */
 export function scanTokens(text: string, kinds: readonly TokenKind[]): TokenSpan[] {
-  if (kinds.includes("entry")) {
+  // "entry" carries both routes; the granular pair lets a surface carry one
+  // without the other (Settings → Features can switch Journal/Quotes off) —
+  // a route whose kind isn't listed stays plain. The color never lies.
+  if (kinds.includes("entry") || kinds.includes("entry-journal") || kinds.includes("entry-quote")) {
     const m = text.match(ENTRY_RE);
-    if (m) return [{ kind: "entry", start: 0, end: m[0].length, value: m[1] }];
+    const ok = m && (
+      kinds.includes("entry") ||
+      (m[1] === "j" ? kinds.includes("entry-journal") : kinds.includes("entry-quote"))
+    );
+    if (ok && m) return [{ kind: "entry", start: 0, end: m[0].length, value: m[1] }];
   }
   const out: TokenSpan[] = [];
   if (kinds.includes("section")) {

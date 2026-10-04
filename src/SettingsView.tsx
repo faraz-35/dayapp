@@ -20,7 +20,7 @@ import { useState } from "react";
 import { type Project } from "./lib";
 import { clip, trace } from "./devlog";
 
-export type FeatureKey = "tasks" | "today" | "daily" | "backlog" | "notes" | "goals";
+export type FeatureKey = "tasks" | "today" | "daily" | "backlog" | "notes" | "goals" | "journal" | "quotes";
 
 // The header's icon buttons — each an On/Off choice in the Header group.
 export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes" | "settings";
@@ -75,6 +75,8 @@ const FEATURES: { key: FeatureKey; label: string; hint: string }[] = [
   { key: "backlog", label: "Backlog", hint: "section" },
   { key: "notes", label: "Notes", hint: "the notepad surface" },
   { key: "goals", label: "Goals", hint: "the identity layer" },
+  { key: "journal", label: "Journal", hint: "##j entries + the page" },
+  { key: "quotes", label: "Quotes", hint: "##q entries, the page + the idle moment" },
 ];
 
 export default function SettingsView({

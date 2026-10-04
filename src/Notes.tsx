@@ -67,7 +67,7 @@ const sortNotes = (list: Note[]) =>
   );
 
 export default function Notes({
-  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, focusMode, funMode, cardBg = true, onCreateProject, onEntryRouted,
+  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, focusMode, funMode, cardBg = true, entryRoutes, onCreateProject, onEntryRouted,
 }: {
   hiddenFilter: HiddenFilter;
   focusedId?: string | null;
@@ -89,6 +89,10 @@ export default function Notes({
    *  language — bare at rest, hover/focus tint (the JS-tracked .hovered
    *  class, never :hover — the textareas resize under a stationary pointer). */
   cardBg: boolean;
+  /** Settings → Features: which entry routes the bus still carries. A route
+   *  whose destination is switched off doesn't process or color — the line
+   *  stays an ordinary note with the token as literal prose. */
+  entryRoutes: { journal: boolean; quotes: boolean };
   /** App's create-project path (its state is the single source, like Goals) —
    *  a footer/capture `#tag` that matches nothing creates its project through
    *  this, so the label renders immediately. */
@@ -218,7 +222,10 @@ export default function Notes({
   // onEntryRouted so the quote modal's pool refreshes.
   const handleCapture = (raw: string) => {
     const route = parseEntryCapture(raw);
-    if (!route) {
+    // A route whose destination is switched off (Settings → Features) leaves
+    // the line an ordinary note — the token stays literal prose, and the
+    // capture field's kinds list already stops coloring it.
+    if (!route || (route.kind === "journal" ? !entryRoutes.journal : !entryRoutes.quotes)) {
       handleCreate(raw);
       return;
     }
@@ -359,7 +366,12 @@ export default function Notes({
       {hiddenFilter !== "only" && (
         <div className="capture">
           <TokenField
-            kinds={["entry", "project", "priority"]}
+            kinds={[
+              "project",
+              "priority",
+              ...(entryRoutes.journal ? (["entry-journal"] as const) : []),
+              ...(entryRoutes.quotes ? (["entry-quote"] as const) : []),
+            ]}
             capture="notes"
             route
             multiline
