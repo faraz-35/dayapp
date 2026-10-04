@@ -769,7 +769,7 @@ keyboard-first.** Every choice below is intentional.
 | `--bg-elev` | `#16181c` | cards, inputs, elevated surfaces (floating modals, notes) |
 | `--bg-hover` | `#1c1f24` | row hover, button hover |
 | `--border` | `#30343c` | dividers, input borders |
-| `--text` | `#e6e7ea` | primary text |
+| `--text` | `#d2d5da` | primary text — a pleasant white, softened from `#e6e7ea` (2026-10-04) |
 | `--text-dim` | `#a2a7b1` | secondary text + every section/tier header (one shade) |
 | `--text-faint` | `#7b7f88` | the quietest text: hints, placeholders, empty states, disabled |
 | `--accent` | `#7b8cff` | the ONE accent: done/selected/focus/links |

@@ -6,7 +6,7 @@
   --bg-soft: #121417;   /* --bg → --bg-elev midpoint: elevated, one step quieter */
   --bg-hover: #1c1f24;
   --border: #30343c;    /* hairlines, capture underlines — bright enough to read as lines */
-  --text: #e6e7ea;
+  --text: #d2d5da;      /* a pleasant white — full-strength but soft against #0e0f11 */
   --text-dim: #a2a7b1;  /* secondary text + every section/tier header (one shade) */
   --text-faint: #7b7f88; /* the quietest text: placeholders, hints, disabled */
   --accent: #7b8cff;
@@ -353,7 +353,7 @@ button {
 .item-text {
   flex: 1;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.45;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -363,7 +363,7 @@ button {
 .item-edit {
   flex: 1;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.45;
   background: var(--bg-elev);
   border: 1px solid var(--accent);
   border-radius: 4px;
@@ -385,7 +385,7 @@ button {
   outline: none;
   font: inherit;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 .token-field.item-edit .token-mirror {
   padding: 2px 6px;
@@ -444,7 +444,7 @@ button {
   color: var(--text);
   font: inherit;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.45;
   resize: none;
   overflow: hidden;
   min-height: 18px;
@@ -498,7 +498,7 @@ button {
   color: var(--text);
   font: inherit;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.45;
   white-space: pre;
 }
 /* Multiline (the notes capture): wrap exactly like the textarea does, so
@@ -2235,7 +2235,7 @@ button {
   margin: 4px 8px 10px;
   font-size: 12px;
   color: var(--danger);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 .mobile-hint {
   padding: 24px 12px;
