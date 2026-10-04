@@ -317,6 +317,9 @@ button {
 }
 .item:hover { background: var(--bg-hover); }
 .item.selected { background: var(--bg-hover); }
+/* UI option (Settings → UI): task rows with the notes-card fill. Hover keeps
+   its tint (rows don't resize, so :hover is safe here). */
+.sections-card .item { background: var(--bg-soft); }
 /* Keyboard-focused goal row (the grammar's `g1-9` + digits target) — same
    tint as .item.selected: one focus language across rows, notes, goals. */
 .goal-row.focused { background: var(--bg-hover); }
@@ -1160,6 +1163,14 @@ button {
    bottom underline only (inset, so the card's bounds and the textarea's layout
    never shift — a real border would move the text). */
 .note:focus-within { box-shadow: inset 0 -1px 0 var(--accent); }
+
+/* UI option (Settings → UI): the notes surface without the card fill — the
+   row language. Bare at rest; the hover tint keys off the JS-tracked
+   .hovered class, never :hover — the textareas resize under a stationary
+   pointer (see the reveal rules). Focus underline, reveals, tier dividers:
+   all unchanged. */
+.notes-bare .note { background: none; }
+.notes-bare .note.hovered { background: var(--bg-hover); }
 
 /* Keyboard-focused note (the grammar's `n1-9` + digits target) — the same
    resting tint a selected row gets, so every focusable surface reads alike.

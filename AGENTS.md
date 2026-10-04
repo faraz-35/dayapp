@@ -985,7 +985,12 @@ it), `Today`/`Daily`/`Backlog` sections, `Notes`, `Goals` — persisted in the
 Settings is high-level configuration, ⌘P is the working door). A disabled surface
 renders nothing, isn't searchable or keyboard-navigable, and its whole ⌘P option family
 disappears with it — and none of its data moves: the rows stay in the db; Analytics,
-the CLI, and the phone mirror read them regardless. **Views:** custom lenses
+the CLI, and the phone mirror read them regardless. **UI:** the resting fill behind
+notes and task rows — each surface picks Card (the `--bg-soft` fill; notes' default) or
+Bare (the row language: nothing at rest, hover/focus tint instead; tasks' default).
+Notes' Bare hover tint keys off the JS-tracked `.hovered` class, never `:hover` (the
+textareas resize under a stationary pointer); tasks keep `:hover`. Persisted
+`dayapp-notes-card` / `dayapp-tasks-card` (2026-10-05). **Views:** custom lenses
 like Focus/Fun Mode — a named combination of priority tiers, the delegation axis
 (agent/mine/all), one project, notes + their tiers, built from pill chips on the page
 (no edit yet — delete + recreate). `Enter/Exit <name> View` rides ⌘P and the page;

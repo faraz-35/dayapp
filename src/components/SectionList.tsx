@@ -34,7 +34,7 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
 ];
 
 export default function SectionList({
-  items, visible, projects, selectedId, editingId, detailsOpenId,
+  items, visible, projects, selectedId, editingId, detailsOpenId, rowBg = false,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
   onSetProject, onCreateProject, onSetReminder, onMoveItem, onPromote, onToggleDetails, onSetDetails,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
@@ -44,6 +44,9 @@ export default function SectionList({
    *  all (its items stay in state; the parent already narrows `items` to the
    *  visible sections, this keeps the section heads/dropzones off screen). */
   visible: Record<Section, boolean>;
+  /** Settings → UI: the soft card fill behind each row (the notes-card look).
+   *  False = the default bare row language. */
+  rowBg: boolean;
   projects: Project[];
   selectedId: string | null;
   editingId: string | null;
@@ -187,7 +190,7 @@ export default function SectionList({
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
       >
-        <main className="sections">
+        <main className={`sections${rowBg ? " sections-card" : ""}`}>
           {SECTIONS.filter((sec) => visible[sec.id]).map((sec) => (
             <SectionView
               key={sec.id}

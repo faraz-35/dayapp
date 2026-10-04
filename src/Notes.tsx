@@ -67,7 +67,7 @@ const sortNotes = (list: Note[]) =>
   );
 
 export default function Notes({
-  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, focusMode, funMode, onCreateProject, onEntryRouted,
+  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, focusMode, funMode, cardBg = true, onCreateProject, onEntryRouted,
 }: {
   hiddenFilter: HiddenFilter;
   focusedId?: string | null;
@@ -85,6 +85,10 @@ export default function Notes({
   /** ⌘P → Fun Mode: P1/P2 notes hide (the inverse lens — only non-urgent
    *  notes show). Same lens contract as focusMode. */
   funMode: boolean;
+  /** Settings → UI: the soft card fill behind each note. False = the row
+   *  language — bare at rest, hover/focus tint (the JS-tracked .hovered
+   *  class, never :hover — the textareas resize under a stationary pointer). */
+  cardBg: boolean;
   /** App's create-project path (its state is the single source, like Goals) —
    *  a footer/capture `#tag` that matches nothing creates its project through
    *  this, so the label renders immediately. */
@@ -342,7 +346,7 @@ export default function Notes({
   };
 
   return (
-    <section className="notes">
+    <section className={`notes${cardBg ? "" : " notes-bare"}`}>
       <div className="section-head">
         <span className="section-name surface-name">Notes</span>
       </div>

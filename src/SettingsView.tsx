@@ -69,6 +69,7 @@ const FEATURES: { key: FeatureKey; label: string; hint: string }[] = [
 export default function SettingsView({
   features, onToggleFeature, projects, views, activeViewId,
   onToggleViewActive, onCreateView, onDeleteView,
+  notesCard, tasksCard, onSetCard,
 }: {
   features: Record<FeatureKey, boolean>;
   onToggleFeature: (key: FeatureKey) => void;
@@ -78,6 +79,9 @@ export default function SettingsView({
   onToggleViewActive: (id: string) => void;
   onCreateView: (view: CustomView) => void;
   onDeleteView: (id: string) => void;
+  notesCard: boolean;
+  tasksCard: boolean;
+  onSetCard: (surface: "notes" | "tasks", card: boolean) => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -144,6 +148,37 @@ export default function SettingsView({
               </span>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="an-card">
+        <div className="an-card-title">
+          UI
+          <span className="hint">the resting fill behind notes and task rows</span>
+        </div>
+        <div className="settings-rows">
+          {([["notes", "Notes background", "the soft card behind each note"],
+             ["tasks", "Tasks background", "the soft card behind each row"]] as const).map(
+            ([key, label, hint]) => {
+              const card = key === "notes" ? notesCard : tasksCard;
+              return (
+                <div className="settings-row" key={key}>
+                  <div className="settings-main">
+                    <span className="settings-name">{label}</span>
+                    <span className="settings-hint">{hint}</span>
+                  </div>
+                  <button
+                    className={`pill${card ? " active" : ""}`}
+                    onClick={() => { trace("ui.card", { surface: key, to: true }); onSetCard(key, true); }}
+                  >Card</button>
+                  <button
+                    className={`pill${!card ? " active" : ""}`}
+                    onClick={() => { trace("ui.card", { surface: key, to: false }); onSetCard(key, false); }}
+                  >Bare</button>
+                </div>
+              );
+            },
+          )}
         </div>
       </div>
 

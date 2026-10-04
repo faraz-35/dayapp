@@ -268,6 +268,16 @@ function DayApp() {
     daily: localStorage.getItem("dayapp-sec-daily-enabled") !== "0",
     backlog: localStorage.getItem("dayapp-sec-backlog-enabled") !== "0",
   }));
+  // UI style (the Settings page's UI group): whether notes and task rows
+  // carry the soft card fill. Notes default ON (the cards), tasks default
+  // OFF (bare rows) — today's looks. The bare side is the row language:
+  // hover/focus tint instead of a resting fill, everything else unchanged.
+  const [notesCard, setNotesCard] = useState(
+    () => localStorage.getItem("dayapp-notes-card") !== "0",
+  );
+  const [tasksCard, setTasksCard] = useState(
+    () => localStorage.getItem("dayapp-tasks-card") === "1",
+  );
   const [showHiddenItems, setShowHiddenItems] = useState(
     () => localStorage.getItem("dayapp-hidden-items") === "1",
   );
@@ -578,6 +588,8 @@ function DayApp() {
     localStorage.setItem("dayapp-sec-today-enabled", sectionsEnabled.today ? "1" : "0");
     localStorage.setItem("dayapp-sec-daily-enabled", sectionsEnabled.daily ? "1" : "0");
     localStorage.setItem("dayapp-sec-backlog-enabled", sectionsEnabled.backlog ? "1" : "0");
+    localStorage.setItem("dayapp-notes-card", notesCard ? "1" : "0");
+    localStorage.setItem("dayapp-tasks-card", tasksCard ? "1" : "0");
     localStorage.setItem("dayapp-views", JSON.stringify(views));
     localStorage.setItem("dayapp-active-view", activeViewId ?? "");
     // Retired keys: the single-tier "only" filter era, and the rotating
@@ -586,7 +598,7 @@ function DayApp() {
     // it's read at mount, never rewritten.)
     localStorage.removeItem("dayapp-priority");
     localStorage.removeItem("dayapp-quotes-visible");
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -1555,6 +1567,10 @@ function DayApp() {
     else if (key === "notes") setNotesEnabled((v) => !v);
     else setGoalsEnabled((v) => !v);
   }, []);
+  const setCardStyle = useCallback((surface: "notes" | "tasks", card: boolean) => {
+    if (surface === "notes") setNotesCard(card);
+    else setTasksCard(card);
+  }, []);
   const createView = useCallback((v: CustomView) => {
     setViews((vs) => [...vs, v]);
   }, []);
@@ -1996,6 +2012,7 @@ function DayApp() {
             {notesEnabled && notesVisible && (!activeView || activeView.notes) && (
               <Notes
                 hiddenFilter={showHiddenNotes ? "include" : "exclude"}
+                cardBg={notesCard}
                 focusedId={focusNoteId}
                 reloadEpoch={dataEpoch}
                 projects={projects}
@@ -2021,6 +2038,7 @@ function DayApp() {
             {tasksEnabled && tasksVisible && (
               <SectionList
                 items={renderItems}
+                rowBg={tasksCard}
                 /* Fun Mode removes Daily entirely — an emptied section must
                    not leave its header behind (the toggle's semantics,
                    composed with the lens; sectionsVisible itself is untouched).
@@ -2071,6 +2089,9 @@ function DayApp() {
             }}
             onToggleFeature={toggleFeature}
             projects={projects}
+            notesCard={notesCard}
+            tasksCard={tasksCard}
+            onSetCard={setCardStyle}
             views={views}
             activeViewId={activeViewId}
             onToggleViewActive={toggleViewActive}
