@@ -10,8 +10,16 @@
   --text-dim: #a2a7b1;  /* secondary text + every section/tier header (one shade) */
   --text-faint: #7b7f88; /* the quietest text: placeholders, hints, disabled */
   --accent: #7b8cff;
+  --accent-rgb: 123, 140, 255;  /* the accent as a triplet — alphas spell rgba(var(--accent-rgb), a) */
   --done: #3a3f48;
   --danger: #e5484d;
+  /* Derived layer (themes.ts overwrites at runtime): scrims, card shadows,
+     and the analytics track tint — all luminance-aware. */
+  --scrim: var(--scrim);
+  --scrim-strong: var(--scrim-strong);
+  --track: var(--track);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif;
   font-size: 13px;
   color-scheme: dark;
@@ -135,7 +143,7 @@ button {
 .search-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--scrim);
   z-index: 90;                    /* below the command palette (100) so ⌘P wins */
   display: flex;
   align-items: flex-start;
@@ -149,7 +157,7 @@ button {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 .search-input {
@@ -299,7 +307,7 @@ button {
   transition: background 0.1s ease, min-height 0.1s ease;
 }
 .section-dropzone.is-over {
-  background: rgba(123, 140, 255, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
   min-height: 36px;
   border-radius: 6px;
 }
@@ -535,7 +543,7 @@ button {
   position: absolute;
   top: 0;
   left: 0;
-  background: rgba(123, 140, 255, 0.3);
+  background: rgba(var(--accent-rgb), 0.3);
   border-radius: 1px;
 }
 
@@ -550,7 +558,7 @@ button {
 
 .drag-overlay {
   opacity: 0.9;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-md);
   background: var(--bg-elev);
   border-radius: 6px;
   padding: 6px 8px;
@@ -686,9 +694,9 @@ button {
   background: transparent;
   cursor: default;
 }
-.cal-cell.l1 { background: rgba(123, 140, 255, 0.24); }
-.cal-cell.l2 { background: rgba(123, 140, 255, 0.42); }
-.cal-cell.l3 { background: rgba(123, 140, 255, 0.64); }
+.cal-cell.l1 { background: rgba(var(--accent-rgb), 0.24); }
+.cal-cell.l2 { background: rgba(var(--accent-rgb), 0.42); }
+.cal-cell.l3 { background: rgba(var(--accent-rgb), 0.64); }
 .cal-cell.l4 { background: var(--accent); }
 .cal-cell.future {
   background: transparent;
@@ -763,7 +771,7 @@ button {
   flex: 1;
   height: 6px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--track);
   overflow: hidden;
 }
 .an-row .fill {
@@ -792,7 +800,7 @@ button {
   height: 8px;
   border-radius: 4px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--track);
   margin: 2px 0 12px;
 }
 .an-segbar .seg { height: 100%; }
@@ -1049,7 +1057,7 @@ button {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 4px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -1077,7 +1085,7 @@ button {
 .anf-check { color: var(--accent); font-size: 11px; }
 .anf-tier { display: inline-flex; align-items: center; padding: 4px 7px; }
 .anf-tier.active { background: var(--bg-hover); }
-.anf-tier.active .priority-bars .bar { background: rgba(123, 140, 255, 0.35); }
+.anf-tier.active .priority-bars .bar { background: rgba(var(--accent-rgb), 0.35); }
 .anf-tier.active .priority-bars .bar.filled { background: var(--accent); }
 .anf-clear { color: var(--text-dim); }
 .anf-clear:hover { color: var(--text); }
@@ -1266,7 +1274,7 @@ button {
   caret-color: var(--text);
 }
 .note-body-wrap .note-textarea::selection {
-  background: rgba(123, 140, 255, 0.3);
+  background: rgba(var(--accent-rgb), 0.3);
 }
 .note-mirror {
   position: absolute;
@@ -1283,13 +1291,13 @@ button {
   word-break: break-word;
   overflow: hidden;
 }
-/* rgba() of --accent: the token is a plain hex, so the alphas are spelled out
-   here (same pattern as the reminder chip / dropzone tints). */
+/* Alpha tints of --accent ride --accent-rgb (the triplet applyTheme derives
+   from the accent hex), so find marks follow every theme. */
 .note-mirror mark {
-  background: rgba(123, 140, 255, 0.25);
+  background: rgba(var(--accent-rgb), 0.25);
   border-radius: 2px;
 }
-.note-mirror mark.note-find-cur { background: rgba(123, 140, 255, 0.55); }
+.note-mirror mark.note-find-cur { background: rgba(var(--accent-rgb), 0.55); }
 .note-mirror .tok { color: var(--accent); }
 /* The note body keeps its NATIVE caret (no overlay to redraw it), so a
    substituted footer token must occupy its raw sigil's exact advance or the
@@ -1354,7 +1362,7 @@ button {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 4px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -1558,8 +1566,8 @@ button {
   padding: 1px 6px;
   border-radius: 8px;
   color: var(--accent);
-  background: rgba(123, 140, 255, 0.1);
-  border: 1px solid rgba(123, 140, 255, 0.25);
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
   white-space: nowrap;
 }
 
@@ -1621,8 +1629,8 @@ button {
   animation: timer-pulse 1.4s ease-in-out infinite;
 }
 @keyframes timer-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(123, 140, 255, 0.45); }
-  50%      { opacity: 0.55; box-shadow: 0 0 0 3px rgba(123, 140, 255, 0); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.45); }
+  50%      { opacity: 0.55; box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0); }
 }
 .timer-chip-elapsed {
   font-size: 12px;
@@ -1728,7 +1736,7 @@ button {
 .quote-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);   /* deeper than the palette's 0.4 — the dim is the point */
+  background: var(--scrim-strong);   /* deeper than the palette's 0.4 — the dim is the point */
   -webkit-backdrop-filter: blur(12px);  /* erase what sat beneath, both surfaces */
   backdrop-filter: blur(12px);
   z-index: 105;                     /* above search (90), below update (110) */
@@ -1825,7 +1833,7 @@ button {
 .palette-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--scrim);
   z-index: 100;
   display: flex;
   align-items: flex-start;
@@ -1840,7 +1848,7 @@ button {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 
@@ -1894,7 +1902,7 @@ button {
 .name-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--scrim);
   z-index: 100;
   display: flex;
   align-items: center;
@@ -1907,7 +1915,7 @@ button {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -1937,7 +1945,7 @@ button {
 .help-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--scrim);
   z-index: 95;
   display: flex;
   align-items: flex-start;
@@ -1954,7 +1962,7 @@ button {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
   padding: 14px 16px 16px;
 }
 
@@ -2016,7 +2024,7 @@ button {
 .overlay-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--scrim-strong);
   z-index: 110;
   display: flex;
   align-items: center;
@@ -2031,7 +2039,7 @@ button {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2113,7 +2121,7 @@ button {
   font-size: 12px;
   color: var(--text);
   z-index: 120;                     /* above every floating surface */
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-md);
   max-width: 80%;
   text-align: center;
   animation: title-in 0.12s ease;
@@ -2126,7 +2134,7 @@ button {
 .sync-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--scrim);
   z-index: 105;                     /* above search (90), below update (110) */
   display: flex;
   align-items: center;
@@ -2139,7 +2147,7 @@ button {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -2494,3 +2502,40 @@ button {
 }
 .settings-save:hover { background: var(--bg-hover); }
 .settings-save:disabled { color: var(--text-faint); cursor: default; background: none; }
+
+/* Appearance: the theme rows carry four swatch dots (bg · elevated · accent ·
+   text) so a theme reads at a glance; the editor is a two-column grid of
+   labeled native color wells. */
+.settings-theme-dots {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.settings-theme-dots i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+.settings-colors {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 18px;
+}
+.settings-color {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.settings-color input[type="color"] {
+  width: 34px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}

@@ -19,6 +19,7 @@
 import { useState } from "react";
 import { type Project } from "./lib";
 import { clip, trace } from "./devlog";
+import { BUILT_IN_THEMES, COLOR_FIELDS, applyTheme, type Theme, type ThemeColors } from "./themes";
 
 export type FeatureKey = "tasks" | "today" | "daily" | "backlog" | "notes" | "goals" | "journal" | "quotes";
 
@@ -83,6 +84,7 @@ export default function SettingsView({
   features, onToggleFeature, projects, views, activeViewId,
   onToggleViewActive, onCreateView, onDeleteView,
   notesCard, tasksCard, onSetCard, headerBtns, onToggleHeaderBtn,
+  themeId, customThemes, onActivateTheme, onCreateTheme, onDeleteTheme,
 }: {
   features: Record<FeatureKey, boolean>;
   onToggleFeature: (key: FeatureKey) => void;
@@ -97,6 +99,11 @@ export default function SettingsView({
   onSetCard: (surface: "notes" | "tasks", card: boolean) => void;
   headerBtns: Record<HeaderBtn, boolean>;
   onToggleHeaderBtn: (btn: HeaderBtn) => void;
+  themeId: string;
+  customThemes: Theme[];
+  onActivateTheme: (id: string) => void;
+  onCreateTheme: (theme: Theme) => void;
+  onDeleteTheme: (id: string) => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -105,6 +112,26 @@ export default function SettingsView({
   const [projectId, setProjectId] = useState<string | null>(null);
   const [notes, setNotes] = useState(true);
   const [notePriorities, setNotePriorities] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
+  // The theme draft (New Theme form): eleven shades, applied live to the
+  // document as they're tweaked — Cancel re-applies the active theme.
+  const [draft, setDraft] = useState<{ name: string; colors: ThemeColors } | null>(null);
+
+  const cancelTheme = () => {
+    setDraft(null);
+    // Re-apply the active theme directly — setThemeId(same id) wouldn't re-run
+    // App's apply effect, and the preview would stick.
+    applyTheme([...BUILT_IN_THEMES, ...customThemes].find((t) => t.id === themeId) ?? BUILT_IN_THEMES[0]);
+  };
+  const createThemeNow = () => {
+    if (!draft || !draft.name.trim()) return;
+    trace("theme.create", { name: clip(draft.name) });
+    onCreateTheme({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      name: draft.name.trim(),
+      colors: draft.colors,
+    });
+    setDraft(null); // onCreateTheme activates the new theme — the preview sticks
+  };
 
   const resetDraft = () => {
     setName("");
@@ -220,6 +247,106 @@ export default function SettingsView({
               </span>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="an-card">
+        <div className="an-card-title">
+          Appearance
+          <span className="hint">the color ladder — Dark, Light, or your own</span>
+        </div>
+        <div className="settings-rows">
+          {[...BUILT_IN_THEMES, ...customThemes].map((t) => {
+            const active = themeId === t.id;
+            const builtIn = BUILT_IN_THEMES.some((b) => b.id === t.id);
+            return (
+              <div className="settings-row" key={t.id}>
+                <button
+                  className="settings-main"
+                  onClick={() => {
+                    trace("theme.activate", { id: t.id });
+                    onActivateTheme(t.id);
+                  }}
+                >
+                  <span className="settings-name">{t.name}</span>
+                  <span className="settings-theme-dots">
+                    {[t.colors.bg, t.colors.bgElev, t.colors.accent, t.colors.text].map((c, i) => (
+                      <i key={i} style={{ background: c }} />
+                    ))}
+                  </span>
+                </button>
+                {active && <span className="settings-state on">Active</span>}
+                {!builtIn && (
+                  <button
+                    className="settings-x"
+                    title="Delete theme"
+                    aria-label={`Delete ${t.name}`}
+                    onClick={() => {
+                      trace("theme.delete", { id: t.id });
+                      onDeleteTheme(t.id);
+                    }}
+                  >×</button>
+                )}
+              </div>
+            );
+          })}
+          {!creating && (
+            <div className="settings-row">
+              <button
+                className="settings-main"
+                onClick={() => {
+                  const base = [...BUILT_IN_THEMES, ...customThemes].find((t) => t.id === themeId);
+                  setDraft({ name: "", colors: { ...(base ?? BUILT_IN_THEMES[0]).colors } });
+                  setCreating(true);
+                }}
+              >
+                <span className="settings-name">+ New Theme</span>
+                <span className="settings-hint">eleven shades, previewed live</span>
+              </button>
+            </div>
+          )}
+          {creating && draft && (
+            <div className="settings-form">
+              <input
+                className="settings-name-input"
+                placeholder="Theme name"
+                value={draft.name}
+                autoFocus
+                spellCheck={false}
+                onChange={(e) => {
+                  if (!draft) return;
+                  setDraft({ ...draft, name: e.target.value });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); createThemeNow(); }
+                  else if (e.key === "Escape") { e.preventDefault(); cancelTheme(); }
+                }}
+              />
+              <div className="settings-colors">
+                {COLOR_FIELDS.map(({ key, label }) => (
+                  <label className="settings-color" key={key}>
+                    <span>{label}</span>
+                    <input
+                      type="color"
+                      value={draft.colors[key]}
+                      onChange={(e) => {
+                        if (!draft) return;
+                        const colors = { ...draft.colors, [key]: e.target.value };
+                        setDraft({ ...draft, colors });
+                        // Live preview: the draft skins the app as you tweak;
+                        // Cancel re-applies the active theme.
+                        applyTheme({ id: "draft", name: draft.name || "Draft", colors });
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="settings-form-actions">
+                <button className="pill" onClick={cancelTheme}>Cancel</button>
+                <button className="settings-save" disabled={!draft.name.trim()} onClick={createThemeNow}>Create Theme</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

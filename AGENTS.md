@@ -763,13 +763,30 @@ keyboard-first.** Every choice below is intentional.
 4. **Dense rows, single-line text, ellipsis.** This is a list, not a document.
 5. **One accent colour.** `#7b8cff` means "active/selected/completed/done-today." Do not
    introduce a second accent.
-6. **Dark, always dark.** No light theme, no `prefers-color-scheme` switching. `color-scheme: dark`.
+6. **Dark by default, themeable by choice.** The default is the dark ladder; a
+   complete Light theme ships beside it, and custom themes are eleven-color
+   token sets (Settings → Appearance, 2026-10-05). No `prefers-color-scheme`
+   — the scheme is an explicit choice, persisted (`dayapp-theme`), applied by
+   `applyTheme` in `themes.ts` writing the custom properties onto `<html>`.
+   Everything renders through the tokens, so a theme is one paint; the derived
+   layer (scrims, shadows, the accent's alpha triplet, `color-scheme`) is
+   computed from the eleven shades, never stored.
 7. **Identity first, then capture.** Goals — the identity layer — at the very top of
    the content; Notes, the lowest-friction capture surface, right below.
    There is always a ready textarea. (The quote moment is a summoned modal, not
    ambient chrome — see "Quote modal" under UI/UX.)
 
 ### Colour tokens (from `index.css` — use these, do not hardcode hex)
+
+The table is the DARK theme's resting values — the runtime truth is whatever
+`applyTheme` last wrote onto `<html>` (Dark by default, Light built-in, custom
+themes from Settings → Appearance). Alongside the colors ride the derived
+tokens: `--accent-rgb` (the accent triplet — every accent alpha tints as
+`rgba(var(--accent-rgb), a)`), `--scrim`/`--scrim-strong` (floating-surface
+backdrops), `--track` (analytics bar tracks), and `--shadow-md`/`--shadow-lg`
+(cards and modals). Never spell an rgba color literal in new CSS — add or use
+a token; a theme is exactly the eleven shades in `themes.ts`, and the derived
+layer follows them.
 
 | Token | Value | Use |
 |---|---|---|
@@ -1340,7 +1357,11 @@ Journal / Quotes icons):**
 
 ### What NOT to add (explicit non-goals)
 
-- No light theme. No `prefers-color-scheme`.
+- No `prefers-color-scheme` and no automatic theme switching — Light exists as
+  an explicit built-in theme beside Dark, and custom themes are user-built
+  token sets (Settings → Appearance). Don't grow this toward a theming product:
+  a theme is exactly the eleven shades, nothing more (no per-surface colors, no
+  wallpaper/accent-pair picker beyond the ladder).
 - No second accent colour. No status colours per section.
 - No tags or arbitrary due-date fields. (Projects are a first-class filter axis; reminders
   are a date-granular promotion; timers are a measurement layer; priorities are a `!1..3`

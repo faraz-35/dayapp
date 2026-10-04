@@ -26,6 +26,7 @@ import MobileSyncSettings from "./MobileSyncSettings";
 import KeyboardHelp from "./KeyboardHelp";
 import NamePrompt from "./NamePrompt";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, popoverOpen, scrollIntoViewEl } from "./focusNav";
+import { BUILT_IN_THEMES, applyTheme, loadCustomThemes, resolveTheme, saveCustomThemes, type Theme } from "./themes";
 
 type View = "list" | "analytics" | "journal" | "quotes" | "settings";
 
@@ -324,6 +325,17 @@ function DayApp() {
   const [quotesEnabled, setQuotesEnabled] = useState(
     () => localStorage.getItem("dayapp-quotes-enabled") !== "0",
   );
+  // Theme (Settings → Appearance): the active id resolves against the
+  // built-ins plus the user's custom themes; the apply effect writes the
+  // token ladder onto <html> — the whole app re-skins in one paint. App-level
+  // like zoom (one set across demo/real).
+  const [themeId, setThemeId] = useState(() => localStorage.getItem("dayapp-theme") || "dark");
+  const [customThemes, setCustomThemes] = useState<Theme[]>(loadCustomThemes);
+  useEffect(() => {
+    const theme = resolveTheme(themeId, customThemes);
+    applyTheme(theme);
+    localStorage.setItem("dayapp-theme", theme.id);
+  }, [themeId, customThemes]);
   const [showHiddenItems, setShowHiddenItems] = useState(
     () => localStorage.getItem("dayapp-hidden-items") === "1",
   );
@@ -1156,6 +1168,17 @@ function DayApp() {
     // pages, doors, and routes all go — nothing left to open.
     ...(journalEnabled ? [{ id: "view-journal", label: "View Journal", run: () => setView("journal") }] : []),
     ...(quotesEnabled ? [{ id: "view-quotes", label: "View Quotes", run: () => setView("quotes") }] : []),
+    // Themes ride the palette too — the power-user door to the same choice
+    // Settings → Appearance makes.
+    ...[...BUILT_IN_THEMES, ...customThemes].map((t) => ({
+      id: `theme-${t.id}`,
+      label: `Theme: ${t.name}`,
+      hint: themeId === t.id ? "active" : undefined,
+      run: () => {
+        trace("theme.activate", { id: t.id });
+        setThemeId(t.id);
+      },
+    })),
     // The settings page: the feature toggles (what exists at all) and the
     // custom views.
     { id: "view-settings", label: view === "settings" ? "Close Settings" : "Open Settings", hint: "features + views", run: () => setView(view === "settings" ? "list" : "settings") },
@@ -1186,7 +1209,7 @@ function DayApp() {
           },
         ]
       : []),
-  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects]);
+  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects, themeId, customThemes]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1633,6 +1656,25 @@ function DayApp() {
   }, []);
   const toggleHeaderBtn = useCallback((btn: HeaderBtn) => {
     setHeaderBtns((b) => ({ ...b, [btn]: !b[btn] }));
+  }, []);
+  // Themes (Settings → Appearance). Activating stores the id (the apply
+  // effect skins the app); deleting the active theme falls back to Dark.
+  const activateTheme = useCallback((id: string) => {
+    setThemeId(id);
+  }, []);
+  const createTheme = useCallback((theme: Theme) => {
+    setCustomThemes((ts) => {
+      saveCustomThemes([...ts, theme]);
+      return [...ts, theme];
+    });
+    setThemeId(theme.id);
+  }, []);
+  const deleteTheme = useCallback((id: string) => {
+    setCustomThemes((ts) => {
+      saveCustomThemes(ts.filter((t) => t.id !== id));
+      return ts.filter((t) => t.id !== id);
+    });
+    setThemeId((cur) => (cur === id ? "dark" : cur));
   }, []);
   const createView = useCallback((v: CustomView) => {
     setViews((vs) => [...vs, v]);
@@ -2199,6 +2241,11 @@ function DayApp() {
             onSetCard={setCardStyle}
             headerBtns={headerBtns}
             onToggleHeaderBtn={toggleHeaderBtn}
+            themeId={themeId}
+            customThemes={customThemes}
+            onActivateTheme={activateTheme}
+            onCreateTheme={createTheme}
+            onDeleteTheme={deleteTheme}
             views={views}
             activeViewId={activeViewId}
             onToggleViewActive={toggleViewActive}
