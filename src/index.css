@@ -2359,3 +2359,122 @@ button {
 
 
 
+
+/* ---- Settings view ------------------------------------------------------ */
+/* The settings page (⌘P → Settings): the feature toggles (what exists at
+   all) and the custom views — named lenses over the display axes, the
+   Focus Mode contract. Groups ride the analytics card; rows are the item
+   language: hover tint, state at the right, delete on hover only. */
+
+.settings {
+  padding: 12px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+  border-radius: 6px;
+}
+.settings-row:hover { background: var(--bg-hover); }
+.settings-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 4px;
+  text-align: left;
+}
+.settings-name { font-size: 13px; }
+.settings-hint {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-state {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.settings-state.on { color: var(--accent); }
+.settings-x {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.08s ease, color 0.08s ease;
+}
+.settings-row:hover .settings-x { opacity: 1; }
+.settings-x:hover { color: var(--danger); }
+
+/* The create form: a label + pill chips per axis, reusing the analytics
+   pill; the name field is the capture-line underline input. */
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 4px 4px;
+}
+.settings-name-input {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 2px;
+}
+.settings-name-input:focus { border-bottom-color: var(--accent); }
+.settings-name-input::placeholder { color: var(--text-faint); }
+.settings-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.settings-field-label {
+  width: 88px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.settings-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.settings-save {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+.settings-save:hover { background: var(--bg-hover); }
+.settings-save:disabled { color: var(--text-faint); cursor: default; background: none; }

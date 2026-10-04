@@ -67,6 +67,10 @@ Direction at three horizons: Timeless (∞, can't be achieved), Long term, Short
 
 `!1`–`!3` sets a priority (signal bars; the Backlog sorts by tier). `#tag` links a color-coded project and creates it if the name is new. Both strip out of the text and are never logged.
 
+## Settings
+
+⌘P → Settings turns parts of the app off: Tasks (or just Daily or Backlog), Notes, Goals. You can also create named views that combine what you see — priority tiers, agent or your own tasks, one project, notes. Enter a view from ⌘P; exit it the same way, with Esc, or with Show Default View.
+
 ## Delegating to the agent
 
 End a task with `@` to mark it as fully delegable — it gets a robot badge, and its details body is the agent's prompt. The CLI marks these rows 🤖, so a remote agent session can claim the task, work it, and complete it.

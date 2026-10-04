@@ -281,7 +281,8 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
 - `project_id` — optional link to a `projects` row (housekeeping, **not**
   logged; deleting a project nulls it, same as items).
 - The section renders at the very top of the main page, above Notes — the
-  identity layer sits over everything; **⌘P → Show/Hide Goals** toggles it
+  identity layer sits over everything; the **Settings page's Goals toggle**
+  toggles it
   completely (persisted in localStorage `dayapp-goals-visible`, **hidden by
   default** — a display preference like zoom). **Show Default View hides it** — the default
   working view is the plain task list. Goals don't take part
@@ -623,6 +624,7 @@ dayapp/
 │   ├── MobileView.tsx              ← Android client: read-only list + capture bar (GitHub fetch, renders when UA is Android)
 │   ├── MobileSyncSettings.tsx      ← ⌘P sync-config modal (repo/branch/token + validate-by-deploy)
 │   ├── AnalyticsView.tsx           ← the analytics page: stats + heatmap + splits + day ledger/day cards over dashboard.rs (no raw log)
+│   ├── SettingsView.tsx            ← the settings page (⌘P → Settings): Features toggles + custom view create/enter/delete
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← the ONE task capture (##t/##d/##b routing) + DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + sortable items + dropzone; Backlog tier dividers)
@@ -670,6 +672,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
 | `AnalyticsView.tsx` | the analytics page: range/day-pick state, dashboard + time fetch, stats/heatmap/splits/day-card render | derivation (all in `dashboard.rs`), item state |
+| `SettingsView.tsx` | the settings page: Features toggles (the six surface switches) + custom views create/enter/delete | the toggle/view state (App's — the palette reads it too) |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---
@@ -973,12 +976,24 @@ The single-key `t` (timer), `d` (details), and `⌫` (delete) verbs are retired
 Do not reintroduce bare single-letter verbs that collide with the address
 prefixes `n`/`t`/`d`/`b`/`g`.
 
-**Show/Hide toggles (⌘P):** every layout surface is an independent, persisted toggle
-whose label reflects its state — `Goals`, `Notes`, `Tasks` (the whole tasks area in one
-toggle: the capture input plus all three sections — the per-section toggles refine inside
-it; while hidden, no task row is rendered, searchable, keyboard-navigable, or totaled),
-`Today`/`Daily`/`Backlog` sections,
-`Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
+**Settings (⌘P → Settings):** the settings page owns what exists at all and the custom
+views — the six surface toggles were the ⌘P Show/Hide entries until 2026-10-04, when
+they retired into the page. **Features:** `Tasks` (the whole tasks area in one toggle:
+the capture input plus all three sections — the section toggles refine inside it; while
+hidden, no task row is rendered, searchable, keyboard-navigable, or totaled),
+`Today`/`Daily`/`Backlog` sections, `Notes`, `Goals` — the same persisted localStorage
+flags as before, now with a page instead of palette entries. **Views:** custom lenses
+like Focus/Fun Mode — a named combination of priority tiers, the delegation axis
+(agent/mine/all), one project, notes + their tiers, built from pill chips on the page
+(no edit yet — delete + recreate). `Enter/Exit <name> View` rides ⌘P and the page;
+the active view composes through the same `displayItems`/Notes pipelines — its unshown
+tiers fold into the hidden sets, its agent/project axis overrides the session filters —
+and never mutates the toggles or filters: exiting restores everything (the Focus Mode
+contract). Persisted in localStorage (`dayapp-views`, active id `dayapp-active-view`);
+Show Default View exits the active view.
+
+**Show/Hide toggles (⌘P):** the transient surfaces stay in the palette: `Hidden Tasks`
+and `Hidden Notes` (both render hidden entries inline where they live,
 dimmed, ↺/× actions), the per-tier `Priority 1/2/3 Tasks` toggles, the notes' own
 `Priority 1/2/3 Notes` toggles (independent of the task tiers, like Hidden Notes ≠
 Hidden Tasks), and `Agent Tasks` (hides the 🤖-marked rows — the "what's actually mine"
@@ -1042,7 +1057,7 @@ same `displayItems` pipeline.
 
 **Show Default View is the universal reset:** hidden entries excluded, priority tiers
 (tasks + notes), project and agent filters cleared, agent tasks shown, focus + fun
-mode off,
+mode off, any active view exited,
 Tasks (capture + all three sections) and Notes shown —
 and Goals hidden (the default working view is the plain task list). One command
 always restores it.

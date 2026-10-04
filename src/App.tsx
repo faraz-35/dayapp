@@ -17,6 +17,7 @@ import Quotes from "./Quotes";
 import EntriesPage from "./EntriesPage";
 import SectionList from "./components/SectionList";
 import AnalyticsView from "./AnalyticsView";
+import SettingsView, { viewSummary, type CustomView, type FeatureKey } from "./SettingsView";
 import CommandPalette, { type Command } from "./CommandPalette";
 import SearchMenu, { type SearchHit } from "./components/SearchMenu";
 import UpdateOverlay from "./UpdateOverlay";
@@ -26,12 +27,7 @@ import KeyboardHelp from "./KeyboardHelp";
 import NamePrompt from "./NamePrompt";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, popoverOpen, scrollIntoViewEl } from "./focusNav";
 
-type View = "list" | "analytics" | "journal" | "quotes";
-
-// Labels for the per-section ⌘P toggles (Show/Hide Today, …).
-const SECTION_LABELS: Record<Section, string> = {
-  today: "Today", daily: "Daily", backlog: "Backlog",
-};
+type View = "list" | "analytics" | "journal" | "quotes" | "settings";
 
 // ⌘+/⌘- zoom bounds and step, in the comfortable-reading range around the 13px
 // base — much beyond it and the fixed 480px window stops fitting a list. The
@@ -289,6 +285,22 @@ function DayApp() {
   const [funMode, setFunMode] = useState(
     () => localStorage.getItem("dayapp-fun-mode") === "1",
   );
+  // Custom views (the Settings page): named lenses over the display axes —
+  // priority tiers, the delegation axis, project, notes + their tiers. The
+  // active one composes through the same pipelines as the toggles and ⌘F
+  // filters below (never mutating them — exiting restores everything, the
+  // Focus Mode contract). Persisted like every layout preference.
+  const [views, setViews] = useState<CustomView[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem("dayapp-views") ?? "[]");
+      return Array.isArray(raw) ? (raw as CustomView[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [activeViewId, setActiveViewId] = useState<string | null>(
+    () => localStorage.getItem("dayapp-active-view") || null,
+  );
   // ⌘P "Show/Hide Agent Tasks" — hide the 🤖-marked rows to focus on the ones
   // that are Faraz's own. Persisted like the other layout toggles; default on
   // (agent rows are normal tasks until he says otherwise).
@@ -532,13 +544,15 @@ function DayApp() {
     localStorage.setItem("dayapp-focus-mode", focusMode ? "1" : "0");
     localStorage.setItem("dayapp-fun-mode", funMode ? "1" : "0");
     localStorage.setItem("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
+    localStorage.setItem("dayapp-views", JSON.stringify(views));
+    localStorage.setItem("dayapp-active-view", activeViewId ?? "");
     // Retired keys: the single-tier "only" filter era, and the rotating
     // quote line the modal replaced — one-time cleanups. (The quote
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.)
     localStorage.removeItem("dayapp-priority");
     localStorage.removeItem("dayapp-quotes-visible");
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -619,24 +633,51 @@ function DayApp() {
   }, [quoteScreensaver, quoteOpen, quoteCount, paletteOpen, searchOpen, helpOpen, syncSettingsOpen, updateStatus, openQuote]);
 
   // What the user sees: items narrowed by the ⌘P hidden priority tiers, the ⌘P
-  // agent-tasks toggle, and/or the ⌘F project/agent filters, if any. Hiding a
-  // tier removes just that tier's rows — unmarked rows stay, and each tier is
-  // independent. Focus Mode adds its lens here: the Backlog narrows to P1
-  // (Today/Daily stay whole — the day's list is the point of the mode). Fun
-  // Mode is the inverse lens: Daily empties and P1/P2 drop everywhere —
-  // Today keeps its P3/unmarked rows rather than vanishing.
+  // agent-tasks toggle, and/or the ⌘F project/agent filters, if any — plus the
+  // active custom view's axes (below). Hiding a tier removes just that tier's
+  // rows — unmarked rows stay, and each tier is independent. Focus Mode adds
+  // its lens here: the Backlog narrows to P1 (Today/Daily stay whole — the
+  // day's list is the point of the mode). Fun Mode is the inverse lens: Daily
+  // empties and P1/P2 drop everywhere — Today keeps its P3/unmarked rows
+  // rather than vanishing.
   // Mutations read the full `items`, and DnD indexes map back to full-list
   // space in handleMoveItem.
+  //
+  // The active custom view rides these same pipelines instead of adding a
+  // parallel one: its unshown tiers fold into the hidden sets, its
+  // agent/project axis overrides the session filters while it's on — the
+  // session values restore untouched on exit. A lens, never a mutation.
+  const activeView = useMemo(
+    () => views.find((v) => v.id === activeViewId) ?? null,
+    [views, activeViewId],
+  );
+  const effHiddenPriorities = useMemo(() => {
+    const hidden = new Set(hiddenPriorities);
+    if (activeView) {
+      for (const t of [1, 2, 3] as const) if (!activeView.priorities.includes(t)) hidden.add(t);
+    }
+    return [...hidden];
+  }, [hiddenPriorities, activeView]);
+  const effHiddenNotePriorities = useMemo(() => {
+    const hidden = new Set(hiddenNotePriorities);
+    if (activeView && activeView.notes) {
+      for (const t of [1, 2, 3] as const) if (!activeView.notePriorities.includes(t)) hidden.add(t);
+    }
+    return [...hidden];
+  }, [hiddenNotePriorities, activeView]);
+  const effAgentFilter: "agent" | "mine" | null =
+    activeView && activeView.agent !== "all" ? activeView.agent : agentFilter;
+  const effProjectFilter = activeView?.projectId ?? projectFilter;
   const displayItems = useMemo<Record<Section, Item[]>>(() => {
     if (
-      hiddenPriorities.length === 0 && projectFilter === null &&
-      agentTasksVisible && agentFilter === null && !focusMode && !funMode
+      effHiddenPriorities.length === 0 && effProjectFilter === null &&
+      agentTasksVisible && effAgentFilter === null && !focusMode && !funMode
     ) return items;
     const matches = (i: Item) =>
-      (i.priority === null || !hiddenPriorities.includes(i.priority)) &&
-      (projectFilter === null || i.projectId === projectFilter) &&
+      (i.priority === null || !effHiddenPriorities.includes(i.priority)) &&
+      (effProjectFilter === null || i.projectId === effProjectFilter) &&
       (agentTasksVisible || !i.assignedToAgent) &&
-      (agentFilter === null || (agentFilter === "agent") === i.assignedToAgent) &&
+      (effAgentFilter === null || (effAgentFilter === "agent") === i.assignedToAgent) &&
       (!focusMode || i.section !== "backlog" || i.priority === 1) &&
       (!funMode || i.priority === null || i.priority === 3);
     return {
@@ -644,7 +685,7 @@ function DayApp() {
       daily: funMode ? [] : items.daily.filter(matches),
       backlog: items.backlog.filter(matches),
     };
-  }, [items, hiddenPriorities, projectFilter, agentTasksVisible, agentFilter, focusMode, funMode]);
+  }, [items, effHiddenPriorities, effProjectFilter, agentTasksVisible, effAgentFilter, focusMode, funMode]);
 
   // displayItems narrowed to the visible sections — a toggled-off section's
   // rows aren't rendered, searchable, keyboard-navigable, or totaled (they
@@ -787,6 +828,7 @@ function DayApp() {
         setProjectFilter(null);
         setAgentTasksVisible(true);
         setAgentFilter(null);
+        setActiveViewId(null);
         setSectionsVisible({ today: true, daily: true, backlog: true });
         setTasksVisible(true);
         setNotesVisible(true);
@@ -796,34 +838,9 @@ function DayApp() {
     // The ##q moment has no palette door anymore (2026-09-15): the Quotes
     // page (❝ / View Quotes) is the deliberate surface, the screensaver the
     // idle one. Both entries — Show a Quote and the screensaver toggle —
-    // retired; the watcher below carries the whole feature.
-    {
-      id: "toggle-goals",
-      label: goalsVisible ? "Hide Goals" : "Show Goals",
-      hint: "the goals section",
-      run: () => { setView("list"); setGoalsVisible((v) => !v); },
-    },
-    {
-      id: "toggle-notes",
-      label: notesVisible ? "Hide Notes" : "Show Notes",
-      hint: "the notes section",
-      run: () => { setView("list"); setNotesVisible((v) => !v); },
-    },
-    {
-      id: "toggle-tasks",
-      label: tasksVisible ? "Hide Tasks" : "Show Tasks",
-      hint: "capture + all three sections",
-      run: () => { setView("list"); setTasksVisible((v) => !v); },
-    },
-    ...(["today", "daily", "backlog"] as const).map((s) => ({
-      id: `toggle-${s}`,
-      label: sectionsVisible[s] ? `Hide ${SECTION_LABELS[s]}` : `Show ${SECTION_LABELS[s]}`,
-      hint: "section",
-      run: () => {
-        setView("list");
-        setSectionsVisible((v) => ({ ...v, [s]: !v[s] }));
-      },
-    })),
+    // retired; the watcher below carries the whole feature. The Goals/Notes/
+    // Tasks/section Show/Hide entries retired the same way (2026-10-04) —
+    // they are the Settings page's Features group now (⌘P → Settings).
     {
       id: "toggle-hidden-items",
       label: showHiddenItems ? "Hide Hidden Tasks" : "Show Hidden Tasks",
@@ -884,6 +901,17 @@ function DayApp() {
       hint: "Daily + P1/P2 hidden",
       run: () => { setView("list"); setFunMode((v) => !v); },
     },
+    // Custom views (Settings): the palette is their switch too — Enter/Exit
+    // <name>, the Focus Mode pattern.
+    ...views.map((v) => ({
+      id: `view-${v.id}`,
+      label: activeViewId === v.id ? `Exit ${v.name} View` : `Enter ${v.name} View`,
+      hint: viewSummary(v, projects) || "everything",
+      run: () => {
+        setView("list");
+        setActiveViewId((cur) => (cur === v.id ? null : v.id));
+      },
+    })),
     {
       id: "toggle-agent-tasks",
       // The delegation axis: 🤖-marked rows are the agent's queue. Hiding them
@@ -996,6 +1024,9 @@ function DayApp() {
     { id: "view-analytics", label: "View Analytics", run: () => setView("analytics") },
     { id: "view-journal", label: "View Journal", run: () => setView("journal") },
     { id: "view-quotes", label: "View Quotes", run: () => setView("quotes") },
+    // The settings page: the feature toggles (what exists at all) and the
+    // custom views.
+    { id: "view-settings", label: view === "settings" ? "Close Settings" : "Open Settings", hint: "features + views", run: () => setView(view === "settings" ? "list" : "settings") },
     // The masthead's owner (hidden in demo mode — the name would write into
     // the demo db's meta, and the masthead reads "Live @ Demo" there anyway).
     ...(demoMode ? [] : [{
@@ -1023,7 +1054,7 @@ function DayApp() {
           },
         ]
       : []),
-  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, demoMode, devlogOn, syncConfigured]);
+  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1443,6 +1474,29 @@ function DayApp() {
     setAgentFilter((f) => (f === mode ? null : mode));
   }, []);
 
+  // ---- Settings: features + custom views ---------------------------------
+  // The six feature toggles live on the Settings page now (their ⌘P entries
+  // retired); the custom views are App state so the palette can list them
+  // and Show Default View can exit the active one.
+  const toggleFeature = useCallback((key: FeatureKey) => {
+    if (key === "tasks") setTasksVisible((v) => !v);
+    else if (key === "today") setSectionsVisible((s) => ({ ...s, today: !s.today }));
+    else if (key === "daily") setSectionsVisible((s) => ({ ...s, daily: !s.daily }));
+    else if (key === "backlog") setSectionsVisible((s) => ({ ...s, backlog: !s.backlog }));
+    else if (key === "notes") setNotesVisible((v) => !v);
+    else setGoalsVisible((v) => !v);
+  }, []);
+  const createView = useCallback((v: CustomView) => {
+    setViews((vs) => [...vs, v]);
+  }, []);
+  const deleteView = useCallback((id: string) => {
+    setViews((vs) => vs.filter((v) => v.id !== id));
+    setActiveViewId((cur) => (cur === id ? null : cur));
+  }, []);
+  const toggleViewActive = useCallback((id: string) => {
+    setActiveViewId((cur) => (cur === id ? null : id));
+  }, []);
+
   // ---- Keyboard nav + the focus grammar ----------------------------------
   //
 // The grammar (⌘P → Keyboard Shortcuts is the reference card):
@@ -1654,6 +1708,14 @@ function DayApp() {
         return;
       }
 
+      // The settings page's back door: Esc is "done here" (nothing on the
+      // page is ever focused — the grammar below never runs on it).
+      if (e.key === "Escape" && view === "settings") {
+        trace("view.switch", { view: "list" });
+        setView("list");
+        return;
+      }
+
       if (view !== "list") {
         pendingAddr.current = "";
         return;
@@ -1738,7 +1800,7 @@ function DayApp() {
             view while the disposable demo db is active — the one unmissable
             (but calm) signal of which data is on screen. */}
         <span className="title" key={demoMode ? "demo" : view === "list" ? liveAt : view}>
-          {demoMode ? "Live @ Demo" : view === "analytics" ? "Analytics" : view === "journal" ? "Journal" : view === "quotes" ? "Quotes" : `Live @ ${liveAt}`}
+          {demoMode ? "Live @ Demo" : view === "analytics" ? "Analytics" : view === "journal" ? "Journal" : view === "quotes" ? "Quotes" : view === "settings" ? "Settings" : `Live @ ${liveAt}`}
         </span>
         <div className="header-right">
           {/* The running timer is always visible here — survives scrolling away
@@ -1862,27 +1924,27 @@ function DayApp() {
                 the Backlog (footer tokens `!N`/`#tag` — see Notes.tsx) and
                 narrow under the ⌘F `#` project filter, the ⌘P note-tier
                 toggles, and the Focus/Fun Mode lenses. */}
-            {notesVisible && (
+            {notesVisible && (!activeView || activeView.notes) && (
               <Notes
                 hiddenFilter={showHiddenNotes ? "include" : "exclude"}
                 focusedId={focusNoteId}
                 reloadEpoch={dataEpoch}
                 projects={projects}
-                projectFilter={projectFilter}
-                hiddenPriorities={hiddenNotePriorities}
+                projectFilter={effProjectFilter}
+                hiddenPriorities={effHiddenNotePriorities}
                 focusMode={focusMode}
                 funMode={funMode}
                 onCreateProject={handleCreateProject}
                 onEntryRouted={handleEntryRouted}
               />
             )}
-            {(hiddenPriorities.length > 0 || projectFilter !== null || agentFilter !== null) && tasksVisible && allVisible.length === 0 && (
+            {(effHiddenPriorities.length > 0 || effProjectFilter !== null || effAgentFilter !== null) && tasksVisible && allVisible.length === 0 && (
               <div className="empty">
-                {projectFilter
-                  ? `No tasks in ${projects.find((p) => p.id === projectFilter)?.name ?? "project"}.`
-                  : agentFilter === "agent"
+                {effProjectFilter
+                  ? `No tasks in ${projects.find((p) => p.id === effProjectFilter)?.name ?? "project"}.`
+                  : effAgentFilter === "agent"
                     ? "No agent tasks."
-                    : agentFilter === "mine"
+                    : effAgentFilter === "mine"
                       ? "No tasks assigned to you."
                       : "No tasks at the shown priorities."}
               </div>
@@ -1927,6 +1989,24 @@ function DayApp() {
           </>
         ) : view === "analytics" ? (
           <AnalyticsView />
+        ) : view === "settings" ? (
+          <SettingsView
+            features={{
+              tasks: tasksVisible,
+              today: sectionsVisible.today,
+              daily: sectionsVisible.daily,
+              backlog: sectionsVisible.backlog,
+              notes: notesVisible,
+              goals: goalsVisible,
+            }}
+            onToggleFeature={toggleFeature}
+            projects={projects}
+            views={views}
+            activeViewId={activeViewId}
+            onToggleViewActive={toggleViewActive}
+            onCreateView={createView}
+            onDeleteView={deleteView}
+          />
         ) : view === "journal" ? (
           /* The two entry pages (##j reflections, ##q quotes) — one component,
              one kind each. Self-contained like Notes; remount on every view
