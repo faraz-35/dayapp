@@ -23,13 +23,14 @@ import { clip, trace } from "./devlog";
 export type FeatureKey = "tasks" | "today" | "daily" | "backlog" | "notes" | "goals";
 
 // The header's icon buttons — each an On/Off choice in the Header group.
-export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes";
+export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes" | "settings";
 
 const HEADER_BUTTONS: { key: HeaderBtn; label: string; hint: string }[] = [
   { key: "hidden", label: "Hidden entries", hint: "the ◐ archive peek" },
   { key: "analytics", label: "Analytics", hint: "the chart icon" },
   { key: "journal", label: "Journal", hint: "the prose icon" },
   { key: "quotes", label: "Quotes", hint: "the quote icon" },
+  { key: "settings", label: "Settings", hint: "the gear icon" },
 ];
 
 export interface CustomView {

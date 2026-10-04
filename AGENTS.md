@@ -994,7 +994,8 @@ Notes' Bare hover tint keys off the JS-tracked `.hovered` class, never `:hover` 
 textareas resize under a stationary pointer); tasks keep `:hover`. Persisted
 `dayapp-notes-card` / `dayapp-tasks-card` (2026-10-05). **Header:** which icon
 buttons mount top-right — `Hidden entries` (◐), `Analytics`, `Journal`, `Quotes`,
-all on by default (`dayapp-header-buttons`). Off hides only the button; the view
+`Settings` (the gear), all on by default (`dayapp-header-buttons`). Off hides only the
+button; the view
 stays in ⌘P (the two-layers rule). The update icon and timer chip aren't choices —
 they mount on their own conditions. **Views:** custom lenses
 like Focus/Fun Mode — a named combination of priority tiers, the delegation axis

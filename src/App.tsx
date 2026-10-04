@@ -162,6 +162,23 @@ function CloseIcon() {
   );
 }
 
+// The settings door's glyph: a hub with eight spokes — the gear, in the
+// set's stroke language (16-box, stroke 1.7 round, currentColor).
+function SettingsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <circle cx="8" cy="8" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M8 1.6v2.1M8 12.3v2.1M1.6 8h2.1M12.3 8h2.1M3.5 3.5l1.5 1.5M11 11l1.5 1.5M12.5 3.5 11 5M5 11l-1.5 1.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 // The release-update door's glyph: an arrow dropping into a tray — the one
 // header icon that isn't a view, so it reads as "something to receive", not
 // "somewhere to go". Same 16-box, stroke 1.7 round as the rest of the set.
@@ -290,9 +307,10 @@ function DayApp() {
         analytics: raw.analytics !== false,
         journal: raw.journal !== false,
         quotes: raw.quotes !== false,
+        settings: raw.settings !== false,
       };
     } catch {
-      return { hidden: true, analytics: true, journal: true, quotes: true };
+      return { hidden: true, analytics: true, journal: true, quotes: true, settings: true };
     }
   });
   const [showHiddenItems, setShowHiddenItems] = useState(
@@ -2005,6 +2023,22 @@ function DayApp() {
               aria-label="Toggle quotes"
             >
               {view === "quotes" ? <CloseIcon /> : <QuotesIcon />}
+            </button>
+          )}
+          {/* The Settings door (the gear) — same per-button toggle as the
+              other view doors: active reads the close X and returns. */}
+          {headerBtns.settings && (
+            <button
+              className={`icon-btn ${view === "settings" ? "active" : ""}`}
+              onClick={() => {
+                const next = view === "settings" ? "list" : "settings";
+                trace("view.switch", { view: next });
+                setView(next);
+              }}
+              title={view === "settings" ? "Back to list" : "Open settings"}
+              aria-label="Toggle settings"
+            >
+              {view === "settings" ? <CloseIcon /> : <SettingsIcon />}
             </button>
           )}
           {/* The release-update door (release installs only — source
