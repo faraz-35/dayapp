@@ -12,8 +12,9 @@
 // theme is eleven colors and nothing else.
 //
 // Built-ins: Dark (the original ladder, verbatim) and Light (the full white
-// reskin). Custom themes persist in localStorage (dayapp-themes); the active
-// id in dayapp-theme. App-level, like zoom — one set across demo/real.
+// reskin). Custom themes live in the settings store (settings.json — the
+// same file the CLI's theme verbs read and write); the active id in
+// dayapp-theme. App-level, like zoom — one set across demo/real.
 
 export interface ThemeColors {
   bg: string;
@@ -87,21 +88,10 @@ export const COLOR_FIELDS: { key: keyof ThemeColors; label: string }[] = [
 ];
 
 // ---- Persistence ----------------------------------------------------------
-
-const THEMES_KEY = "dayapp-themes";
-
-export function loadCustomThemes(): Theme[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(THEMES_KEY) ?? "[]");
-    return Array.isArray(raw) ? (raw as Theme[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveCustomThemes(themes: Theme[]): void {
-  localStorage.setItem(THEMES_KEY, JSON.stringify(themes));
-}
+//
+// The custom list is store-backed: App reads it through sget at mount and
+// writes through sset on create/delete — the CLI's --theme-* verbs hit the
+// same key, so both writers see one list.
 
 export function resolveTheme(id: string, custom: Theme[]): Theme {
   return [...BUILT_IN_THEMES, ...custom].find((t) => t.id === id) ?? DARK;

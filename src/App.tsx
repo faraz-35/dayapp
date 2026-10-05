@@ -26,7 +26,7 @@ import MobileSyncSettings from "./MobileSyncSettings";
 import KeyboardHelp from "./KeyboardHelp";
 import NamePrompt from "./NamePrompt";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, popoverOpen, scrollIntoViewEl } from "./focusNav";
-import { BUILT_IN_THEMES, applyTheme, loadCustomThemes, resolveTheme, saveCustomThemes, type Theme } from "./themes";
+import { BUILT_IN_THEMES, applyTheme, resolveTheme, type Theme } from "./themes";
 import { MIGRATED_KEYS, externallyChanged, initSettings, sget, sset, ssetMany } from "./settings";
 import { FeaturesContext, type Features } from "./features";
 
@@ -402,7 +402,14 @@ function DayAppBody() {
   // token ladder onto <html> — the whole app re-skins in one paint. App-level
   // like zoom (one set across demo/real).
   const [themeId, setThemeId] = useState(() => sget("dayapp-theme", "dark"));
-  const [customThemes, setCustomThemes] = useState<Theme[]>(loadCustomThemes);
+  const [customThemes, setCustomThemes] = useState<Theme[]>(() => {
+    try {
+      const raw = JSON.parse(sget("dayapp-themes", "[]"));
+      return Array.isArray(raw) ? (raw as Theme[]) : [];
+    } catch {
+      return [];
+    }
+  });
   useEffect(() => {
     const theme = resolveTheme(themeId, customThemes);
     applyTheme(theme);
@@ -1798,15 +1805,17 @@ function DayAppBody() {
   }, []);
   const createTheme = useCallback((theme: Theme) => {
     setCustomThemes((ts) => {
-      saveCustomThemes([...ts, theme]);
-      return [...ts, theme];
+      const next = [...ts, theme];
+      sset("dayapp-themes", JSON.stringify(next));
+      return next;
     });
     setThemeId(theme.id);
   }, []);
   const deleteTheme = useCallback((id: string) => {
     setCustomThemes((ts) => {
-      saveCustomThemes(ts.filter((t) => t.id !== id));
-      return ts.filter((t) => t.id !== id);
+      const next = ts.filter((t) => t.id !== id);
+      sset("dayapp-themes", JSON.stringify(next));
+      return next;
     });
     setThemeId((cur) => (cur === id ? "dark" : cur));
   }, []);
