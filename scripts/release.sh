@@ -309,4 +309,8 @@ say "shipped $TAG:"
 say "  release  https://github.com/faraz-35/dayapp/releases/tag/$TAG"
 say "  channel  https://github.com/faraz-35/dayapp/releases/latest/download/latest.json (verified: serves $NEXT)"
 say "  install  $SITE_URL/install.sh (verified: serves $TAG's bytes)"
-say "  notes    $NOTES_COUNT changes since ${PREV_TAG:-the first tag}"
+if [ -n "${NOTES:-}" ]; then
+  say "  notes    custom ($NOTES)"
+else
+  say "  notes    $NOTES_COUNT changes since ${PREV_TAG:-the first tag}"
+fi
