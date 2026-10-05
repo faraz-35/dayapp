@@ -76,9 +76,10 @@ export default function Notes({
   /** App's projects list — the single source (like Goals). The collapsed card's
    *  project label renders from it; ids not in it simply show no label. */
   projects: Project[];
-  /** ⌘F `#` picker: narrow notes to this project too (null = off) — the same
-   *  filter that narrows the task sections, composed with the tiers below. */
-  projectFilter: string | null;
+  /** ⌘F `#` picker (single) or a view's project scope (multiple): narrow
+   *  notes to these projects (null/empty = off) — composed with the tiers
+   *  below. */
+  projectFilter: string[] | null;
   /** ⌘P → Show/Hide Priority N Notes: tiers in this list are hidden. */
   hiddenPriorities: (1 | 2 | 3)[];
   /** ⌘P → Focus Mode: only P1 notes show (the lens, not a toggle mutation). */
@@ -317,7 +318,7 @@ export default function Notes({
       notes.filter(
         (n) =>
           (prio(n) === null || !hiddenPriorities.includes(prio(n)!)) &&
-          (projectFilter === null || n.projectId === projectFilter) &&
+          (projectFilter === null || (n.projectId !== null && projectFilter.includes(n.projectId))) &&
           (!focusMode || prio(n) === 1) &&
           (!funMode || prio(n) === null || prio(n) === 3),
       ),

@@ -44,10 +44,18 @@ export interface CustomView {
   priorities: (1 | 2 | 3)[];
   // The delegation axis: all | agent (🤖 rows only) | mine.
   agent: "all" | "agent" | "mine";
-  projectId: string | null;
+  // The project scope: rows from ANY of these (OR within the axis); empty =
+  // all projects.
+  projectIds: string[];
   notes: boolean;
   notePriorities: (1 | 2 | 3)[];
 }
+
+/** Older stores kept a single `projectId` — normalize on read. */
+export const normalizeView = (v: CustomView & { projectId?: string | null }): CustomView => ({
+  ...v,
+  projectIds: v.projectIds ?? (v.projectId ? [v.projectId] : []),
+});
 
 const ALL_TIERS = [1, 2, 3] as const;
 
@@ -61,7 +69,12 @@ export const viewSummary = (v: CustomView, projects: Project[]): string => {
       : [...v.priorities].sort().map((p) => `P${p}`).join("+"));
   }
   if (v.agent !== "all") parts.push(v.agent === "agent" ? "agent" : "mine");
-  if (v.projectId) parts.push(`#${projects.find((p) => p.id === v.projectId)?.name ?? "project"}`);
+  if (v.projectIds.length > 0) {
+    const names = v.projectIds
+      .map((id) => projects.find((p) => p.id === id)?.name ?? "project")
+      .map((n) => `#${n}`);
+    parts.push(names.length <= 3 ? names.join("+") : `${names.length} projects`);
+  }
   if (!v.notes) parts.push("no notes");
   else if (v.notePriorities.length < 3) {
     parts.push(v.notePriorities.length === 0
@@ -94,6 +107,7 @@ export default function SettingsView({
   onToggleViewActive, onCreateView, onDeleteView,
   notesCard, tasksCard, onSetCard, headerBtns, onToggleHeaderBtn,
   themeId, customThemes, onActivateTheme, onCreateTheme, onDeleteTheme,
+  focusMode, funMode, onToggleFocus, onToggleFun,
 }: {
   features: Record<FeatureKey, boolean>;
   onToggleFeature: (key: FeatureKey) => void;
@@ -113,6 +127,10 @@ export default function SettingsView({
   onActivateTheme: (id: string) => void;
   onCreateTheme: (theme: Theme) => void;
   onDeleteTheme: (id: string) => void;
+  focusMode: boolean;
+  funMode: boolean;
+  onToggleFocus: () => void;
+  onToggleFun: () => void;
 }) {
   // Two independent create-forms — one state for both made "+ New Theme"
   // open the Views form too (2026-10-05). The theme form's gate is its draft
@@ -121,7 +139,7 @@ export default function SettingsView({
   const [name, setName] = useState("");
   const [priorities, setPriorities] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
   const [agent, setAgent] = useState<CustomView["agent"]>("all");
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectIds, setProjectIds] = useState<string[]>([]);
   const [notes, setNotes] = useState(true);
   const [notePriorities, setNotePriorities] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
   // The theme draft (New Theme form): eleven shades, applied live to the
@@ -149,7 +167,7 @@ export default function SettingsView({
     setName("");
     setPriorities([1, 2, 3]);
     setAgent("all");
-    setProjectId(null);
+    setProjectIds([]);
     setNotes(true);
     setNotePriorities([1, 2, 3]);
   };
@@ -163,7 +181,7 @@ export default function SettingsView({
       name: trimmed,
       priorities: [...priorities],
       agent,
-      projectId,
+      projectIds,
       notes,
       notePriorities: [...notePriorities],
     });
@@ -182,7 +200,6 @@ export default function SettingsView({
       <div className="an-card">
         <div className="an-card-title">
           Features
-          <span className="hint">what exists at all — show/hide stays in ⌘P</span>
         </div>
         <div className="settings-rows">
           {FEATURES.map(({ key, label, hint }) => (
@@ -208,7 +225,6 @@ export default function SettingsView({
       <div className="an-card">
         <div className="an-card-title">
           UI
-          <span className="hint">the resting fill behind notes and task rows</span>
         </div>
         <div className="settings-rows">
           {([["notes", "Notes background", "the soft card behind each note"],
@@ -239,7 +255,6 @@ export default function SettingsView({
       <div className="an-card">
         <div className="an-card-title">
           Header
-          <span className="hint">icon buttons top-right — the views stay in ⌘P</span>
         </div>
         <div className="settings-rows">
           {HEADER_BUTTONS.map(({ key, label, hint }) => (
@@ -265,7 +280,6 @@ export default function SettingsView({
       <div className="an-card">
         <div className="an-card-title">
           Appearance
-          <span className="hint">the color ladder — Dark, Light, or your own</span>
         </div>
         <div className="settings-rows">
           {[...BUILT_IN_THEMES, ...customThemes].map((t) => {
@@ -364,9 +378,28 @@ export default function SettingsView({
       <div className="an-card">
         <div className="an-card-title">
           Views
-          <span className="hint">lenses like focus mode — click to enter, click again to exit</span>
         </div>
         <div className="settings-rows">
+          {/* The built-in lenses live beside the custom views — enter/exit
+              from here, no delete (they're code, not data). */}
+          {([
+            ["Focus", focusMode, onToggleFocus, "P1 notes + Today + Daily + P1 Backlog, Goals hidden"],
+            ["Fun", funMode, onToggleFun, "the unwind view — Daily + P1/P2 hidden"],
+          ] as const).map(([name, active, toggle, hint]) => (
+            <div className="settings-row" key={name}>
+              <button
+                className="settings-main"
+                onClick={() => {
+                  trace("views.activate", { name, to: !active });
+                  toggle();
+                }}
+              >
+                <span className="settings-name">{name}</span>
+                <span className="settings-hint">{hint}</span>
+              </button>
+              {active && <span className="settings-state on">Active</span>}
+            </div>
+          ))}
           {views.map((v) => {
             const active = activeViewId === v.id;
             return (
@@ -438,16 +471,18 @@ export default function SettingsView({
               </div>
               {features.projects && (
                 <div className="settings-field">
-                  <span className="settings-field-label">Project</span>
+                  <span className="settings-field-label">Projects</span>
                   <button
-                    className={`pill${projectId === null ? " active" : ""}`}
-                    onClick={() => setProjectId(null)}
+                    className={`pill${projectIds.length === 0 ? " active" : ""}`}
+                    onClick={() => setProjectIds([])}
                   >Any</button>
                   {projects.map((p) => (
                     <button
                       key={p.id}
-                      className={`pill${projectId === p.id ? " active" : ""}`}
-                      onClick={() => setProjectId(projectId === p.id ? null : p.id)}
+                      className={`pill${projectIds.includes(p.id) ? " active" : ""}`}
+                      onClick={() => setProjectIds((ids) =>
+                        ids.includes(p.id) ? ids.filter((x) => x !== p.id) : [...ids, p.id],
+                      )}
                     >{p.name}</button>
                   ))}
                 </div>

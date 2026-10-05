@@ -17,7 +17,7 @@ import Quotes from "./Quotes";
 import EntriesPage from "./EntriesPage";
 import SectionList from "./components/SectionList";
 import AnalyticsView from "./AnalyticsView";
-import SettingsView, { viewSummary, type CustomView, type FeatureKey, type HeaderBtn } from "./SettingsView";
+import SettingsView, { normalizeView, viewSummary, type CustomView, type FeatureKey, type HeaderBtn } from "./SettingsView";
 import CommandPalette, { type Command } from "./CommandPalette";
 import SearchMenu, { type SearchHit } from "./components/SearchMenu";
 import UpdateOverlay from "./UpdateOverlay";
@@ -446,7 +446,7 @@ function DayAppBody() {
   const [views, setViews] = useState<CustomView[]>(() => {
     try {
       const raw = JSON.parse(sget("dayapp-views", "[]"));
-      return Array.isArray(raw) ? (raw as CustomView[]) : [];
+      return Array.isArray(raw) ? (raw as (CustomView & { projectId?: string | null })[]).map(normalizeView) : [];
     } catch {
       return [];
     }
@@ -852,7 +852,15 @@ function DayAppBody() {
   }, [hiddenNotePriorities, activeView]);
   const effAgentFilter: "agent" | "mine" | null =
     activeView && activeView.agent !== "all" ? activeView.agent : agentFilter;
-  const effProjectFilter = projectsEnabled ? (activeView?.projectId ?? projectFilter) : null;
+  // The effective project scope, as a set of ids: a view overrides the
+  // session filter with its (possibly multiple) selection; null = all.
+  const effProjectFilter: string[] | null = projectsEnabled
+    ? activeView
+      ? activeView.projectIds
+      : projectFilter
+        ? [projectFilter]
+        : null
+    : null;
   const displayItems = useMemo<Record<Section, Item[]>>(() => {
     if (
       effHiddenPriorities.length === 0 && effProjectFilter === null &&
@@ -860,7 +868,7 @@ function DayAppBody() {
     ) return items;
     const matches = (i: Item) =>
       (i.priority === null || !effHiddenPriorities.includes(i.priority)) &&
-      (effProjectFilter === null || i.projectId === effProjectFilter) &&
+      (effProjectFilter === null || (i.projectId !== null && effProjectFilter.includes(i.projectId))) &&
       (agentTasksVisible || !i.assignedToAgent) &&
       (effAgentFilter === null || (effAgentFilter === "agent") === i.assignedToAgent) &&
       (!focusMode || i.section !== "backlog" || i.priority === 1) &&
@@ -2322,7 +2330,9 @@ function DayAppBody() {
             {(effHiddenPriorities.length > 0 || effProjectFilter !== null || effAgentFilter !== null) && tasksEnabled && tasksVisible && allVisible.length === 0 && (
               <div className="empty">
                 {effProjectFilter
-                  ? `No tasks in ${projects.find((p) => p.id === effProjectFilter)?.name ?? "project"}.`
+                  ? `No tasks in ${effProjectFilter.length === 1
+                      ? projects.find((p) => p.id === effProjectFilter[0])?.name ?? "the selected project"
+                      : "the selected projects"}.`
                   : effAgentFilter === "agent"
                     ? "No agent tasks."
                     : effAgentFilter === "mine"
@@ -2408,6 +2418,10 @@ function DayAppBody() {
             onActivateTheme={activateTheme}
             onCreateTheme={createTheme}
             onDeleteTheme={deleteTheme}
+            focusMode={focusMode}
+            funMode={funMode}
+            onToggleFocus={() => { setView("list"); setFocusMode((v) => !v); }}
+            onToggleFun={() => { setView("list"); setFunMode((v) => !v); }}
             views={views}
             activeViewId={activeViewId}
             onToggleViewActive={toggleViewActive}
