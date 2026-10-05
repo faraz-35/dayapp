@@ -5,6 +5,11 @@
 #   npm run release <patch|minor|major>            # full release
 #   npm run release <patch|minor|major> dry         # build + verify only
 #
+#   NOTES=path/to/file.md                           # custom release notes
+#                                                   # (verbatim; without it the
+#                                                   # notes auto-generate from
+#                                                   # the commits since the tag)
+#
 # Stages (each checks current state first, so re-running after a failure
 # skips what's done and resumes where it stopped — the version resumes too:
 # a tagged bump commit on HEAD means "finish that release", not "roll the
@@ -209,9 +214,28 @@ grep -q "v$NEXT/" "$LATEST" || die "latest.json url is not the $TAG release"
 TARGZ_SHA="$(shasum -a 256 "$TARGZ" | cut -d' ' -f1)"
 say "verified — tar.gz sha256 $TARGZ_SHA"
 
+# ---- release notes (custom NOTES=path override, else auto-generated) ------
+
+if [ -n "${NOTES:-}" ] && [ ! -f "$NOTES" ]; then
+  die "NOTES=$NOTES does not exist"
+fi
+NOTESFILE="$(mktemp)"
+if [ -n "${NOTES:-}" ]; then
+  cp "$NOTES" "$NOTESFILE"
+  say "notes: custom ($NOTES)"
+else
+  {
+    echo "## Changes"
+    echo
+    git log "${PREV_TAG:-$TAG}"..HEAD --format='- %s' | grep -v '^- v[0-9]' || echo "- initial release"
+  } > "$NOTESFILE"
+  say "notes: auto-generated (commits since ${PREV_TAG:-the first tag})"
+fi
+
 if [ "$DRY_RUN" = 1 ]; then
   say "DRY RUN — everything above is real; a full run would now publish:"
-  say "  commit v$NEXT + tag $TAG, gh release v$NEXT (3 assets, notes since ${PREV_TAG:-the first tag})"
+  say "  commit v$NEXT + tag $TAG, gh release v$NEXT (3 assets)"
+  say "  notes: $(head -1 "$NOTESFILE")"
   say "  install path: the live curl one-liner must serve $TAG's bytes"
   say "DRY RUN complete — artifacts left in $BUNDLE for inspection"
   exit 0
@@ -233,12 +257,6 @@ say "pushed main + $TAG"
 
 # ---- 5. gh release ---------------------------------------------------------
 
-NOTESFILE="$(mktemp)"
-{
-  echo "## Changes"
-  echo
-  git log "${PREV_TAG:-$TAG}"..HEAD --format='- %s' | grep -v '^- v[0-9]' || echo "- initial release"
-} > "$NOTESFILE"
 if gh release view "$TAG" --repo faraz-35/dayapp > /dev/null 2>&1; then
   gh release upload "$TAG" "$TARGZ" "$SIG" "$LATEST" --repo faraz-35/dayapp --clobber
   say "release $TAG updated (assets re-uploaded)"
