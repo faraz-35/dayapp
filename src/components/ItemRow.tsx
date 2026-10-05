@@ -224,16 +224,14 @@ export default function ItemRow({
               action a shelved row offers; timing belongs to Today/Daily,
               where the work happens. A hidden row never starts anything, so
               it only ever shows the stop form. */}
-          {(item.hidden || isTiming || (features.timer && item.section !== "backlog")) &&
-            (isTiming ? (
-              <button
-                className="item-action timer-btn"
-                data-kb={slots.timer}
-                onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
-                title="Stop timer"
-                aria-label="Stop timer"
-              >⏸</button>
-            ) : item.section === "backlog" ? (
+          {/* Hidden rows only ever show the stop form (a timer started
+              before hiding must stay stoppable). Backlog's slot 1 is ALWAYS
+              ↑ send to Today — movement, not timing, so it survives the
+              timer switch. Today/Daily's ▶/⏸ exists only when timing does. */}
+          {(item.hidden
+            ? isTiming
+            : item.section === "backlog" || features.timer) &&
+            (item.section === "backlog" && !isTiming ? (
               <button
                 className="item-action promote-btn"
                 data-kb={slots.timer}
@@ -246,9 +244,9 @@ export default function ItemRow({
                 className="item-action timer-btn"
                 data-kb={slots.timer}
                 onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
-                title="Start timer"
-                aria-label="Start timer"
-              >▶</button>
+                title={isTiming ? "Stop timer" : "Start timer"}
+                aria-label={isTiming ? "Stop timer" : "Start timer"}
+              >{isTiming ? "⏸" : "▶"}</button>
             ))}
           {item.hidden ? (
             <>
