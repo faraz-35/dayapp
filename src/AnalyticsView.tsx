@@ -370,14 +370,14 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
       .catch((e) => log.warn("dashboard load failed", e));
     // Tracked time is a done-flavored dimension (work, not intake) — not
     // fetched in created mode.
-    if (subject === "done") {
+    if (subject === "done" && features.timer) {
       timersApi.sessionTimeByDay({ since: bounds.since, until: bounds.until })
         .then(setTimes)
         .catch((e) => log.warn("session time load failed", e));
     } else {
       setTimes([]);
     }
-  }, [bounds, filter, subject]);
+  }, [bounds, filter, subject, features.timer]);
 
   useEffect(() => {
     setDetail(null);
@@ -820,7 +820,7 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
                       <span>{detail.tasks.length} {noun}</span>
                     )}
                     {detail != null && pickedMissed > 0 && <span>{pickedMissed} missed</span>}
-                    {pickedSecs > 0 && <span>{formatDuration(pickedSecs)}</span>}
+                    {features.timer && pickedSecs > 0 && <span>{formatDuration(pickedSecs)}</span>}
                   </span>
                 </div>
                 <div className="an-day-detail">
@@ -830,7 +830,7 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
                       <span className="dd-mark">{noun === "created" ? "+" : "✓"}</span>
                       <span className="dd-time">{t.time}</span>
                       <span className="dd-text">{t.text}</span>
-                      {subject === "done" && t.secs > 0 && (
+                      {subject === "done" && features.timer && t.secs > 0 && (
                         <span className="dd-secs">{formatDuration(t.secs)}</span>
                       )}
                       <span className="dd-proj">{t.project ?? ""}</span>
@@ -897,7 +897,7 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
                         {d.count > 0 && <span className="done">{d.count} {noun}</span>}
                         {subject === "done" && missed > 0 && <span>{missed} missed</span>}
                         {subject === "done" && !hasFilter && secs > 0 && (
-                          <span className="time">{formatDuration(secs)}</span>
+                          <span className="time">{features.timer && formatDuration(secs)}</span>
                         )}
                         <Chevron />
                       </span>

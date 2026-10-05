@@ -35,7 +35,7 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
 ];
 
 export default function SectionList({
-  items, visible, projects, selectedId, editingId, detailsOpenId, rowBg = false,
+  items, visible, projects, routes, selectedId, editingId, detailsOpenId, rowBg = false,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
   onSetProject, onCreateProject, onSetReminder, onMoveItem, onPromote, onToggleDetails, onSetDetails,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
@@ -49,6 +49,9 @@ export default function SectionList({
    *  False = the default bare row language. */
   rowBg: boolean;
   projects: Project[];
+  /** Which destination sections EXIST (Settings → Features, view state
+   *  excluded) — the capture routes degrade to Today for absent sections. */
+  routes: { today: boolean; daily: boolean; backlog: boolean };
   selectedId: string | null;
   editingId: string | null;
   detailsOpenId: string | null;
@@ -139,7 +142,7 @@ export default function SectionList({
   const submit = () => {
     const t = draft.trim();
     if (!t) return;
-    const { section, text } = parseTaskCapture(t);
+    const { section, text } = parseTaskCapture(t, routes);
     // A bare route token with no text is a no-op — no junk row, the entries
     // rule. The stripped text still runs App's item grammar (#tag/!N/@).
     if (text) {
@@ -170,8 +173,10 @@ export default function SectionList({
       <div className="capture task-capture">
         <TokenField
           kinds={[
+            ...(routes.today ? (["section-today"] as const) : []),
+            ...(routes.daily ? (["section-daily"] as const) : []),
+            ...(routes.backlog ? (["section-backlog"] as const) : []),
             ...(features.projects ? (["project"] as const) : []),
-            "section",
             ...(features.taskPriorities ? (["priority"] as const) : []),
             ...(features.agent ? (["agent"] as const) : []),
           ]}

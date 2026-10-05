@@ -243,7 +243,13 @@ export default function SearchMenu({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKey}
-          placeholder="Search items… (# project filter, @ agent/my)"
+          placeholder={features.projects && features.agent
+              ? "Search items… (# project filter, @ agent/my)"
+              : features.projects
+                ? "Search items… (# project filter)"
+                : features.agent
+                  ? "Search items… (@ agent/my)"
+                  : "Search items…"}
           spellCheck={false}
         />
         <div className="search-list" ref={listRef}>

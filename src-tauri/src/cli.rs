@@ -167,6 +167,12 @@ fn store() -> anyhow::Result<std::collections::HashMap<String, String>> {
 
 /// The projects existence switch (Settings → Features). Off, the # verbs
 /// refuse — the axis doesn't exist for the GUI either.
+/// Whether a destination section exists (Settings → Features). CLI verbs
+/// refuse identically to the GUI's routes.
+fn section_enabled(name: &str) -> anyhow::Result<bool> {
+    Ok(store()?.get(&format!("dayapp-sec-{}-enabled", name)).map(String::as_str) != Some("0"))
+}
+
 fn projects_enabled() -> anyhow::Result<bool> {
     Ok(store()?.get("dayapp-projects-enabled").map(String::as_str) != Some("0"))
 }
@@ -1111,11 +1117,15 @@ fn list(db: &Db, rest: &[String]) -> anyhow::Result<()> {
         if !["today", "daily", "backlog"].contains(&s.as_str()) {
             anyhow::bail!("unknown section \"{s}\" (today | daily | backlog)");
         }
+        if !section_enabled(s)? {
+            anyhow::bail!("the {s} section is off in settings");
+        }
     }
     let filter = if hidden { HiddenFilter::Include } else { HiddenFilter::Exclude };
     let rows: Vec<(Item, &'static str)> = all_items(db, filter)?
         .into_iter()
         .filter(|(_, sec)| section.as_deref().map_or(true, |s| s == *sec))
+        .filter(|(_, sec)| section_enabled(sec).unwrap_or(true))
         .collect();
     print_rows(db, &rows)
 }
@@ -1148,14 +1158,16 @@ fn print_rows(db: &Db, rows: &[(Item, &'static str)]) -> anyhow::Result<()> {
 /// The row's text with its metadata: !priority, 🤖 agent mark, #project — the
 /// one formatting shared by --list, --search, and --task.
 fn row_meta(item: &Item, projects: &std::collections::HashMap<String, String>) -> String {
-    static FLAGS: std::sync::OnceLock<(bool, bool)> = std::sync::OnceLock::new();
-    let (prio_on, agent_on) = FLAGS.get_or_init(|| {
+    static FLAGS: std::sync::OnceLock<(bool, bool, bool)> = std::sync::OnceLock::new();
+    let (prio_on, agent_on, proj_on) = FLAGS.get_or_init(|| {
+        let flag = |k: &str| store().ok().and_then(|m| m.get(k).cloned()) != Some("0".into());
         (
-            store().ok().and_then(|m| m.get("dayapp-task-priorities-enabled").cloned()) != Some("0".into()),
-            store().ok().and_then(|m| m.get("dayapp-agent-enabled").cloned()) != Some("0".into()),
+            flag("dayapp-task-priorities-enabled"),
+            flag("dayapp-agent-enabled"),
+            flag("dayapp-projects-enabled"),
         )
     });
-    row_meta_in(item, projects, *prio_on, *agent_on)
+    row_meta_in(item, projects, *prio_on, *agent_on, *proj_on)
 }
 
 /// The axis-aware variant: existence switches off (Settings → Features), the
@@ -1165,6 +1177,7 @@ fn row_meta_in(
     projects: &std::collections::HashMap<String, String>,
     priorities: bool,
     agent_axis: bool,
+    project_axis: bool,
 ) -> String {
     let prio = if priorities {
         item.priority.map(|p| format!(" !{p}")).unwrap_or_default()
@@ -1174,11 +1187,14 @@ fn row_meta_in(
     // The delegation axis: 🤖 marks rows assigned to the AI agent, so an
     // agent (or Faraz over SSH) can see which tasks are theirs to take.
     let agent = if agent_axis && item.assigned_to_agent { "🤖 " } else { "" };
-    let proj = item
-        .project_id
-        .as_ref()
-        .and_then(|id| projects.get(id).map(|n| format!(" #{n}")))
-        .unwrap_or_default();
+    let proj = if project_axis {
+        item.project_id
+            .as_ref()
+            .and_then(|id| projects.get(id).map(|n| format!(" #{n}")))
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
     format!("{prio}{agent}{}{proj}", item.text)
 }
 
@@ -1213,7 +1229,9 @@ fn task(db: &Db, rest: &[String]) -> anyhow::Result<()> {
         }
     }
     if let Some(r) = item.remind_at.as_deref() {
-        println!("  remind {}", pretty_date(r));
+        if store()?.get("dayapp-reminders-enabled").map(String::as_str) != Some("0") {
+            println!("  remind {}", pretty_date(r));
+        }
     }
     if item.details.trim().is_empty() {
         println!("no details");
@@ -1234,6 +1252,9 @@ fn add(db: &Db, rest: &[String]) -> anyhow::Result<()> {
             section = it.next().ok_or_else(|| anyhow::anyhow!("--to needs a section (today | daily | backlog)"))?.clone();
             if !["today", "daily", "backlog"].contains(&section.as_str()) {
                 anyhow::bail!("unknown section \"{section}\"");
+            }
+            if !section_enabled(&section)? {
+                anyhow::bail!("the {section} section is off in settings");
             }
         } else {
             text = Some(a.clone());
@@ -1270,6 +1291,9 @@ fn move_item(db: &Db, rest: &[String]) -> anyhow::Result<()> {
     let to = to.ok_or_else(|| anyhow::anyhow!("--move needs --to <section> (today | daily | backlog)"))?;
     if !["today", "daily", "backlog"].contains(&to.as_str()) {
         anyhow::bail!("unknown section \"{to}\"");
+    }
+    if !section_enabled(&to)? {
+        anyhow::bail!("the {to} section is off in settings");
     }
     let item = find_item(db, &q)?;
     if item.section == to {

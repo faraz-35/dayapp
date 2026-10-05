@@ -1413,7 +1413,7 @@ function DayAppBody() {
     // go INTO the create call: the `created` action snapshots the row's axes
     // at birth, so they must be on it before the log fires. Only `@` stays a
     // post-create set (actions carry no agent snapshot).
-    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects, projectsEnabled, taskPrioritiesEnabled);
+    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects, { projects: projectsEnabled, priorities: taskPrioritiesEnabled, agent: agentEnabled });
     const assignId = projectId ?? (await materializeTagProject(createProjectName));
     // !0 ("clear") is a no-op at capture — a fresh item has no priority yet.
     // Same for @0: fresh rows start unassigned.
@@ -1512,7 +1512,7 @@ function DayAppBody() {
   };
 
   const handleCommitEdit = async (id: string, raw: string) => {
-    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects, projectsEnabled, taskPrioritiesEnabled);
+    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects, { projects: projectsEnabled, priorities: taskPrioritiesEnabled, agent: agentEnabled });
     setEditingId(null);
     if (!text) return;
     // Apply the stripped text, and — only if a token resolved or created a
@@ -1873,9 +1873,9 @@ function DayAppBody() {
       // an empty section.
       else if (a === "j" && journalEnabled) { trace("capture.focus", { address: seq, target: "notes", route: "##j" }); focusCapture("notes", "##j"); }
       else if (a === "q" && quotesEnabled) { trace("capture.focus", { address: seq, target: "notes", route: "##q" }); focusCapture("notes", "##q"); }
-      else if (a === "t") { trace("capture.focus", { address: seq, target: "tasks", route: "##t" }); focusCapture("tasks", "##t"); }
-      else if (a === "d") { trace("capture.focus", { address: seq, target: "tasks", route: "##d" }); focusCapture("tasks", "##d"); }
-      else if (a === "b") { trace("capture.focus", { address: seq, target: "tasks", route: "##b" }); focusCapture("tasks", "##b"); }
+      else if (a === "t" && sectionsEnabled.today) { trace("capture.focus", { address: seq, target: "tasks", route: "##t" }); focusCapture("tasks", "##t"); }
+      else if (a === "d" && sectionsEnabled.daily) { trace("capture.focus", { address: seq, target: "tasks", route: "##d" }); focusCapture("tasks", "##d"); }
+      else if (a === "b" && sectionsEnabled.backlog) { trace("capture.focus", { address: seq, target: "tasks", route: "##b" }); focusCapture("tasks", "##b"); }
       else if (n >= 1 && n <= 9) {
         // Note priorities off → the flat n[1-9] scheme: the digit is the row.
         // On → the tier-row scheme (tier digit 4 = unmarked, then the row).
@@ -2129,6 +2129,9 @@ function DayAppBody() {
     reminders: remindersEnabled,
     hide: hideEnabled,
     tasks: tasksEnabled && tasksVisible,
+    today: tasksEnabled && sectionsEnabled.today,
+    daily: tasksEnabled && sectionsEnabled.daily,
+    backlog: tasksEnabled && sectionsEnabled.backlog,
     notes: notesEnabled,
     goals: goalsEnabled,
     journal: journalEnabled,
@@ -2331,6 +2334,11 @@ function DayAppBody() {
               <SectionList
                 items={renderItems}
                 rowBg={tasksCard}
+                routes={{
+                  today: sectionsEnabled.today,
+                  daily: sectionsEnabled.daily,
+                  backlog: sectionsEnabled.backlog,
+                }}
                 /* Fun Mode removes Daily entirely — an emptied section must
                    not leave its header behind (the toggle's semantics,
                    composed with the lens; sectionsVisible itself is untouched).

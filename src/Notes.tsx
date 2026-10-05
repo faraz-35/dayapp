@@ -244,7 +244,7 @@ export default function Notes({
   // stripped from the body, applied through the setters, and the note lands in
   // its tier group right away via sortNotes — App.handleCreate's shape.
   const handleCreate = async (raw: string) => {
-    const { text, projectId, createProjectName, priority } = parseNoteCapture(raw, projects, features.projects, features.notePriorities);
+    const { text, projectId, createProjectName, priority } = parseNoteCapture(raw, projects, { projects: features.projects, priorities: features.notePriorities });
     trace("capture.note", { text: clip(text) });
     const note = await notesApi.create(text);
     const assignId = projectId ?? (createProjectName ? (await onCreateProject(createProjectName)).id : null);
@@ -374,7 +374,7 @@ export default function Notes({
           <TokenField
             kinds={[
               ...(features.projects ? (["project"] as const) : []),
-              "priority",
+              ...(features.notePriorities ? (["priority"] as const) : []),
               ...(entryRoutes.journal ? (["entry-journal"] as const) : []),
               ...(entryRoutes.quotes ? (["entry-quote"] as const) : []),
             ]}
@@ -553,7 +553,7 @@ function NoteInput({
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
-    const s = splitNoteFooter(val, features.projects, features.notePriorities);
+    const s = splitNoteFooter(val, { projects: features.projects, priorities: features.notePriorities });
     if (s.priority !== null || s.tag !== null || s.clearProject) {
       trace("note.tokens", {
         ...(s.priority !== null && { priority: s.priority }),
@@ -578,7 +578,7 @@ function NoteInput({
     const full = flushAndCatch();
     trace("note.export", { name: exportName(full) });
     try {
-      await notesApi.saveAs(exportName(full), splitNoteFooter(full, features.projects, features.notePriorities).body);
+      await notesApi.saveAs(exportName(full), splitNoteFooter(full, { projects: features.projects, priorities: features.notePriorities }).body);
     } catch (e) {
       log.warn("notes: export failed", e);
     }
@@ -644,7 +644,7 @@ function NoteInput({
   // renders through the mirror — since the transparency flip it IS the
   // visible text layer, so it must always mount with the textarea.
   const mirrorNodes = useMemo(() => {
-    const tokens = scanNoteFooterTokens(val, features.projects, features.notePriorities);
+    const tokens = scanNoteFooterTokens(val, { projects: features.projects, priorities: features.notePriorities });
     const finds = findOpen ? matches : [];
     // A trailing newline collapses at the mirror's block end (the textarea
     // still reserves the line); a zero-width tail makes the mirror take it.
@@ -736,7 +736,7 @@ function NoteInput({
               right-aligned; the preview yields the hover-action cluster its
               corner while revealed (CSS on .note-preview). */}
           <span className="note-preview-text">
-            {splitNoteFooter(val, features.projects, features.notePriorities).body
+            {splitNoteFooter(val, { projects: features.projects, priorities: features.notePriorities }).body
               .split("\n")
               .find((l) => l.trim().length > 0)
               ?.trim() ?? ""}

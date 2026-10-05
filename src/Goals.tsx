@@ -69,7 +69,7 @@ export default function Goals({
     const raw = draft.trim();
     setDraft("");
     if (!raw) return;
-    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects, features.projects);
+    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects, { projects: features.projects });
     if (!text) return;
     trace("capture.goal", { horizon: horizon ?? "short", text: clip(text) });
     try {
@@ -88,7 +88,7 @@ export default function Goals({
 
   const handleCommitEdit = async (goal: Goal, raw: string) => {
     setEditingId(null);
-    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects, features.projects);
+    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects, { projects: features.projects });
     if (!text) return;
     try {
       const assignId = projectId ?? (createProjectName ? (await onCreateProject(createProjectName)).id : null);

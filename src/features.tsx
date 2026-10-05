@@ -18,6 +18,9 @@ export interface Features {
   /** The surfaces (already state-backed in App — mirrored here for parsing
    *  flags so one context answers every "does this exist" question). */
   tasks: boolean;
+  today: boolean;
+  daily: boolean;
+  backlog: boolean;
   notes: boolean;
   goals: boolean;
   journal: boolean;
@@ -27,7 +30,8 @@ export interface Features {
 export const FeaturesContext = createContext<Features>({
   projects: true, taskPriorities: true, notePriorities: true, agent: true,
   timer: true, reminders: true, hide: true,
-  tasks: true, notes: true, goals: true, journal: true, quotes: true,
+  tasks: true, today: true, daily: true, backlog: true,
+  notes: true, goals: true, journal: true, quotes: true,
 });
 
 export const useFeatures = () => useContext(FeaturesContext);

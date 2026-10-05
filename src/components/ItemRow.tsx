@@ -189,7 +189,7 @@ export default function ItemRow({
           {!isTiming && features.timer && totalSec > 0 && (
             <span className="time-label" title="Time tracked">⏱ {formatDuration(totalSec)}</span>
           )}
-          {item.remindAt && (
+          {features.reminders && item.remindAt && (
             <span className="reminder-chip" title={`Reminds on ${item.remindAt}`}>
               → {formatReminder(item.remindAt)}
             </span>

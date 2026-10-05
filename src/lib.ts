@@ -187,8 +187,9 @@ export const goalsApi = {
 export function parseGoalText(
   text: string,
   projects: Project[],
-  allowProject = true,
+  axes?: TokenAxes,
 ): { text: string; horizon: GoalHorizon | null; projectId: string | null; createProjectName?: string } {
+  const allowProject = axes?.projects !== false;
   const trimmed = text.trim();
   const words = trimmed.split(/\s+/);
   const first = words[0]?.toLowerCase() ?? "";
@@ -541,25 +542,34 @@ export const projectColor = (id: string): string => {
  *  shape: a standalone `@` assigns, `@0` is the explicit clear, `@word` stays
  *  literal (so "ping @bob" is never eaten); last token wins.
  */
+/** Which token axes a surface's grammar carries — ON by default; a false
+ *  axis never parses: its sigils stay literal prose and nothing resolves,
+ *  creates, or strips. Mirrors the TokenField `kinds` list so what colors is
+ *  exactly what processes (the single-source invariant), driven from
+ *  Settings → Features. */
+export interface TokenAxes {
+  projects?: boolean;
+  priorities?: boolean;
+  agent?: boolean;
+}
+
+const resolveAxes = (axes?: TokenAxes) => ({
+  projects: axes?.projects !== false,
+  priorities: axes?.priorities !== false,
+  agent: axes?.agent !== false,
+});
+
 export function parseItemTags(
   text: string,
   projects: Project[],
-  /** The projects existence switch (Settings → Features): off, `#tag` never
-   *  parses — it stays literal prose, and nothing resolves or creates. */
-  allowProject = true,
-  /** The priority axis switch: off, `!N` stays literal too. */
-  allowPriority = true,
+  axes?: TokenAxes,
 ): { text: string; projectId: string | null; createProjectName?: string; priority: 0 | 1 | 2 | 3 | null; agent: boolean | null } {
-  const noAgent = parseAgentToken(text);
-  if (!allowPriority) {
-    if (!allowProject) return { text: noAgent.text, projectId: null, priority: null, agent: noAgent.agent };
-    const project = parseProjectTag(noAgent.text, projects);
-    return { ...project, priority: null, agent: noAgent.agent };
-  }
-  const stripped = parsePriorityTag(noAgent.text);
-  if (!allowProject) return { text: stripped.text, projectId: null, priority: stripped.priority, agent: noAgent.agent };
-  const project = parseProjectTag(stripped.text, projects);
-  return { ...project, priority: stripped.priority, agent: noAgent.agent };
+  const a = resolveAxes(axes);
+  const noAgent = a.agent ? parseAgentToken(text) : { text, agent: null };
+  const unPrio = a.priorities ? parsePriorityTag(noAgent.text) : { text: noAgent.text, priority: null as 0 | 1 | 2 | 3 | null };
+  if (!a.projects) return { text: unPrio.text, projectId: null, priority: unPrio.priority, agent: noAgent.agent };
+  const project = parseProjectTag(unPrio.text, projects);
+  return { ...project, priority: unPrio.priority, agent: noAgent.agent };
 }
 
 // ---- Token scanner ------------------------------------------------------------
@@ -570,7 +580,7 @@ export function parseItemTags(
 // what colors as a token while you type is exactly what processes at Enter —
 // the two can never drift apart.
 
-export type TokenKind = "entry" | "entry-journal" | "entry-quote" | "section" | "project" | "priority" | "agent";
+export type TokenKind = "entry" | "entry-journal" | "entry-quote" | "section" | "section-today" | "section-daily" | "section-backlog" | "project" | "priority" | "agent";
 
 /** A matched token. `start`/`end` span the sigil through the token's last
  *  char (the word-boundary space before it stays plain text); `value` is the
@@ -655,9 +665,16 @@ export function scanTokens(text: string, kinds: readonly TokenKind[]): TokenSpan
     if (ok && m) return [{ kind: "entry", start: 0, end: m[0].length, value: m[1] }];
   }
   const out: TokenSpan[] = [];
-  if (kinds.includes("section")) {
+  if (kinds.includes("section") || kinds.includes("section-today")
+      || kinds.includes("section-daily") || kinds.includes("section-backlog")) {
     const m = text.match(SECTION_RE);
-    if (m) out.push({ kind: "section", start: 0, end: m[0].length, value: m[1] });
+    if (m) {
+      const ok = kinds.includes("section")
+        || (m[1] === "t" ? kinds.includes("section-today")
+          : m[1] === "d" ? kinds.includes("section-daily")
+          : kinds.includes("section-backlog"));
+      if (ok) out.push({ kind: "section", start: 0, end: m[0].length, value: m[1] });
+    }
   }
   const sigils: Array<[TokenKind, RegExp]> = [
     ["project", PROJECT_RE],
@@ -850,7 +867,9 @@ function footerTokenKind(word: string): TokenKind | null {
  *  line isn't a catchable footer (prose on the line, no blank line above, or
  *  nothing to catch) — and inline tokens elsewhere in the body never color,
  *  because they never process there. */
-export function scanNoteFooterTokens(body: string, allowProject = true, allowPriority = true): TokenSpan[] {
+export function scanNoteFooterTokens(body: string, axes?: TokenAxes): TokenSpan[] {
+  const allowProject = axes?.projects !== false;
+  const allowPriority = axes?.priorities !== false;
   const f = footerLine(body);
   if (!f) return [];
   const line = body.slice(f.start, f.end);
@@ -881,11 +900,9 @@ export function scanNoteFooterTokens(body: string, allowProject = true, allowPri
  *  markdown-ish "# Heading" or a stray "wow!!" never parses. */
 export function splitNoteFooter(
   body: string,
-  /** The projects existence switch: off, `#tag`/`#0` are not footer tokens —
-   *  a line carrying one is body text, never stripped. */
-  allowProject = true,
-  /** The note-priorities switch: off, `!N` is prose the same way. */
-  allowPriority = true,
+  /** Off, `#tag`/`#0` are not footer tokens — a line carrying one is body
+   *  text, never stripped. Same for `!N` when the priority axis is off. */
+  axes?: TokenAxes,
 ): {
   body: string;
   /** 0 = the explicit `!0` clear; null = no priority token on the line. */
@@ -894,6 +911,8 @@ export function splitNoteFooter(
   /** A `#0` token — the explicit project clear. */
   clearProject: boolean;
 } {
+  const allowProject = axes?.projects !== false;
+  const allowPriority = axes?.priorities !== false;
   const f = footerLine(body);
   if (f) {
     let priority: 0 | 1 | 2 | 3 | null = null;
@@ -925,21 +944,16 @@ export function splitNoteFooter(
 export function parseNoteCapture(
   text: string,
   projects: Project[],
-  allowProject = true,
-  allowPriority = true,
+  axes?: TokenAxes,
 ): { text: string; priority: 0 | 1 | 2 | 3 | null; projectId: string | null; createProjectName?: string } {
+  const a = resolveAxes(axes);
   // Strip standalone `#0` tokens first so parseProjectTag can't resolve or
   // create a project literally named "0".
-  const noClear = allowProject ? stripNoteClearTags(text) : text;
-  if (!allowPriority) {
-    if (!allowProject) return { text: noClear, priority: null, projectId: null };
-    const project = parseProjectTag(noClear, projects);
-    return { ...project, priority: null };
-  }
-  const stripped = parsePriorityTag(noClear);
-  if (!allowProject) return { text: stripped.text, priority: stripped.priority, projectId: null };
-  const project = parseProjectTag(stripped.text, projects);
-  return { ...project, priority: stripped.priority };
+  const noClear = a.projects ? stripNoteClearTags(text) : text;
+  const unPrio = a.priorities ? parsePriorityTag(noClear) : { text: noClear, priority: null as 0 | 1 | 2 | 3 | null };
+  if (!a.projects) return { text: unPrio.text, priority: unPrio.priority, projectId: null };
+  const project = parseProjectTag(unPrio.text, projects);
+  return { ...project, priority: unPrio.priority };
 }
 
 function stripNoteClearTags(text: string): string {
@@ -989,11 +1003,18 @@ export function parseEntryCapture(text: string): { kind: EntryKind; text: string
  *  stripped from the text. No token = Today — the default working destination.
  *  A bare token with no text is the caller's no-op (no junk row), same rule as
  *  the entry routes. */
-export function parseTaskCapture(text: string): { section: Section; text: string } {
+export function parseTaskCapture(
+  text: string,
+  /** Which destination sections exist (Settings → Features). A route to a
+   *  switched-off section degrades to the default (Today), token stripped —
+   *  the same degrade-not-die rule the entry routes follow. */
+  routes: { today: boolean; daily: boolean; backlog: boolean } = { today: true, daily: true, backlog: true },
+): { section: Section; text: string } {
   const m = text.match(SECTION_RE);
   if (!m) return { section: "today", text };
+  const section = m[1] === "t" ? "today" : m[1] === "d" ? "daily" : "backlog";
   return {
-    section: m[1] === "t" ? "today" : m[1] === "d" ? "daily" : "backlog",
+    section: routes[section] ? section : "today",
     text: text.slice(m[0].length).trim(),
   };
 }
