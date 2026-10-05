@@ -161,18 +161,36 @@ function CloseIcon() {
   );
 }
 
-// The settings door's glyph: a hub with eight spokes — the gear, in the
-// set's stroke language (16-box, stroke 1.7 round, currentColor).
+// The settings door's glyph: a cog — chunky teeth around a ring plus a
+// center hole (thin rays from a small core read as a sun, the reason the
+// first attempt failed). Stroke language as the rest of the set.
 function SettingsIcon() {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <circle cx="8" cy="8" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="8" cy="8" r="3.4" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="8" cy="8" r="1.1" fill="currentColor" stroke="none" />
       <path
-        d="M8 1.6v2.1M8 12.3v2.1M1.6 8h2.1M12.3 8h2.1M3.5 3.5l1.5 1.5M11 11l1.5 1.5M12.5 3.5 11 5M5 11l-1.5 1.5"
+        d="M8 1.4v2.2M8 12.4v2.2M1.4 8h2.2M12.4 8h2.2M3.3 3.3l1.6 1.6M11.1 11.1l1.6 1.6M12.7 3.3l-1.6 1.6M4.9 11.1l-1.6 1.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// The theme toggle's glyph: a crescent moon — dark/light in one mark
+// (a bisected circle was taken: it's the hidden-entries mark).
+function ThemeToggleIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M13.2 9.3A5.6 5.6 0 1 1 6.7 2.8a4.4 4.4 0 0 0 6.5 6.5Z"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.7"
-        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
@@ -337,9 +355,10 @@ function DayAppBody() {
         journal: raw.journal !== false,
         quotes: raw.quotes !== false,
         settings: raw.settings !== false,
+        theme: raw.theme !== false,
       };
     } catch {
-      return { hidden: true, analytics: true, journal: true, quotes: true, settings: true };
+      return { hidden: true, analytics: true, journal: true, quotes: true, settings: true, theme: true };
     }
   });
   // Journal/Quotes existence (Settings → Features): the written-entry pages,
@@ -1760,6 +1779,18 @@ function DayAppBody() {
   const toggleHeaderBtn = useCallback((btn: HeaderBtn) => {
     setHeaderBtns((b) => ({ ...b, [btn]: !b[btn] }));
   }, []);
+  // The header theme toggle: to the opposite side of the ladder. A custom
+  // theme goes by its background's luminance (a light-feeling custom lands
+  // on Dark, and vice versa).
+  const toggleTheme = useCallback(() => {
+    const current = resolveTheme(themeId, customThemes);
+    const lightNow = resolveTheme("light", customThemes);
+    const target = current.colors.bg.toLowerCase() === lightNow.colors.bg.toLowerCase() || current.id === "light"
+      ? "dark"
+      : "light";
+    trace("theme.toggle", { from: themeId, to: target });
+    setThemeId(target);
+  }, [themeId, customThemes]);
   // Themes (Settings → Appearance). Activating stores the id (the apply
   // effect skins the app); deleting the active theme falls back to Dark.
   const activateTheme = useCallback((id: string) => {
@@ -1781,6 +1812,9 @@ function DayAppBody() {
   }, []);
   const createView = useCallback((v: CustomView) => {
     setViews((vs) => [...vs, v]);
+  }, []);
+  const updateView = useCallback((id: string, v: CustomView) => {
+    setViews((vs) => vs.map((x) => (x.id === id ? v : x)));
   }, []);
   const deleteView = useCallback((id: string) => {
     setViews((vs) => vs.filter((v) => v.id !== id));
@@ -2179,7 +2213,14 @@ function DayAppBody() {
               }}
               title={showHiddenItems || showHiddenNotes ? "Hide hidden entries" : "Show hidden entries inline"}
               aria-label="Toggle hidden entries"
-            >◐</button>
+            >
+              {/* The ◐ mark, drawn at the set's size — the text glyph rode
+                  the font's metrics and rendered oversized. */}
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <circle cx="8" cy="8" r="5.9" fill="none" stroke="currentColor" strokeWidth="1.7" />
+                <path d="M8 2.1a5.9 5.9 0 0 1 0 11.8Z" fill="currentColor" stroke="none" />
+              </svg>
+            </button>
           )}
           {headerBtns.analytics && (
             <button
@@ -2231,6 +2272,19 @@ function DayAppBody() {
           )}
           {/* The Settings door (the gear) — same per-button toggle as the
               other view doors: active reads the close X and returns. */}
+          {/* The theme toggle — one click to the other side of the ladder. */}
+          {headerBtns.theme && (
+          <button
+            className="icon-btn"
+            onClick={toggleTheme}
+            title={themeId === "light" || resolveTheme(themeId, customThemes).colors.bg.toLowerCase() === "#f7f7f8"
+              ? "Switch to dark"
+              : "Switch to light"}
+            aria-label="Toggle theme"
+          >
+            <ThemeToggleIcon />
+          </button>
+          )}
           {headerBtns.settings && (
             <button
               className={`icon-btn ${view === "settings" ? "active" : ""}`}
@@ -2397,6 +2451,7 @@ function DayAppBody() {
             activeViewId={activeViewId}
             onToggleViewActive={toggleViewActive}
             onCreateView={createView}
+            onUpdateView={updateView}
             onDeleteView={deleteView}
           />
         ) : view === "journal" ? (

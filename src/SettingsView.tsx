@@ -26,7 +26,7 @@ export type FeatureKey =
   | "projects" | "taskPriorities" | "notePriorities" | "agent" | "timer" | "reminders" | "hide";
 
 // The header's icon buttons — each an On/Off choice in the Header group.
-export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes" | "settings";
+export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes" | "settings" | "theme";
 
 const HEADER_BUTTONS: { key: HeaderBtn; label: string; hint: string }[] = [
   { key: "hidden", label: "Hidden entries", hint: "the ◐ archive peek" },
@@ -34,6 +34,7 @@ const HEADER_BUTTONS: { key: HeaderBtn; label: string; hint: string }[] = [
   { key: "journal", label: "Journal", hint: "the prose icon" },
   { key: "quotes", label: "Quotes", hint: "the quote icon" },
   { key: "settings", label: "Settings", hint: "the gear icon" },
+  { key: "theme", label: "Theme toggle", hint: "the moon icon — dark/light in one click" },
 ];
 
 export interface CustomView {
@@ -136,7 +137,7 @@ const FEATURES: { key: FeatureKey; label: string; hint: string }[] = [
 
 export default function SettingsView({
   features, onToggleFeature, projects, views, activeViewId,
-  onToggleViewActive, onCreateView, onDeleteView,
+  onToggleViewActive, onCreateView, onUpdateView, onDeleteView,
   notesCard, tasksCard, onSetCard, headerBtns, onToggleHeaderBtn,
   themeId, customThemes, onActivateTheme, onCreateTheme, onDeleteTheme,
 }: {
@@ -147,6 +148,7 @@ export default function SettingsView({
   activeViewId: string | null;
   onToggleViewActive: (id: string) => void;
   onCreateView: (view: CustomView) => void;
+  onUpdateView: (id: string, view: CustomView) => void;
   onDeleteView: (id: string) => void;
   notesCard: boolean;
   tasksCard: boolean;
@@ -163,6 +165,9 @@ export default function SettingsView({
   // open the Views form too (2026-10-05). The theme form's gate is its draft
   // (null = closed), so only the Views form needs a boolean.
   const [creatingView, setCreatingView] = useState(false);
+  /** The view being edited (✎ on its row) — the form saves back into it. */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [goals, setGoals] = useState(true);
   const [name, setName] = useState("");
   const [priorities, setPriorities] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
   const [agent, setAgent] = useState<CustomView["agent"]>("all");
@@ -192,32 +197,57 @@ export default function SettingsView({
   };
 
   const resetDraft = () => {
+    setEditingId(null);
     setName("");
     setPriorities([1, 2, 3]);
     setAgent("all");
     setProjectIds([]);
     setSections({ today: true, daily: true, backlog: true });
     setNotes(true);
+    setGoals(true);
     setNotePriorities([1, 2, 3]);
   };
 
-  const create = () => {
+  const save = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    trace("views.create", { name: clip(trimmed) });
-    onCreateView({
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    const view: CustomView = {
+      id: editingId ?? Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
       name: trimmed,
       priorities: [...priorities],
       agent,
       projectIds,
-      goals: true,
+      goals,
       sections: { ...sections },
       notes,
       notePriorities: [...notePriorities],
-    });
+    };
+    if (editingId) {
+      trace("views.update", { name: clip(trimmed) });
+      onUpdateView(editingId, view);
+    } else {
+      trace("views.create", { name: clip(trimmed) });
+      onCreateView(view);
+    }
     resetDraft();
+    setEditingId(null);
     setCreatingView(false);
+  };
+
+  /** Open the form pre-filled with a view's values — the edit path. */
+  const edit = (id: string) => {
+    const v = views.find((x) => x.id === id);
+    if (!v) return;
+    setName(v.name);
+    setPriorities([...v.priorities]);
+    setAgent(v.agent);
+    setProjectIds([...v.projectIds]);
+    setSections({ ...v.sections });
+    setNotes(v.notes);
+    setGoals(v.goals);
+    setNotePriorities([...v.notePriorities]);
+    setEditingId(id);
+    setCreatingView(true);
   };
 
   const toggleTier = (
@@ -428,6 +458,12 @@ export default function SettingsView({
                 {active && <span className="settings-state on">Active</span>}
                 <button
                   className="settings-x"
+                  title="Edit view"
+                  aria-label={`Edit ${v.name}`}
+                  onClick={() => edit(v.id)}
+                >✎</button>
+                <button
+                  className="settings-x"
                   title="Delete view"
                   aria-label={`Delete ${v.name}`}
                   onClick={() => {
@@ -456,7 +492,7 @@ export default function SettingsView({
                 spellCheck={false}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") { e.preventDefault(); create(); }
+                  if (e.key === "Enter") { e.preventDefault(); save(); }
                   else if (e.key === "Escape") { e.preventDefault(); setCreatingView(false); resetDraft(); }
                 }}
               />
@@ -533,7 +569,7 @@ export default function SettingsView({
               )}
               <div className="settings-form-actions">
                 <button className="pill" onClick={() => { setCreatingView(false); resetDraft(); }}>Cancel</button>
-                <button className="settings-save" disabled={!name.trim()} onClick={create}>Create View</button>
+                <button className="settings-save" disabled={!name.trim()} onClick={save}>{editingId ? "Save Changes" : "Create View"}</button>
               </div>
             </div>
           )}
