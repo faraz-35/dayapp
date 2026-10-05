@@ -29,25 +29,10 @@ import { trace } from "./devlog";
 // these stand in for the captured quotes instead of mixing with them: a
 // heavy quote from the real pool would break the register. Turn the lens
 // off and the ##q pool comes back untouched.
-const FUN_QUOTES = [
-  "Slow is fine. Slow is still going.",
-  "Nothing you finish today has to be perfect. It just has to exist.",
-  "You can do anything for five minutes.",
-  "Done badly is still done.",
-  "The list will be here tomorrow. You don't have to be.",
-  "Small steps still leave footprints.",
-  "You are not behind. You are just early for later.",
-  "Rest counts as work. It's the work that makes the rest of it possible.",
-  "Start sloppy. Fix it when it's fun again.",
-  "One thing. Just pick one thing.",
-  "The tab you keep meaning to read will forgive you.",
-  "Today was a day. That's all it had to be.",
-];
 
 export default function Quotes({
   version = 0,
   open = false,
-  funMode = false,
   onClose,
   onCount,
 }: {
@@ -55,8 +40,6 @@ export default function Quotes({
   version?: number;
   /** App's render flag — the modal exists only while true. */
   open?: boolean;
-  /** Fun Mode's lens — while on, picks come from FUN_QUOTES, not the pool. */
-  funMode?: boolean;
   onClose: () => void;
   /** Reports the pool size up so App's idle watcher can skip an empty pool. */
   onCount?: (n: number) => void;
@@ -72,27 +55,24 @@ export default function Quotes({
       .then((all) => {
         const pool = all.filter((e) => e.kind === "quote");
         setQuotes(pool);
-        onCount?.(funMode ? Math.max(pool.length, 1) : pool.length);
+        onCount?.(pool.length);
       })
       .catch((e) => log.error("quotes load failed", e));
-  }, [version, funMode, onCount]);
+  }, [version, onCount]);
 
-  // Summoning picks: a random quote that isn't the last one shown. Under
-  // Fun Mode the pool is FUN_QUOTES (never empty); otherwise the captured
-  // ##q entries. `quotes` may still be loading when open lands first — the
+  // Summoning picks: a random quote that isn't the last one shown, from the
+  // captured ##q entries. `quotes` may still be loading when open lands first — the
   // effect re-runs when it arrives, so the pick happens either way.
   useEffect(() => {
     if (!open) return;
-    const all = funMode
-      ? FUN_QUOTES.map((text) => ({ text }))
-      : quotes;
+    const all = quotes;
     if (all.length === 0) return;
     const pool = all.filter((q) => q.text !== lastText.current);
     const from = pool.length > 0 ? pool : all;
     const pick = from[Math.floor(Math.random() * from.length)];
     lastText.current = pick.text;
     setCurrent(pick.text);
-  }, [open, quotes, funMode]);
+  }, [open, quotes]);
 
   if (!open || current == null) return null;
 

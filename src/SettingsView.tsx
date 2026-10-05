@@ -49,15 +49,42 @@ export interface CustomView {
   projectIds: string[];
   notes: boolean;
   notePriorities: (1 | 2 | 3)[];
+  // Whether the Goals layer renders in this view.
+  goals: boolean;
+  // Which task sections the view keeps.
+  sections: { today: boolean; daily: boolean; backlog: boolean };
 }
 
-/** Older stores kept a single `projectId` — normalize on read. */
-export const normalizeView = (v: CustomView & { projectId?: string | null }): CustomView => ({
+/** Older stores kept a single `projectId` and no goals/sections — normalize
+ *  on read. */
+export const normalizeView = (
+  v: CustomView & { projectId?: string | null },
+): CustomView => ({
   ...v,
   projectIds: v.projectIds ?? (v.projectId ? [v.projectId] : []),
+  goals: v.goals ?? true,
+  sections: v.sections ?? { today: true, daily: true, backlog: true },
 });
 
 const ALL_TIERS = [1, 2, 3] as const;
+
+/** The two classic lenses, seeded as real (editable, deletable) views on
+ *  first load. Their definitions are data now — edit them by recreating, or
+ *  delete them and they leave ⌘P with the rest. */
+export const SEED_VIEWS: CustomView[] = [
+  {
+    id: "view-focus", name: "Focus",
+    priorities: [1], agent: "all", projectIds: [],
+    notes: true, notePriorities: [1], goals: false,
+    sections: { today: true, daily: true, backlog: true },
+  },
+  {
+    id: "view-fun", name: "Fun",
+    priorities: [3], agent: "all", projectIds: [],
+    notes: true, notePriorities: [3], goals: true,
+    sections: { today: true, daily: false, backlog: true },
+  },
+];
 
 // One line on what a view shows — the row hint here and the ⌘P entry hint.
 // "everything" when no axis is narrowed.
@@ -81,6 +108,11 @@ export const viewSummary = (v: CustomView, projects: Project[]): string => {
       ? "no note tiers"
       : `notes ${[...v.notePriorities].sort().map((p) => `P${p}`).join("+")}`);
   }
+  if (!v.goals) parts.push("no goals");
+  const dropped = (["today", "daily", "backlog"] as const)
+    .filter((sec) => !v.sections[sec])
+    .map((sec) => `no ${sec}`);
+  if (dropped.length < 3) parts.push(...dropped);
   return parts.join(" · ");
 };
 
@@ -107,7 +139,6 @@ export default function SettingsView({
   onToggleViewActive, onCreateView, onDeleteView,
   notesCard, tasksCard, onSetCard, headerBtns, onToggleHeaderBtn,
   themeId, customThemes, onActivateTheme, onCreateTheme, onDeleteTheme,
-  focusMode, funMode, onToggleFocus, onToggleFun,
 }: {
   features: Record<FeatureKey, boolean>;
   onToggleFeature: (key: FeatureKey) => void;
@@ -127,10 +158,6 @@ export default function SettingsView({
   onActivateTheme: (id: string) => void;
   onCreateTheme: (theme: Theme) => void;
   onDeleteTheme: (id: string) => void;
-  focusMode: boolean;
-  funMode: boolean;
-  onToggleFocus: () => void;
-  onToggleFun: () => void;
 }) {
   // Two independent create-forms — one state for both made "+ New Theme"
   // open the Views form too (2026-10-05). The theme form's gate is its draft
@@ -140,6 +167,7 @@ export default function SettingsView({
   const [priorities, setPriorities] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
   const [agent, setAgent] = useState<CustomView["agent"]>("all");
   const [projectIds, setProjectIds] = useState<string[]>([]);
+  const [sections, setSections] = useState({ today: true, daily: true, backlog: true });
   const [notes, setNotes] = useState(true);
   const [notePriorities, setNotePriorities] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
   // The theme draft (New Theme form): eleven shades, applied live to the
@@ -168,6 +196,7 @@ export default function SettingsView({
     setPriorities([1, 2, 3]);
     setAgent("all");
     setProjectIds([]);
+    setSections({ today: true, daily: true, backlog: true });
     setNotes(true);
     setNotePriorities([1, 2, 3]);
   };
@@ -182,6 +211,8 @@ export default function SettingsView({
       priorities: [...priorities],
       agent,
       projectIds,
+      goals: true,
+      sections: { ...sections },
       notes,
       notePriorities: [...notePriorities],
     });
@@ -380,26 +411,6 @@ export default function SettingsView({
           Views
         </div>
         <div className="settings-rows">
-          {/* The built-in lenses live beside the custom views — enter/exit
-              from here, no delete (they're code, not data). */}
-          {([
-            ["Focus", focusMode, onToggleFocus, "P1 notes + Today + Daily + P1 Backlog, Goals hidden"],
-            ["Fun", funMode, onToggleFun, "the unwind view — Daily + P1/P2 hidden"],
-          ] as const).map(([name, active, toggle, hint]) => (
-            <div className="settings-row" key={name}>
-              <button
-                className="settings-main"
-                onClick={() => {
-                  trace("views.activate", { name, to: !active });
-                  toggle();
-                }}
-              >
-                <span className="settings-name">{name}</span>
-                <span className="settings-hint">{hint}</span>
-              </button>
-              {active && <span className="settings-state on">Active</span>}
-            </div>
-          ))}
           {views.map((v) => {
             const active = activeViewId === v.id;
             return (
@@ -449,15 +460,29 @@ export default function SettingsView({
                   else if (e.key === "Escape") { e.preventDefault(); setCreatingView(false); resetDraft(); }
                 }}
               />
+              {features.taskPriorities && (
+                <div className="settings-field">
+                  <span className="settings-field-label">Priorities</span>
+                  {ALL_TIERS.map((n) => (
+                    <button
+                      key={n}
+                      className={`pill${priorities.includes(n) ? " active" : ""}`}
+                      onClick={() => toggleTier(n, priorities, setPriorities)}
+                    >P{n}</button>
+                  ))}
+                </div>
+              )}
               <div className="settings-field">
-                <span className="settings-field-label">Priorities</span>
-                {ALL_TIERS.map((n) => (
-                  <button
-                    key={n}
-                    className={`pill${priorities.includes(n) ? " active" : ""}`}
-                    onClick={() => toggleTier(n, priorities, setPriorities)}
-                  >P{n}</button>
-                ))}
+                <span className="settings-field-label">Sections</span>
+                {([["today", "Today"], ["daily", "Daily"], ["backlog", "Backlog"]] as const).map(
+                  ([sec, label]) => (
+                    <button
+                      key={sec}
+                      className={`pill${sections[sec] ? " active" : ""}`}
+                      onClick={() => setSections((sc) => ({ ...sc, [sec]: !sc[sec] }))}
+                    >{label}</button>
+                  ),
+                )}
               </div>
               <div className="settings-field">
                 <span className="settings-field-label">Tasks from</span>
@@ -487,12 +512,14 @@ export default function SettingsView({
                   ))}
                 </div>
               )}
-              <div className="settings-field">
-                <span className="settings-field-label">Notes</span>
-                <button className={`pill${notes ? " active" : ""}`} onClick={() => setNotes(true)}>Show</button>
-                <button className={`pill${!notes ? " active" : ""}`} onClick={() => setNotes(false)}>Hide</button>
-              </div>
-              {notes && (
+              {features.notes && (
+                <div className="settings-field">
+                  <span className="settings-field-label">Notes</span>
+                  <button className={`pill${notes ? " active" : ""}`} onClick={() => setNotes(true)}>Show</button>
+                  <button className={`pill${!notes ? " active" : ""}`} onClick={() => setNotes(false)}>Hide</button>
+                </div>
+              )}
+              {features.notes && features.notePriorities && (
                 <div className="settings-field">
                   <span className="settings-field-label">Note tiers</span>
                   {ALL_TIERS.map((n) => (

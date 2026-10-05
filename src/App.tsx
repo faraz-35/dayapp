@@ -17,7 +17,7 @@ import Quotes from "./Quotes";
 import EntriesPage from "./EntriesPage";
 import SectionList from "./components/SectionList";
 import AnalyticsView from "./AnalyticsView";
-import SettingsView, { normalizeView, viewSummary, type CustomView, type FeatureKey, type HeaderBtn } from "./SettingsView";
+import SettingsView, { normalizeView, SEED_VIEWS, viewSummary, type CustomView, type FeatureKey, type HeaderBtn } from "./SettingsView";
 import CommandPalette, { type Command } from "./CommandPalette";
 import SearchMenu, { type SearchHit } from "./components/SearchMenu";
 import UpdateOverlay from "./UpdateOverlay";
@@ -49,10 +49,6 @@ const clampZoom = (z: number) =>
 // Masthead brand rotation: the "Live @ " words the header steps out to, one
 // picked at random every 2 minutes before returning to "Faraz" (home).
 const MASTHEAD_THEMES = ["growth", "money", "journey", "learn"] as const;
-// Fun Mode's masthead pool — the unwind counterpart to MASTHEAD_THEMES, with
-// "Fun" as home while the lens is on.
-const FUN_MASTHEAD_THEMES = ["experiment", "play", "create"] as const;
-
 // The quote screensaver's threshold: two minutes of focused stillness (no
 // key, click, pointer movement, or scroll) summons the quote modal unprompted.
 const SCREENSAVER_IDLE_MS = 120_000;
@@ -427,17 +423,11 @@ function DayAppBody() {
   // focus mode is stricter than the default working view). Exiting restores
   // whatever the toggles were. Persisted like every layout surface; Show
   // Default View exits it.
-  const [focusMode, setFocusMode] = useState(
-    () => sget("dayapp-focus-mode", "0") === "1",
-  );
   // ⌘P "Enter/Exit Fun Mode" — the unwind lens, Focus Mode's inverse: Daily
   // hidden, and P1/P2 rows drop everywhere (Today keeps only P3/unmarked;
   // same for the Backlog and the notes), leaving the non-urgent shelf. Same
   // lens contract — exiting restores the toggles untouched; persisted like
   // Focus Mode, Show Default View exits it.
-  const [funMode, setFunMode] = useState(
-    () => sget("dayapp-fun-mode", "0") === "1",
-  );
   // Custom views (the Settings page): named lenses over the display axes —
   // priority tiers, the delegation axis, project, notes + their tiers. The
   // active one composes through the same pipelines as the toggles and ⌘F
@@ -454,6 +444,15 @@ function DayAppBody() {
   const [activeViewId, setActiveViewId] = useState<string | null>(
     () => sget("dayapp-active-view", "") || null,
   );
+  // The two classic lenses ship as seeded views — present unless deliberately
+  // deleted, so a pre-views store (or a fresh one) gets them as real,
+  // editable rows. Deleting one is the deactivate: it leaves ⌘P with it.
+  useEffect(() => {
+    setViews((vs) => {
+      const missing = SEED_VIEWS.filter((seed) => !vs.some((v) => v.id === seed.id));
+      return missing.length > 0 ? [...missing, ...vs] : vs;
+    });
+  }, []);
   // ⌘P "Show/Hide Agent Tasks" — hide the 🤖-marked rows to focus on the ones
   // that are Faraz's own. Persisted like the other layout toggles; default on
   // (agent rows are normal tasks until he says otherwise).
@@ -710,8 +709,6 @@ function DayAppBody() {
     sset("dayapp-hidden-notes", showHiddenNotes ? "1" : "0");
     sset("dayapp-hidden-priorities", JSON.stringify(hiddenPriorities));
     sset("dayapp-hidden-note-priorities", JSON.stringify(hiddenNotePriorities));
-    sset("dayapp-focus-mode", focusMode ? "1" : "0");
-    sset("dayapp-fun-mode", funMode ? "1" : "0");
     sset("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
     sset("dayapp-goals-enabled", goalsEnabled ? "1" : "0");
     sset("dayapp-notes-enabled", notesEnabled ? "1" : "0");
@@ -737,15 +734,15 @@ function DayAppBody() {
     // quote line the modal replaced — one-time cleanups. (The quote
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.)
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, hideEnabled, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, hideEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
   // the masthead while it's on — home becomes "Fun" and the pool the fun
   // words (demo mode still overrides the whole line with "Live @ Demo").
   useEffect(() => {
-    const home = funMode ? "Fun" : (ownerName || "DayApp");
-    const themes = funMode ? FUN_MASTHEAD_THEMES : MASTHEAD_THEMES;
+    const home = ownerName || "DayApp";
+    const themes = MASTHEAD_THEMES;
     setLiveAt(home);
     const id = setInterval(() => {
       setLiveAt((word) => {
@@ -757,7 +754,7 @@ function DayAppBody() {
       });
     }, 120_000);
     return () => clearInterval(id);
-  }, [funMode, ownerName]);
+  }, [ownerName]);
 
   // Owner name: fetched at mount and on every demo-mode swap (a launch tour
   // starts the app on the demo db); the first-run ask opens when the real db
@@ -836,22 +833,25 @@ function DayAppBody() {
     () => views.find((v) => v.id === activeViewId) ?? null,
     [views, activeViewId],
   );
+  // A view's axes are contingent on Features: a scope along a switched-off
+  // axis is inert (the axis doesn't exist to filter by — the same rule that
+  // hides its field in the view form).
   const effHiddenPriorities = useMemo(() => {
     const hidden = new Set(hiddenPriorities);
-    if (activeView) {
+    if (taskPrioritiesEnabled && activeView) {
       for (const t of [1, 2, 3] as const) if (!activeView.priorities.includes(t)) hidden.add(t);
     }
     return [...hidden];
-  }, [hiddenPriorities, activeView]);
+  }, [hiddenPriorities, activeView, taskPrioritiesEnabled]);
   const effHiddenNotePriorities = useMemo(() => {
     const hidden = new Set(hiddenNotePriorities);
-    if (activeView && activeView.notes) {
+    if (notePrioritiesEnabled && activeView && activeView.notes) {
       for (const t of [1, 2, 3] as const) if (!activeView.notePriorities.includes(t)) hidden.add(t);
     }
     return [...hidden];
-  }, [hiddenNotePriorities, activeView]);
+  }, [hiddenNotePriorities, activeView, notePrioritiesEnabled]);
   const effAgentFilter: "agent" | "mine" | null =
-    activeView && activeView.agent !== "all" ? activeView.agent : agentFilter;
+    agentEnabled && activeView && activeView.agent !== "all" ? activeView.agent : agentFilter;
   // The effective project scope, as a set of ids: a view overrides the
   // session filter with its (possibly multiple) selection; null = all.
   const effProjectFilter: string[] | null = projectsEnabled
@@ -864,24 +864,22 @@ function DayAppBody() {
   const displayItems = useMemo<Record<Section, Item[]>>(() => {
     if (
       effHiddenPriorities.length === 0 && effProjectFilter === null &&
-      agentTasksVisible && effAgentFilter === null && !focusMode && !funMode
+      agentTasksVisible && effAgentFilter === null
     ) return items;
     const matches = (i: Item) =>
       (i.priority === null || !effHiddenPriorities.includes(i.priority)) &&
       (effProjectFilter === null || (i.projectId !== null && effProjectFilter.includes(i.projectId))) &&
       (agentTasksVisible || !i.assignedToAgent) &&
-      (effAgentFilter === null || (effAgentFilter === "agent") === i.assignedToAgent) &&
-      (!focusMode || i.section !== "backlog" || i.priority === 1) &&
-      (!funMode || i.priority === null || i.priority === 3);
+      (effAgentFilter === null || (effAgentFilter === "agent") === i.assignedToAgent);
     const flat = (list: Item[]) => [...list].sort((a, b) => a.sortOrder - b.sortOrder);
     return {
       today: items.today.filter(matches),
-      daily: funMode ? [] : items.daily.filter(matches),
+      daily: items.daily.filter(matches),
       // The priority axis off: the Backlog reads in plain manual order — a
       // priority-sorted list with no tier signal would look arbitrary.
       backlog: taskPrioritiesEnabled ? items.backlog.filter(matches) : flat(items.backlog.filter(matches)),
     };
-  }, [items, effHiddenPriorities, effProjectFilter, agentTasksVisible, effAgentFilter, focusMode, funMode, taskPrioritiesEnabled]);
+  }, [items, effHiddenPriorities, effProjectFilter, agentTasksVisible, effAgentFilter, taskPrioritiesEnabled]);
 
   // displayItems narrowed to the visible sections — a toggled-off section's
   // rows aren't rendered, searchable, keyboard-navigable, or totaled (they
@@ -1035,8 +1033,6 @@ function DayAppBody() {
         setShowHiddenNotes(false);
         setHiddenPriorities([]);
         setHiddenNotePriorities([]);
-        setFocusMode(false);
-        setFunMode(false);
         setProjectFilter(null);
         setAgentTasksVisible(true);
         setAgentFilter(null);
@@ -1127,25 +1123,6 @@ function DayAppBody() {
         );
       },
     })) : []),
-    {
-      // Focus Mode — the deep-work lens over the working view: P1 notes,
-      // Today, Daily, and P1 Backlog only (Goals hidden too). A lens, not a
-      // batch of toggle mutations: exiting restores the toggles untouched.
-      id: "toggle-focus",
-      label: focusMode ? "Exit Focus Mode" : "Enter Focus Mode",
-      hint: "P1 notes + Today + Daily + P1 Backlog",
-      run: () => { setView("list"); setFocusMode((v) => !v); },
-    },
-    {
-      // Fun Mode — the unwind lens, Focus Mode's inverse: Daily hidden and
-      // P1/P2 rows/notes dropped everywhere (Today keeps its P3/unmarked
-      // rows). Same lens contract as Focus Mode — exiting restores the
-      // toggles untouched.
-      id: "toggle-fun",
-      label: funMode ? "Exit Fun Mode" : "Enter Fun Mode",
-      hint: "Daily + P1/P2 hidden",
-      run: () => { setView("list"); setFunMode((v) => !v); },
-    },
     // Custom views (Settings): the palette is their switch too — Enter/Exit
     // <name>, the Focus Mode pattern.
     ...views.map((v) => ({
@@ -1312,7 +1289,7 @@ function DayAppBody() {
           },
         ]
       : []),
-  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects, themeId, customThemes]);
+  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects, themeId, customThemes]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -2300,7 +2277,7 @@ function DayAppBody() {
                 separate surface, shown as-is. Focus Mode hides them too: the
                 lens is stricter than the default working view, and exiting
                 restores whatever the toggle was. */}
-            {goalsEnabled && goalsVisible && !focusMode && (
+            {goalsEnabled && goalsVisible && (!activeView || activeView.goals) && (
               <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} reloadEpoch={dataEpoch} />
             )}
             {/* Notes — the lowest-friction capture surface, right under the
@@ -2321,8 +2298,6 @@ function DayAppBody() {
                 projects={projects}
                 projectFilter={effProjectFilter}
                 hiddenPriorities={effHiddenNotePriorities}
-                focusMode={focusMode}
-                funMode={funMode}
                 onCreateProject={handleCreateProject}
                 onEntryRouted={handleEntryRouted}
               />
@@ -2355,9 +2330,9 @@ function DayAppBody() {
                    Today stays but only shows its P3/unmarked rows (displayItems).
                    A Settings-disabled section drops its header the same way. */
                 visible={{
-                  today: sectionsEnabled.today && sectionsVisible.today,
-                  daily: sectionsEnabled.daily && sectionsVisible.daily && !funMode,
-                  backlog: sectionsEnabled.backlog && sectionsVisible.backlog,
+                  today: sectionsEnabled.today && sectionsVisible.today && (!activeView || activeView.sections.today),
+                  daily: sectionsEnabled.daily && sectionsVisible.daily && (!activeView || activeView.sections.daily),
+                  backlog: sectionsEnabled.backlog && sectionsVisible.backlog && (!activeView || activeView.sections.backlog),
                 }}
                 projects={projects}
                 selectedId={selectedId}
@@ -2418,10 +2393,6 @@ function DayAppBody() {
             onActivateTheme={activateTheme}
             onCreateTheme={createTheme}
             onDeleteTheme={deleteTheme}
-            focusMode={focusMode}
-            funMode={funMode}
-            onToggleFocus={() => { setView("list"); setFocusMode((v) => !v); }}
-            onToggleFun={() => { setView("list"); setFunMode((v) => !v); }}
             views={views}
             activeViewId={activeViewId}
             onToggleViewActive={toggleViewActive}
@@ -2467,7 +2438,6 @@ function DayAppBody() {
         <Quotes
           version={quotesVersion}
           open={quoteOpen}
-          funMode={funMode}
           onClose={closeQuote}
           onCount={setQuoteCount}
         />
