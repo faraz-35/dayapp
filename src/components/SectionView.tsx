@@ -12,6 +12,7 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { type HideDuration, type Item, type Project, type Section } from "../lib";
 import ItemRow, { ItemDetailsBody } from "./ItemRow";
 import { PriorityBars } from "./PriorityBars";
+import { useFeatures } from "../features";
 
 export default function SectionView({
   section, label, hint, items, projects, selectedId, editingId, detailsOpenId,
@@ -52,6 +53,7 @@ export default function SectionView({
   // the rows carry no bars here, so a single marked tier must still label
   // itself or the tier signal vanishes exactly when every row shares it.
   // Only an entirely UNMARKED Backlog renders undivided.
+  const features = useFeatures();
   const allUnmarked = items.every((i) => i.priority === null);
 
   return (
@@ -72,6 +74,7 @@ export default function SectionView({
           // filters that drop tiers just remove their boundaries — and the
           // dividers are inert: not sortable, not droppable.
           const dividerBefore =
+            features.taskPriorities &&
             section === "backlog" &&
             !allUnmarked &&
             (idx === 0 || items[idx - 1].priority !== item.priority);

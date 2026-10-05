@@ -25,6 +25,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clip, trace } from "../devlog";
 import { projectColor, type Item, type Project, type Section } from "../lib";
+import { useFeatures } from "../features";
 
 export interface SearchHit {
   item: Item;
@@ -89,8 +90,11 @@ export default function SearchMenu({
 
   // A leading `#` flips the list from item hits to projects; `@` to the
   // agent/my executor picker.
-  const projectMode = query.trimStart().startsWith("#");
-  const agentMode = !projectMode && query.trimStart().startsWith("@");
+  // The axis pickers are existence-gated (Settings → Features): with an axis
+  // off, its sigil is just text.
+  const features = useFeatures();
+  const projectMode = features.projects && query.trimStart().startsWith("#");
+  const agentMode = features.agent && !projectMode && query.trimStart().startsWith("@");
 
   // Filter hits by the query (case-insensitive substring on the item text).
   const filtered = useMemo(() => {

@@ -28,6 +28,7 @@ import NamePrompt from "./NamePrompt";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, popoverOpen, scrollIntoViewEl } from "./focusNav";
 import { BUILT_IN_THEMES, applyTheme, loadCustomThemes, resolveTheme, saveCustomThemes, type Theme } from "./themes";
 import { MIGRATED_KEYS, externallyChanged, initSettings, sget, sset, ssetMany } from "./settings";
+import { FeaturesContext, type Features } from "./features";
 
 type View = "list" | "analytics" | "journal" | "quotes" | "settings";
 
@@ -355,6 +356,31 @@ function DayAppBody() {
   );
   const [quotesEnabled, setQuotesEnabled] = useState(
     () => sget("dayapp-quotes-enabled", "1") !== "0",
+  );
+  // The #tag axis: off, projects never parse, resolve, label, or filter —
+  // `#abc` in any capture stays literal prose. Existing links stay in the db.
+  const [projectsEnabled, setProjectsEnabled] = useState(
+    () => sget("dayapp-projects-enabled", "1") !== "0",
+  );
+  // Six more existence switches (same contract: off = the axis/feature
+  // disappears everywhere, data never moves).
+  const [taskPrioritiesEnabled, setTaskPrioritiesEnabled] = useState(
+    () => sget("dayapp-task-priorities-enabled", "1") !== "0",
+  );
+  const [notePrioritiesEnabled, setNotePrioritiesEnabled] = useState(
+    () => sget("dayapp-note-priorities-enabled", "1") !== "0",
+  );
+  const [agentEnabled, setAgentEnabled] = useState(
+    () => sget("dayapp-agent-enabled", "1") !== "0",
+  );
+  const [timerEnabled, setTimerEnabled] = useState(
+    () => sget("dayapp-timer-enabled", "1") !== "0",
+  );
+  const [remindersEnabled, setRemindersEnabled] = useState(
+    () => sget("dayapp-reminders-enabled", "1") !== "0",
+  );
+  const [hideEnabled, setHideEnabled] = useState(
+    () => sget("dayapp-hide-enabled", "1") !== "0",
   );
   // Theme (Settings → Appearance): the active id resolves against the
   // built-ins plus the user's custom themes; the apply effect writes the
@@ -698,13 +724,20 @@ function DayAppBody() {
     sset("dayapp-header-buttons", JSON.stringify(headerBtns));
     sset("dayapp-journal-enabled", journalEnabled ? "1" : "0");
     sset("dayapp-quotes-enabled", quotesEnabled ? "1" : "0");
+    sset("dayapp-projects-enabled", projectsEnabled ? "1" : "0");
+    sset("dayapp-task-priorities-enabled", taskPrioritiesEnabled ? "1" : "0");
+    sset("dayapp-note-priorities-enabled", notePrioritiesEnabled ? "1" : "0");
+    sset("dayapp-agent-enabled", agentEnabled ? "1" : "0");
+    sset("dayapp-timer-enabled", timerEnabled ? "1" : "0");
+    sset("dayapp-reminders-enabled", remindersEnabled ? "1" : "0");
+    sset("dayapp-hide-enabled", hideEnabled ? "1" : "0");
     sset("dayapp-views", JSON.stringify(views));
     sset("dayapp-active-view", activeViewId ?? "");
     // Retired keys: the single-tier "only" filter era, and the rotating
     // quote line the modal replaced — one-time cleanups. (The quote
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.)
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, headerBtns, journalEnabled, quotesEnabled, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, focusMode, funMode, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, hideEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -819,7 +852,7 @@ function DayAppBody() {
   }, [hiddenNotePriorities, activeView]);
   const effAgentFilter: "agent" | "mine" | null =
     activeView && activeView.agent !== "all" ? activeView.agent : agentFilter;
-  const effProjectFilter = activeView?.projectId ?? projectFilter;
+  const effProjectFilter = projectsEnabled ? (activeView?.projectId ?? projectFilter) : null;
   const displayItems = useMemo<Record<Section, Item[]>>(() => {
     if (
       effHiddenPriorities.length === 0 && effProjectFilter === null &&
@@ -832,12 +865,15 @@ function DayAppBody() {
       (effAgentFilter === null || (effAgentFilter === "agent") === i.assignedToAgent) &&
       (!focusMode || i.section !== "backlog" || i.priority === 1) &&
       (!funMode || i.priority === null || i.priority === 3);
+    const flat = (list: Item[]) => [...list].sort((a, b) => a.sortOrder - b.sortOrder);
     return {
       today: items.today.filter(matches),
       daily: funMode ? [] : items.daily.filter(matches),
-      backlog: items.backlog.filter(matches),
+      // The priority axis off: the Backlog reads in plain manual order — a
+      // priority-sorted list with no tier signal would look arbitrary.
+      backlog: taskPrioritiesEnabled ? items.backlog.filter(matches) : flat(items.backlog.filter(matches)),
     };
-  }, [items, effHiddenPriorities, effProjectFilter, agentTasksVisible, effAgentFilter, focusMode, funMode]);
+  }, [items, effHiddenPriorities, effProjectFilter, agentTasksVisible, effAgentFilter, focusMode, funMode, taskPrioritiesEnabled]);
 
   // displayItems narrowed to the visible sections — a toggled-off section's
   // rows aren't rendered, searchable, keyboard-navigable, or totaled (they
@@ -1042,19 +1078,19 @@ function DayAppBody() {
           setSectionsVisible((v) => ({ ...v, [s]: !v[s] }));
         },
       })),
-    ...(tasksEnabled ? [{
+    ...(tasksEnabled && hideEnabled ? [{
       id: "toggle-hidden-items",
       label: showHiddenItems ? "Hide Hidden Tasks" : "Show Hidden Tasks",
       hint: "inline, dimmed",
       run: () => { setView("list"); setShowHiddenItems((v) => !v); },
     }] : []),
-    ...(notesEnabled ? [{
+    ...(notesEnabled && hideEnabled ? [{
       id: "toggle-hidden-notes",
       label: showHiddenNotes ? "Hide Hidden Notes" : "Show Hidden Notes",
       hint: "inline, dimmed",
       run: () => { setView("list"); setShowHiddenNotes((v) => !v); },
     }] : []),
-    ...(tasksEnabled ? ([1, 2, 3] as const).map((n) => ({
+    ...(tasksEnabled && taskPrioritiesEnabled ? ([1, 2, 3] as const).map((n) => ({
       id: `prio-${n}`,
       // Mirrors the row's signal bars: filled count = urgency (P1 = 3).
       // Independent like the section toggles: flipping one tier never
@@ -1069,7 +1105,7 @@ function DayAppBody() {
         );
       },
     })) : []),
-    ...(notesEnabled ? ([1, 2, 3] as const).map((n) => ({
+    ...(notesEnabled && notePrioritiesEnabled ? ([1, 2, 3] as const).map((n) => ({
       id: `notes-prio-${n}`,
       // The notes' own per-tier toggles — Notes groups by tier like the
       // Backlog, and hiding a tier drops that whole group. Independent of the
@@ -1113,7 +1149,7 @@ function DayAppBody() {
         setActiveViewId((cur) => (cur === v.id ? null : v.id));
       },
     })),
-    ...(tasksEnabled ? [{
+    ...(tasksEnabled && agentEnabled ? [{
       id: "toggle-agent-tasks",
       // The delegation axis: 🤖-marked rows are the agent's queue. Hiding them
       // leaves just the rows that need Faraz — the inverse focus of ⌘F's
@@ -1335,7 +1371,7 @@ function DayAppBody() {
   // create field — just triggered by typing the tag at the end of the text.
   // Returns the new project id, or null when there's nothing to create.
   const materializeTagProject = async (name?: string): Promise<string | null> => {
-    if (!name) return null;
+    if (!name || !projectsEnabled) return null;
     return (await handleCreateProject(name)).id;
   };
 
@@ -1377,7 +1413,7 @@ function DayAppBody() {
     // go INTO the create call: the `created` action snapshots the row's axes
     // at birth, so they must be on it before the log fires. Only `@` stays a
     // post-create set (actions carry no agent snapshot).
-    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects);
+    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects, projectsEnabled, taskPrioritiesEnabled);
     const assignId = projectId ?? (await materializeTagProject(createProjectName));
     // !0 ("clear") is a no-op at capture — a fresh item has no priority yet.
     // Same for @0: fresh rows start unassigned.
@@ -1476,7 +1512,7 @@ function DayAppBody() {
   };
 
   const handleCommitEdit = async (id: string, raw: string) => {
-    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects);
+    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects, projectsEnabled, taskPrioritiesEnabled);
     setEditingId(null);
     if (!text) return;
     // Apply the stripped text, and — only if a token resolved or created a
@@ -1707,6 +1743,29 @@ function DayAppBody() {
       setQuotesEnabled((v) => !v);
       setQuoteOpen(false);
       if (quotesEnabled && view === "quotes") setView("list");
+    } else if (key === "projects") {
+      // Off also clears the session filter — a narrowed list to a ghost axis
+      // would strand the user (the same rule the project delete follows).
+      setProjectsEnabled((v) => !v);
+      setProjectFilter(null);
+    } else if (key === "taskPriorities") setTaskPrioritiesEnabled((v) => !v);
+    else if (key === "notePriorities") setNotePrioritiesEnabled((v) => !v);
+    else if (key === "agent") setAgentEnabled((v) => !v);
+    else if (key === "timer") {
+      // Timing off while a timer runs: stop it (the session is kept) — the
+      // feature can't leave an invisible timer counting.
+      setTimerEnabled((v) => {
+        if (v && activeTimer) {
+          setActiveTimer(null);
+          timersApi.stop().catch((e) => log.warn("timer stop on disable failed", e));
+        }
+        return !v;
+      });
+    } else if (key === "reminders") setRemindersEnabled((v) => !v);
+    else if (key === "hide") {
+      setHideEnabled((v) => !v);
+      setShowHiddenItems(false);
+      setShowHiddenNotes(false);
     } else setGoalsEnabled((v) => !v);
   }, [journalEnabled, quotesEnabled, view]);
   const setCardStyle = useCallback((surface: "notes" | "tasks", card: boolean) => {
@@ -1817,9 +1876,15 @@ function DayAppBody() {
       else if (a === "t") { trace("capture.focus", { address: seq, target: "tasks", route: "##t" }); focusCapture("tasks", "##t"); }
       else if (a === "d") { trace("capture.focus", { address: seq, target: "tasks", route: "##d" }); focusCapture("tasks", "##d"); }
       else if (a === "b") { trace("capture.focus", { address: seq, target: "tasks", route: "##b" }); focusCapture("tasks", "##b"); }
-      else if (n >= 1 && n <= 4) {
-        // The Backlog's tier-row scheme over the notes' tier groups: tier
-        // digit (4 = unmarked), then the row within the tier's visible group.
+      else if (n >= 1 && n <= 9) {
+        // Note priorities off → the flat n[1-9] scheme: the digit is the row.
+        // On → the tier-row scheme (tier digit 4 = unmarked, then the row).
+        if (!notePrioritiesEnabled) {
+          const id = noteIdAt(null, n);
+          if (id) { focusNote(id); trace("focus.note", { via: "address", address: seq, id }); }
+          else trace("focus.miss", { address: seq });
+          return;
+        }
         const idx = Number(b);
         if (!(idx >= 1 && idx <= 9)) {
           // Tier digit in, index still coming — hold the sequence open.
@@ -1839,7 +1904,14 @@ function DayAppBody() {
       const id = goalIdAt(n);
       if (id) { focusGoal(id); trace("focus.goal", { via: "address", address: seq, id }); }
       else trace("focus.miss", { address: seq });
-    } else if (p === "b" && n >= 1 && n <= 4) {
+    } else if (p === "b" && n >= 1 && n <= 9) {
+      // Task priorities off → flat b[1-9] over the Backlog's rendered order.
+      if (!taskPrioritiesEnabled) {
+        const item = renderItems.backlog[n - 1];
+        if (item) { focusItem(item.id); trace("focus.task", { via: "address", address: seq, id: item.id }); }
+        else trace("focus.miss", { address: seq });
+        return;
+      }
       const idx = Number(b);
       if (!(idx >= 1 && idx <= 9)) {
         // Tier digit in, index still coming — hold the sequence open.
@@ -2048,7 +2120,23 @@ function DayAppBody() {
 
   // ---- Render ----------------------------------------------------------
 
+  const features: Features = {
+    projects: projectsEnabled,
+    taskPriorities: taskPrioritiesEnabled,
+    notePriorities: notePrioritiesEnabled,
+    agent: agentEnabled,
+    timer: timerEnabled,
+    reminders: remindersEnabled,
+    hide: hideEnabled,
+    tasks: tasksEnabled && tasksVisible,
+    notes: notesEnabled,
+    goals: goalsEnabled,
+    journal: journalEnabled,
+    quotes: quotesEnabled,
+  };
+
   return (
+    <FeaturesContext.Provider value={features}>
     <div className="app">
       <header className="header">
         {/* The list view carries the brand — "Live @ Faraz" is home, and every
@@ -2092,7 +2180,7 @@ function DayAppBody() {
           {/* ◐ toggles both hidden surfaces (tasks + notes) at once — the
               one-click archive peek over the ⌘P per-surface toggles.
               Settings → Header picks which icon buttons mount at all. */}
-          {headerBtns.hidden && (
+          {headerBtns.hidden && hideEnabled && (
             <button
               className={`icon-btn ${showHiddenItems || showHiddenNotes ? "active" : ""}`}
               onClick={() => {
@@ -2292,6 +2380,13 @@ function DayAppBody() {
               goals: goalsEnabled,
               journal: journalEnabled,
               quotes: quotesEnabled,
+              projects: projectsEnabled,
+              taskPriorities: taskPrioritiesEnabled,
+              notePriorities: notePrioritiesEnabled,
+              agent: agentEnabled,
+              timer: timerEnabled,
+              reminders: remindersEnabled,
+              hide: hideEnabled,
             }}
             onToggleFeature={toggleFeature}
             projects={projects}
@@ -2326,7 +2421,7 @@ function DayAppBody() {
       <SearchMenu
         open={searchOpen}
         hits={searchHits}
-        projects={projects}
+        projects={projectsEnabled ? projects : []}
         activeProjectId={projectFilter}
         activeAgentFilter={agentFilter}
         onClose={() => setSearchOpen(false)}
@@ -2381,5 +2476,6 @@ function DayAppBody() {
       />
       {toast && <div className="toast">{toast}</div>}
     </div>
+    </FeaturesContext.Provider>
   );
 }

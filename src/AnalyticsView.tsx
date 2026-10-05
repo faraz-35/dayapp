@@ -48,6 +48,7 @@ import {
 } from "./lib";
 import { log } from "./log";
 import { trace } from "./devlog";
+import { useFeatures } from "./features";
 
 type Range = "today" | "week" | "month" | "all" | "custom";
 
@@ -200,6 +201,7 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
   const [dash, setDash] = useState<DashboardStats | null>(null);
   const [times, setTimes] = useState<DayTaskTime[]>([]);
   const [detail, setDetail] = useState<DayDetail | null>(null);
+  const features = useFeatures();
   const [range, setRange] = useState<Range>("week");
   // What the page counts — the toggle at the left of the filter bar. The
   // picked day survives a switch: the same day re-expands through the other
@@ -578,6 +580,7 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
           );
         })()}
         <span className="anf">
+          {features.projects && (
           <span className="anf-wrap" ref={projMenuRef}>
             <button
               className={`pill anf-proj${selProjects.size ? " active" : ""}`}
@@ -611,7 +614,8 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
               </div>
             )}
           </span>
-          {([1, 2, 3, 0] as const).map((t) => (
+          )}
+          {features.taskPriorities && ([1, 2, 3, 0] as const).map((t) => (
             <button
               key={t}
               className={`pill anf-tier${selTiers.has(t) ? " active" : ""}`}
@@ -622,7 +626,7 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
               <PriorityBars priority={t === 0 ? null : t} />
             </button>
           ))}
-          {(["agent", "mine"] as const).map((a) => (
+          {features.agent && (["agent", "mine"] as const).map((a) => (
             <button
               key={a}
               className={`pill anf-agent${selAgent === a ? " active" : ""}`}
@@ -739,7 +743,7 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
                   already answers it, and a card scoped to the selection would
                   just restate the filter (100% X) while disagreeing with the
                   Done stat. */}
-              {!filter.projects && dash.projects.length > 0 && (
+              {features.projects && !filter.projects && dash.projects.length > 0 && (
                 <section className="an-card an-projects">
                   <div className="an-card-title">
                     Projects
@@ -772,10 +776,10 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
                   comparison — half height each. The comparison hides while the
                   agent axis itself is filtered (the standing split-card rule:
                   a filtered view can't compare against itself). */}
-              {(!filter.priorities || !filter.agent) && (
+              {(features.taskPriorities || features.agent) && (!filter.priorities || !filter.agent) && (
                 <div className="an-stack">
-                  {!filter.priorities && <PriorityCard tiers={dash.priorities} max={maxTier} />}
-                  {!filter.agent && (
+                  {features.taskPriorities && !filter.priorities && <PriorityCard tiers={dash.priorities} max={maxTier} />}
+                  {features.agent && !filter.agent && (
                     <section className="an-card">
                       <div className="an-card-title">Delegation</div>
                       <div className="an-segbar">

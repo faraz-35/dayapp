@@ -27,6 +27,7 @@ import {
 } from "./lib";
 import { log } from "./log";
 import { clip, trace } from "./devlog";
+import { useFeatures } from "./features";
 import ProjectMenu from "./ProjectMenu";
 import TokenField from "./TokenField";
 import { EditInput } from "./components/ItemRow";
@@ -49,6 +50,7 @@ export default function Goals({
   /** Bumps when the whole database is swapped under the app (demo mode). */
   reloadEpoch?: number;
 }) {
+  const features = useFeatures();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [draft, setDraft] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -67,7 +69,7 @@ export default function Goals({
     const raw = draft.trim();
     setDraft("");
     if (!raw) return;
-    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects);
+    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects, features.projects);
     if (!text) return;
     trace("capture.goal", { horizon: horizon ?? "short", text: clip(text) });
     try {
@@ -86,7 +88,7 @@ export default function Goals({
 
   const handleCommitEdit = async (goal: Goal, raw: string) => {
     setEditingId(null);
-    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects);
+    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects, features.projects);
     if (!text) return;
     try {
       const assignId = projectId ?? (createProjectName ? (await onCreateProject(createProjectName)).id : null);
@@ -170,7 +172,7 @@ export default function Goals({
         )}
 
         {editing ? (
-          <EditInput initial={goal.text} onCommit={(text) => handleCommitEdit(goal, text)} kinds={["project"]} />
+          <EditInput initial={goal.text} onCommit={(text) => handleCommitEdit(goal, text)} kinds={features.projects ? ["project"] : []} />
         ) : (
           <span className="item-text">{goal.text}</span>
         )}
@@ -196,13 +198,15 @@ export default function Goals({
                 >{project.name}</span>
               )}
             </div>
-            <ProjectMenu
-              kb="2"
-              projects={projects}
-              projectId={goal.projectId}
-              onAssign={(projectId) => handleSetProject(goal, projectId)}
-              onCreateProject={onCreateProject}
-            />
+            {features.projects && (
+              <ProjectMenu
+                kb="2"
+                projects={projects}
+                projectId={goal.projectId}
+                onAssign={(projectId) => handleSetProject(goal, projectId)}
+                onCreateProject={onCreateProject}
+              />
+            )}
             <button
               className="item-action danger"
               data-kb="3"
@@ -235,7 +239,7 @@ export default function Goals({
           sigil token, and stays plain. */}
       <div className="capture">
         <TokenField
-          kinds={["project"]}
+          kinds={features.projects ? ["project"] : []}
           value={draft}
           onChange={setDraft}
           onKeyDown={(e) => {

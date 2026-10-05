@@ -47,6 +47,7 @@ import { clip, trace } from "./devlog";
 import HideMenu from "./HideMenu";
 import TokenField from "./TokenField";
 import { PriorityBars } from "./components/PriorityBars";
+import { useFeatures } from "./features";
 
 // Collapsed-note ids, persisted like the UI zoom — a display preference.
 // localStorage only: collapse is UI state, not content, so the notes table
@@ -102,6 +103,7 @@ export default function Notes({
    *  here — the notes bar IS the bus. */
   onEntryRouted?: (kind: EntryKind) => void;
 }) {
+  const features = useFeatures();
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState("");
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => {
@@ -242,7 +244,7 @@ export default function Notes({
   // stripped from the body, applied through the setters, and the note lands in
   // its tier group right away via sortNotes — App.handleCreate's shape.
   const handleCreate = async (raw: string) => {
-    const { text, projectId, createProjectName, priority } = parseNoteCapture(raw, projects);
+    const { text, projectId, createProjectName, priority } = parseNoteCapture(raw, projects, features.projects, features.notePriorities);
     trace("capture.note", { text: clip(text) });
     const note = await notesApi.create(text);
     const assignId = projectId ?? (createProjectName ? (await onCreateProject(createProjectName)).id : null);
@@ -306,16 +308,20 @@ export default function Notes({
   // What the user sees: notes narrowed by the ⌘P hidden priority tiers, the ⌘F
   // project filter, and/or the Focus/Fun Mode lenses — the same pipeline the
   // task sections use. The render below groups it by tier (P1 → P3 → unmarked).
+  // The note-priorities axis off: every note reads unmarked — flat order, no
+  // dividers, no footer catch (the parse flags in splitNoteFooter handle the
+  // catch; the priority projection here handles the display).
+  const prio = (n: Note) => (features.notePriorities ? n.priority : null);
   const displayNotes = useMemo(
     () =>
       notes.filter(
         (n) =>
-          (n.priority === null || !hiddenPriorities.includes(n.priority)) &&
+          (prio(n) === null || !hiddenPriorities.includes(prio(n)!)) &&
           (projectFilter === null || n.projectId === projectFilter) &&
-          (!focusMode || n.priority === 1) &&
-          (!funMode || n.priority === null || n.priority === 3),
+          (!focusMode || prio(n) === 1) &&
+          (!funMode || prio(n) === null || prio(n) === 3),
       ),
-    [notes, hiddenPriorities, projectFilter, focusMode, funMode],
+    [notes, hiddenPriorities, projectFilter, focusMode, funMode, features.notePriorities],
   );
 
   // Dividers label every marked tier group present — including a lone one:
@@ -323,7 +329,7 @@ export default function Notes({
   // tier must still label itself or the signal vanishes exactly when every
   // note shares it. Only an entirely UNMARKED list (the plain default) renders
   // undivided — an empty track above every note is chrome, not signal.
-  const allUnmarked = displayNotes.every((n) => n.priority === null);
+  const allUnmarked = displayNotes.every((n) => prio(n) === null);
 
   const handleDelete = async (id: string) => {
     trace("note.delete");
@@ -367,7 +373,7 @@ export default function Notes({
         <div className="capture">
           <TokenField
             kinds={[
-              "project",
+              ...(features.projects ? (["project"] as const) : []),
               "priority",
               ...(entryRoutes.journal ? (["entry-journal"] as const) : []),
               ...(entryRoutes.quotes ? (["entry-quote"] as const) : []),
@@ -410,7 +416,7 @@ export default function Notes({
           <Fragment key={note.id}>
             {dividerBefore && (
               <div className="tier-divider">
-                <PriorityBars priority={note.priority} />
+                <PriorityBars priority={prio(note)} />
               </div>
             )}
             <NoteInput
@@ -456,6 +462,7 @@ function NoteInput({
   onUnhide: () => void;
   onFindClose: () => void;
 }) {
+  const features = useFeatures();
   const [val, setVal] = useState(note.body);
   const ref = useRef<HTMLTextAreaElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -546,7 +553,7 @@ function NoteInput({
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
-    const s = splitNoteFooter(val);
+    const s = splitNoteFooter(val, features.projects, features.notePriorities);
     if (s.priority !== null || s.tag !== null || s.clearProject) {
       trace("note.tokens", {
         ...(s.priority !== null && { priority: s.priority }),
@@ -571,7 +578,7 @@ function NoteInput({
     const full = flushAndCatch();
     trace("note.export", { name: exportName(full) });
     try {
-      await notesApi.saveAs(exportName(full), splitNoteFooter(full).body);
+      await notesApi.saveAs(exportName(full), splitNoteFooter(full, features.projects, features.notePriorities).body);
     } catch (e) {
       log.warn("notes: export failed", e);
     }
@@ -637,7 +644,7 @@ function NoteInput({
   // renders through the mirror — since the transparency flip it IS the
   // visible text layer, so it must always mount with the textarea.
   const mirrorNodes = useMemo(() => {
-    const tokens = scanNoteFooterTokens(val);
+    const tokens = scanNoteFooterTokens(val, features.projects, features.notePriorities);
     const finds = findOpen ? matches : [];
     // A trailing newline collapses at the mirror's block end (the textarea
     // still reserves the line); a zero-width tail makes the mirror take it.
@@ -729,12 +736,12 @@ function NoteInput({
               right-aligned; the preview yields the hover-action cluster its
               corner while revealed (CSS on .note-preview). */}
           <span className="note-preview-text">
-            {splitNoteFooter(val).body
+            {splitNoteFooter(val, features.projects, features.notePriorities).body
               .split("\n")
               .find((l) => l.trim().length > 0)
               ?.trim() ?? ""}
           </span>
-          {project && (
+          {features.projects && project && (
             <span className="project-label" style={{ color: projectColor(project.id) }}>
               {project.name}
             </span>
@@ -788,44 +795,60 @@ function NoteInput({
           title={collapsed ? "Expand note" : "Collapse note"}
           aria-label={collapsed ? "Expand note" : "Collapse note"}
         >{collapsed ? <FindChevron size={12} /> : <FindChevron up size={12} />}</button>
-        {/* ⬇ exports the body as a .txt via the native save panel — slot 2 on
-            a focused note. Only for notes with content, like the delete slot;
+        {/* ⬇ exports the body as a .txt via the native save panel — the slot
+            after collapse. Only for notes with content, like the delete slot;
             hidden notes skip it entirely (their slots are restore/delete
             only). */}
-        {!note.hidden && val.trim() && (
-          <button
-            className="item-action"
-            data-kb="2"
-            onClick={handleDownload}
-            title="Download as .txt"
-            aria-label="Download as .txt"
-          ><DownloadIcon /></button>
-        )}
-        {/* Hidden notes swap the ◐ hide menu for ↺ restore, mirroring hidden
-            item rows in Show-All mode. The digits anchor to the slots the way
-            ItemRow's hidden rows do: restore occupies the hide slot (3), delete
-            keeps its own slot (4) — so the same digit means the same verb on a
-            hidden or visible note. */}
-        {note.hidden ? (
-          <button
-            className="item-action unhide-btn"
-            data-kb="3"
-            onClick={onUnhide}
-            title="Unhide note"
-            aria-label="Unhide note"
-          >↺</button>
-        ) : (
-          <HideMenu kb="3" onHide={onHide} />
-        )}
-        {val.trim() && (
-          <button
-            className="note-delete"
-            data-kb="4"
-            onClick={onDelete}
-            title="Delete note"
-            aria-label="Delete note"
-          >×</button>
-        )}
+        {/* Digit slots are DYNAMIC — assigned left-to-right over whatever
+            renders (the existence switches in Settings remove buttons; the
+            numbering compacts, never holes). Hidden notes swap the ◐ hide
+            menu for ↺ restore and skip ⬇, mirroring hidden item rows. */}
+        {(() => {
+          let n = 0;
+          const next = () => String(++n);
+          const slots: Record<string, string> = {};
+          if (note.hidden) {
+            slots.unhide = next();
+            slots.delete = next();
+          } else {
+            slots.download = next();
+            if (features.hide) slots.hide = next();
+            slots.delete = next();
+          }
+          return (
+            <>
+              {!note.hidden && val.trim() && (
+                <button
+                  className="item-action"
+                  data-kb={slots.download}
+                  onClick={handleDownload}
+                  title="Download as .txt"
+                  aria-label="Download as .txt"
+                ><DownloadIcon /></button>
+              )}
+              {note.hidden ? (
+                <button
+                  className="item-action unhide-btn"
+                  data-kb={slots.unhide}
+                  onClick={onUnhide}
+                  title="Unhide note"
+                  aria-label="Unhide note"
+                >↺</button>
+              ) : (
+                features.hide && <HideMenu kb={slots.hide} onHide={onHide} />
+              )}
+              {val.trim() && (
+                <button
+                  className="note-delete"
+                  data-kb={slots.delete}
+                  onClick={onDelete}
+                  title="Delete note"
+                  aria-label="Delete note"
+                >×</button>
+              )}
+            </>
+          );
+        })()}
       </div>
     </div>
   );

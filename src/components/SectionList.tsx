@@ -24,6 +24,7 @@ import { parseTaskCapture, type HideDuration, type Item, type Project, type Sect
 import { clip, trace } from "../devlog";
 import TokenField from "../TokenField";
 import SectionView from "./SectionView";
+import { useFeatures } from "../features";
 
 // The section definitions live here — they're presentation-only metadata the
 // list cares about, not state the shell needs to touch.
@@ -77,6 +78,7 @@ export default function SectionList({
   // token decides at Enter, so it survives while the user retypes it.
   const [draft, setDraft] = useState("");
 
+  const features = useFeatures();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -167,7 +169,12 @@ export default function SectionList({
           #tag, !N, @) — exactly what Enter parses. */}
       <div className="capture task-capture">
         <TokenField
-          kinds={["section", "project", "priority", "agent"]}
+          kinds={[
+            ...(features.projects ? (["project"] as const) : []),
+            "section",
+            ...(features.taskPriorities ? (["priority"] as const) : []),
+            ...(features.agent ? (["agent"] as const) : []),
+          ]}
           capture="tasks"
           route
           value={draft}

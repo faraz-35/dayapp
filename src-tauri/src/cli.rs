@@ -65,6 +65,9 @@ pub fn run(args: Vec<String>) -> i32 {
             db.complete_item(&item.id)
         }),
         "--start" => with_query(&db, &rest, |db, item| {
+            if store().ok().and_then(|m| m.get("dayapp-timer-enabled").cloned()) == Some("0".into()) {
+                return Err(anyhow::anyhow!("the timer is off in settings"));
+            }
             db.start_timer(&item.id).map(|_| ())
         }),
         "--move" => move_item(&db, &rest),
@@ -160,6 +163,12 @@ fn store() -> anyhow::Result<std::collections::HashMap<String, String>> {
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("cannot resolve the app directory"))?,
     )
+}
+
+/// The projects existence switch (Settings → Features). Off, the # verbs
+/// refuse — the axis doesn't exist for the GUI either.
+fn projects_enabled() -> anyhow::Result<bool> {
+    Ok(store()?.get("dayapp-projects-enabled").map(String::as_str) != Some("0"))
 }
 
 fn store_set(key: &str, value: &str) -> anyhow::Result<()> {
@@ -421,6 +430,9 @@ fn view_create(db: &Db, rest: &[String]) -> anyhow::Result<()> {
                 other => return Err(anyhow::anyhow!("agent is all|agent|mine, not {other:?}")),
             },
             "project" => {
+                if !projects_enabled()? {
+                    return Err(anyhow::anyhow!("projects are off in settings — views can't scope to one"));
+                }
                 project = if v.eq_ignore_ascii_case("none") || v.eq_ignore_ascii_case("any") {
                     None
                 } else {
@@ -640,9 +652,15 @@ fn search(db: &Db, rest: &[String]) -> anyhow::Result<()> {
     let q = rest.first().ok_or_else(|| anyhow::anyhow!("--search needs a <query> (text substring, #project, or @agent/@my)"))?;
     let trimmed = q.trim_start();
     if let Some(name) = trimmed.strip_prefix('#') {
+        if !projects_enabled()? {
+            return Err(anyhow::anyhow!("projects are off in settings — no # axis to search"));
+        }
         return search_project(db, name.trim());
     }
     if let Some(mode) = trimmed.strip_prefix('@') {
+        if store().ok().and_then(|m| m.get("dayapp-agent-enabled").cloned()) == Some("0".into()) {
+            return Err(anyhow::anyhow!("agent delegation is off in settings — no @ axis to search"));
+        }
         return search_agent(db, mode.trim());
     }
     let lower = q.to_lowercase();
@@ -737,6 +755,9 @@ fn analytics(db: &Db, rest: &[String]) -> anyhow::Result<()> {
             "--agent" => agent = Some(true),
             "--mine" => agent = Some(false),
             "--project" => {
+                if !projects_enabled()? {
+                    return Err(anyhow::anyhow!("projects are off in settings — no --project scope"));
+                }
                 project = Some(
                     it.next()
                         .ok_or_else(|| anyhow::anyhow!("--project needs a name"))?
@@ -993,6 +1014,10 @@ fn notes(db: &Db, rest: &[String]) -> anyhow::Result<()> {
 /// Projects as #tags — the same spelling --search `#name` and the capture
 /// field's `#tag` use, so picking a filter from here is copy-pasteable.
 fn projects(db: &Db) -> anyhow::Result<()> {
+    if !projects_enabled()? {
+        println!("projects are off in settings");
+        return Ok(());
+    }
     let all = db.list_projects()?;
     if all.is_empty() {
         println!("no projects");
@@ -1123,10 +1148,32 @@ fn print_rows(db: &Db, rows: &[(Item, &'static str)]) -> anyhow::Result<()> {
 /// The row's text with its metadata: !priority, 🤖 agent mark, #project — the
 /// one formatting shared by --list, --search, and --task.
 fn row_meta(item: &Item, projects: &std::collections::HashMap<String, String>) -> String {
-    let prio = item.priority.map(|p| format!(" !{p}")).unwrap_or_default();
+    static FLAGS: std::sync::OnceLock<(bool, bool)> = std::sync::OnceLock::new();
+    let (prio_on, agent_on) = FLAGS.get_or_init(|| {
+        (
+            store().ok().and_then(|m| m.get("dayapp-task-priorities-enabled").cloned()) != Some("0".into()),
+            store().ok().and_then(|m| m.get("dayapp-agent-enabled").cloned()) != Some("0".into()),
+        )
+    });
+    row_meta_in(item, projects, *prio_on, *agent_on)
+}
+
+/// The axis-aware variant: existence switches off (Settings → Features), the
+/// marks vanish — the CLI mirrors what the GUI shows.
+fn row_meta_in(
+    item: &Item,
+    projects: &std::collections::HashMap<String, String>,
+    priorities: bool,
+    agent_axis: bool,
+) -> String {
+    let prio = if priorities {
+        item.priority.map(|p| format!(" !{p}")).unwrap_or_default()
+    } else {
+        String::new()
+    };
     // The delegation axis: 🤖 marks rows assigned to the AI agent, so an
     // agent (or Faraz over SSH) can see which tasks are theirs to take.
-    let agent = if item.assigned_to_agent { "🤖 " } else { "" };
+    let agent = if agent_axis && item.assigned_to_agent { "🤖 " } else { "" };
     let proj = item
         .project_id
         .as_ref()

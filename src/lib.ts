@@ -187,14 +187,17 @@ export const goalsApi = {
 export function parseGoalText(
   text: string,
   projects: Project[],
+  allowProject = true,
 ): { text: string; horizon: GoalHorizon | null; projectId: string | null; createProjectName?: string } {
   const trimmed = text.trim();
   const words = trimmed.split(/\s+/);
   const first = words[0]?.toLowerCase() ?? "";
   if (words.length > 1 && (GOAL_HORIZONS as readonly string[]).includes(first)) {
+    if (!allowProject) return { text: words.slice(1).join(" "), horizon: first as GoalHorizon, projectId: null };
     const project = parseProjectTag(words.slice(1).join(" "), projects);
     return { horizon: first as GoalHorizon, ...project };
   }
+  if (!allowProject) return { text: trimmed, horizon: null, projectId: null };
   const project = parseProjectTag(trimmed, projects);
   return { horizon: null, ...project };
 }
@@ -541,9 +544,20 @@ export const projectColor = (id: string): string => {
 export function parseItemTags(
   text: string,
   projects: Project[],
+  /** The projects existence switch (Settings → Features): off, `#tag` never
+   *  parses — it stays literal prose, and nothing resolves or creates. */
+  allowProject = true,
+  /** The priority axis switch: off, `!N` stays literal too. */
+  allowPriority = true,
 ): { text: string; projectId: string | null; createProjectName?: string; priority: 0 | 1 | 2 | 3 | null; agent: boolean | null } {
   const noAgent = parseAgentToken(text);
+  if (!allowPriority) {
+    if (!allowProject) return { text: noAgent.text, projectId: null, priority: null, agent: noAgent.agent };
+    const project = parseProjectTag(noAgent.text, projects);
+    return { ...project, priority: null, agent: noAgent.agent };
+  }
   const stripped = parsePriorityTag(noAgent.text);
+  if (!allowProject) return { text: stripped.text, projectId: null, priority: stripped.priority, agent: noAgent.agent };
   const project = parseProjectTag(stripped.text, projects);
   return { ...project, priority: stripped.priority, agent: noAgent.agent };
 }
@@ -836,7 +850,7 @@ function footerTokenKind(word: string): TokenKind | null {
  *  line isn't a catchable footer (prose on the line, no blank line above, or
  *  nothing to catch) — and inline tokens elsewhere in the body never color,
  *  because they never process there. */
-export function scanNoteFooterTokens(body: string): TokenSpan[] {
+export function scanNoteFooterTokens(body: string, allowProject = true, allowPriority = true): TokenSpan[] {
   const f = footerLine(body);
   if (!f) return [];
   const line = body.slice(f.start, f.end);
@@ -845,6 +859,8 @@ export function scanNoteFooterTokens(body: string): TokenSpan[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(line)) !== null) {
     const kind = footerTokenKind(m[0]);
+    if (kind === "project" && !allowProject) return []; // a # line is just prose
+    if (kind === "priority" && !allowPriority) return []; // so is an ! line
     if (kind === null) return [];
     out.push({
       kind,
@@ -863,7 +879,14 @@ export function scanNoteFooterTokens(body: string): TokenSpan[] {
  *  With no valid footer, `body` is the input unchanged and both fields are
  *  null. Strict shape: any prose on the line makes it just text, so a
  *  markdown-ish "# Heading" or a stray "wow!!" never parses. */
-export function splitNoteFooter(body: string): {
+export function splitNoteFooter(
+  body: string,
+  /** The projects existence switch: off, `#tag`/`#0` are not footer tokens —
+   *  a line carrying one is body text, never stripped. */
+  allowProject = true,
+  /** The note-priorities switch: off, `!N` is prose the same way. */
+  allowPriority = true,
+): {
   body: string;
   /** 0 = the explicit `!0` clear; null = no priority token on the line. */
   priority: 0 | 1 | 2 | 3 | null;
@@ -878,7 +901,11 @@ export function splitNoteFooter(body: string): {
     let clearProject = false;
     let ok = true;
     for (const tok of body.slice(f.start, f.end).trim().split(/\s+/)) {
-      if (/^![0-3]$/.test(tok)) priority = Number(tok[1]) as 0 | 1 | 2 | 3; // last wins
+      if (/^![0-3]$/.test(tok)) {
+        if (!allowPriority) { ok = false; break; }                          // ! is prose here
+        priority = Number(tok[1]) as 0 | 1 | 2 | 3;                         // last wins
+      }
+      else if (/^#/.test(tok) && !allowProject) { ok = false; break; }      // # is prose here
       else if (tok === "#0") clearProject = true;
       else if (/^#[\w-]+$/.test(tok)) tag = tok.slice(1);                   // last wins
       else { ok = false; break; }
@@ -898,11 +925,19 @@ export function splitNoteFooter(body: string): {
 export function parseNoteCapture(
   text: string,
   projects: Project[],
+  allowProject = true,
+  allowPriority = true,
 ): { text: string; priority: 0 | 1 | 2 | 3 | null; projectId: string | null; createProjectName?: string } {
   // Strip standalone `#0` tokens first so parseProjectTag can't resolve or
   // create a project literally named "0".
-  const noClear = stripNoteClearTags(text);
+  const noClear = allowProject ? stripNoteClearTags(text) : text;
+  if (!allowPriority) {
+    if (!allowProject) return { text: noClear, priority: null, projectId: null };
+    const project = parseProjectTag(noClear, projects);
+    return { ...project, priority: null };
+  }
   const stripped = parsePriorityTag(noClear);
+  if (!allowProject) return { text: stripped.text, priority: stripped.priority, projectId: null };
   const project = parseProjectTag(stripped.text, projects);
   return { ...project, priority: stripped.priority };
 }

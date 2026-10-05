@@ -21,7 +21,9 @@ import { type Project } from "./lib";
 import { clip, trace } from "./devlog";
 import { BUILT_IN_THEMES, COLOR_FIELDS, applyTheme, type Theme, type ThemeColors } from "./themes";
 
-export type FeatureKey = "tasks" | "today" | "daily" | "backlog" | "notes" | "goals" | "journal" | "quotes";
+export type FeatureKey =
+  | "tasks" | "today" | "daily" | "backlog" | "notes" | "goals" | "journal" | "quotes"
+  | "projects" | "taskPriorities" | "notePriorities" | "agent" | "timer" | "reminders" | "hide";
 
 // The header's icon buttons — each an On/Off choice in the Header group.
 export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes" | "settings";
@@ -78,6 +80,13 @@ const FEATURES: { key: FeatureKey; label: string; hint: string }[] = [
   { key: "goals", label: "Goals", hint: "the identity layer" },
   { key: "journal", label: "Journal", hint: "##j entries + the page" },
   { key: "quotes", label: "Quotes", hint: "##q entries, the page + the idle moment" },
+  { key: "projects", label: "Projects", hint: "the #tag axis for tasks, notes, goals" },
+  { key: "taskPriorities", label: "Task priorities", hint: "the !1–!3 tiers + signal bars" },
+  { key: "notePriorities", label: "Note priorities", hint: "the !N footer tiers on notes" },
+  { key: "agent", label: "Agent delegation", hint: "the @ axis — 🤖 badge + the agent queue" },
+  { key: "timer", label: "Timer", hint: "per-task time tracking (▶ / ⏱)" },
+  { key: "reminders", label: "Reminders", hint: "the ◷ date that pulls a row to Today" },
+  { key: "hide", label: "Hide", hint: "soft-archive rows and notes (◐)" },
 ];
 
 export default function SettingsView({
@@ -427,20 +436,22 @@ export default function SettingsView({
                   >{a === "all" ? "All" : a === "agent" ? "Agent" : "Mine"}</button>
                 ))}
               </div>
-              <div className="settings-field">
-                <span className="settings-field-label">Project</span>
-                <button
-                  className={`pill${projectId === null ? " active" : ""}`}
-                  onClick={() => setProjectId(null)}
-                >Any</button>
-                {projects.map((p) => (
+              {features.projects && (
+                <div className="settings-field">
+                  <span className="settings-field-label">Project</span>
                   <button
-                    key={p.id}
-                    className={`pill${projectId === p.id ? " active" : ""}`}
-                    onClick={() => setProjectId(projectId === p.id ? null : p.id)}
-                  >{p.name}</button>
-                ))}
-              </div>
+                    className={`pill${projectId === null ? " active" : ""}`}
+                    onClick={() => setProjectId(null)}
+                  >Any</button>
+                  {projects.map((p) => (
+                    <button
+                      key={p.id}
+                      className={`pill${projectId === p.id ? " active" : ""}`}
+                      onClick={() => setProjectId(projectId === p.id ? null : p.id)}
+                    >{p.name}</button>
+                  ))}
+                </div>
+              )}
               <div className="settings-field">
                 <span className="settings-field-label">Notes</span>
                 <button className={`pill${notes ? " active" : ""}`} onClick={() => setNotes(true)}>Show</button>

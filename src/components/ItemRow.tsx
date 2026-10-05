@@ -26,6 +26,7 @@ import ProjectMenu from "../ProjectMenu";
 import ReminderMenu from "../ReminderMenu";
 import TokenField from "../TokenField";
 import { PriorityBars } from "./PriorityBars";
+import { useFeatures } from "../features";
 
 export default function ItemRow({
   item, projects, selected, editing, detailsOpen,
@@ -58,17 +59,47 @@ export default function ItemRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id });
 
+  const features = useFeatures();
+
   const doneToday =
     item.section === "daily" && item.lastCompletedDate === todayStr();
   const done = item.status === "done" || doneToday;
-  const project = projects.find((p) => p.id === item.projectId) ?? null;
+  const project = features.projects
+    ? projects.find((p) => p.id === item.projectId) ?? null
+    : null;
 
   // Backlog rows carry no bars — the section's tier dividers label the groups
   // there — so priority feeds the row's metadata only outside the Backlog.
+  // The axis off: no bars at all (the !N tokens never parsed, tiers can't exist).
   const priorityBars =
-    item.priority != null && item.section !== "backlog" ? (
+    features.taskPriorities && item.priority != null && item.section !== "backlog" ? (
       <PriorityBars priority={item.priority} />
     ) : null;
+
+  // The digit slots, assigned dynamically in render order — leftmost is
+  // always 1, and a feature's absence compacts the numbering (no holes). The
+  // same slot map drives the markers below, so the keyboard grammar and the
+  // visual row can never disagree.
+  const slots: Record<string, string> = {};
+  {
+    let n = 0;
+    const next = () => String(++n);
+    // Hidden rows render only ↺ + ×.
+    if (item.hidden) {
+      slots.unhide = next();
+      slots.delete = next();
+    } else {
+      // Slot 1 is the row's first verb: ▶/⏸ when timing exists (↑ on the
+      // Backlog — movement, not timing, so it survives the timer switch).
+      if (item.section === "backlog" || features.timer) slots.timer = next();
+      if (features.projects) slots.project = next();
+      if (features.reminders) slots.remind = next();
+      if (features.hide) slots.hide = next();
+      slots.details = next();
+      slots.delete = next();
+    }
+  }
+
 
   return (
     <div
@@ -118,7 +149,11 @@ export default function ItemRow({
         <EditInput
           initial={item.text}
           onCommit={onCommitEdit}
-          kinds={["project", "priority", "agent"]}
+          kinds={[
+            ...(features.projects ? (["project"] as const) : []),
+            ...(features.taskPriorities ? (["priority"] as const) : []),
+            ...(features.agent ? (["agent"] as const) : []),
+          ]}
         />
       ) : (
         <span className="item-text">{item.text}</span>
@@ -151,7 +186,7 @@ export default function ItemRow({
               ◐ {item.hiddenUntil ? `until ${formatReminder(item.hiddenUntil)}` : "forever"}
             </span>
           )}
-          {!isTiming && totalSec > 0 && (
+          {!isTiming && features.timer && totalSec > 0 && (
             <span className="time-label" title="Time tracked">⏱ {formatDuration(totalSec)}</span>
           )}
           {item.remindAt && (
@@ -166,7 +201,7 @@ export default function ItemRow({
               priorityBars
             )}
           </span>
-          <span className="meta-agent">{item.assignedToAgent && <AgentBadge />}</span>
+          <span className="meta-agent">{features.agent && item.assignedToAgent && <AgentBadge />}</span>
           <span className="meta-project">
             {project && (
               <span
@@ -189,11 +224,11 @@ export default function ItemRow({
               action a shelved row offers; timing belongs to Today/Daily,
               where the work happens. A hidden row never starts anything, so
               it only ever shows the stop form. */}
-          {(isTiming || !item.hidden) &&
+          {(item.hidden || isTiming || (features.timer && item.section !== "backlog")) &&
             (isTiming ? (
               <button
                 className="item-action timer-btn"
-                data-kb="1"
+                data-kb={slots.timer}
                 onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
                 title="Stop timer"
                 aria-label="Stop timer"
@@ -201,7 +236,7 @@ export default function ItemRow({
             ) : item.section === "backlog" ? (
               <button
                 className="item-action promote-btn"
-                data-kb="1"
+                data-kb={slots.timer}
                 onClick={(e) => { e.stopPropagation(); onPromote(); }}
                 title="Send to Today"
                 aria-label="Send to Today"
@@ -209,7 +244,7 @@ export default function ItemRow({
             ) : (
               <button
                 className="item-action timer-btn"
-                data-kb="1"
+                data-kb={slots.timer}
                 onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
                 title="Start timer"
                 aria-label="Start timer"
@@ -219,14 +254,14 @@ export default function ItemRow({
             <>
               <button
                 className="item-action unhide-btn"
-                data-kb="4"
+                data-kb={slots.unhide}
                 onClick={(e) => { e.stopPropagation(); onUnhide(); }}
                 title={item.section === "daily" ? "Unpause" : "Unhide"}
                 aria-label={item.section === "daily" ? "Unpause" : "Unhide"}
               >↺</button>
               <button
                 className="item-action danger"
-                data-kb="6"
+                data-kb={slots.delete}
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 title="Delete"
                 aria-label="Delete"
@@ -234,18 +269,24 @@ export default function ItemRow({
             </>
           ) : (
             <>
-              <ProjectMenu
-                kb="2"
-                projects={projects}
-                projectId={item.projectId}
-                onAssign={onSetProject}
-                onCreateProject={onCreateProject}
-              />
-              <ReminderMenu kb="3" remindAt={item.remindAt} onSet={onSetReminder} />
-              <HideMenu kb="4" onHide={onHide} verb={item.section === "daily" ? "Pause" : "Hide"} />
+              {features.projects && (
+                <ProjectMenu
+                  kb={slots.project}
+                  projects={projects}
+                  projectId={item.projectId}
+                  onAssign={onSetProject}
+                  onCreateProject={onCreateProject}
+                />
+              )}
+              {features.reminders && (
+                <ReminderMenu kb={slots.remind} remindAt={item.remindAt} onSet={onSetReminder} />
+              )}
+              {features.hide && (
+                <HideMenu kb={slots.hide} onHide={onHide} verb={item.section === "daily" ? "Pause" : "Hide"} />
+              )}
               <button
                 className={`item-action${detailsOpen ? " active" : ""}`}
-                data-kb="5"
+                data-kb={slots.details}
                 onClick={(e) => { e.stopPropagation(); onToggleDetails(); }}
                 title={detailsOpen
                   ? "Collapse details"
@@ -256,7 +297,7 @@ export default function ItemRow({
               >{detailsOpen ? <Chevron up /> : item.details ? <Chevron /> : "⋯"}</button>
               <button
                 className="item-action danger"
-                data-kb="6"
+                data-kb={slots.delete}
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 title="Delete"
                 aria-label="Delete"
