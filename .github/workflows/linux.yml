@@ -1,0 +1,51 @@
+name: Linux build
+
+# Builds the Linux AppImage on every push to main and refreshes a rolling
+# `linux-dev` prerelease — the distribution surface for testers (public repo,
+# no login needed to download). A real versioned Linux release rides the
+# release channel later, once the quirk pass settles.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  appimage:
+    runs-on: ubuntu-22.04 # oldest supported runner → glibc 2.35 binaries, forward-compatible everywhere
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Tauri build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential file libssl-dev librsvg2-dev
+
+      - name: Build AppImage
+        run: |
+          npm ci
+          npm run tauri build -- --config src-tauri/tauri.linux.conf.json
+
+      - name: Refresh the rolling linux-dev prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete linux-dev --yes --cleanup-tag || true
+          gh release create linux-dev --prerelease \
+            --title "DayApp — Linux dev build" \
+            --notes "Rolling test build of \`main\`. Needs the WebKit runtime: \`sudo pacman -S webkit2gtk-4.1\` (Arch/Omarchy). Then \`chmod +x DayApp-*.AppImage && ./DayApp-*.AppImage\`." \
+            src-tauri/target/release/bundle/appimage/*.AppImage

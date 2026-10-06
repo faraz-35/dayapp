@@ -703,20 +703,39 @@ async fn reset_demo_data(app: AppHandle, db: State<'_, DbState>) -> Result<(), S
 // surface as an error event and stay alive.
 
 /// A command spawned through the user's login shell. A GUI process gets only
-/// the bare system PATH (/usr/bin:/bin:…), where brew installs and
-/// ~/.local/bin don't exist — `npm`, `gh`, and `aerospace` all spawn-fail with
-/// ENOENT (the "Update failed: No such file or directory" bug, 2026-09-24).
-/// A LOGIN shell sources ~/.zprofile — the user's real PATH — without the
-/// interactive .zshrc and its output noise. The whole command line goes in the
-/// string (quote arguments containing spaces yourself).
+/// the bare system PATH, where brew/home-dir installs don't exist — `npm`,
+/// `gh`, and `aerospace` all spawn-fail with ENOENT (the "Update failed: No
+/// such file or directory" bug, 2026-09-24). A LOGIN shell sources the
+/// profile — the user's real PATH — without the interactive rc and its output
+/// noise. The whole command line goes in the string (quote arguments
+/// containing spaces yourself). Users of the fallback: the macOS self-update
+/// flow, AeroSpace placement, and sync's `gh auth token` fallback — the last
+/// one is why this exists on every platform (zsh on macOS, bash elsewhere).
 pub(crate) fn login_shell_command(line: &str) -> std::process::Command {
-    let mut cmd = std::process::Command::new("/bin/zsh");
+    let shell = if cfg!(target_os = "macos") { "/bin/zsh" } else { "/bin/bash" };
+    let mut cmd = std::process::Command::new(shell);
     cmd.args(["-l", "-c", line]);
     cmd
 }
 
 #[tauri::command]
 async fn self_update(app: AppHandle) -> Result<(), String> {
+    // Local rebuild-and-swap is a macOS source-checkout flow (update.sh swaps
+    // the .app bundle in place). Every other platform updates through the
+    // release channel — update_source_available hides the palette entry there.
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        return Err("self-update is macOS-only; updates come from the release channel".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        self_update_macos(app).await
+    }
+}
+
+#[cfg(target_os = "macos")]
+async fn self_update_macos(app: AppHandle) -> Result<(), String> {
     use std::process::{Command, Stdio};
     use std::io::{BufRead, BufReader};
 
@@ -817,15 +836,22 @@ async fn self_update(app: AppHandle) -> Result<(), String> {
 // phase "downloading" instead of "building" — the overlay renders either.
 
 /// True when the app was built from a source checkout that still exists at the
-/// path embedded at compile time. Release binaries carry this machine's build
-/// path, which doesn't exist on a user's Mac — that's the whole local/release
-/// split the frontend branches on.
+/// path embedded at compile time. Release binaries carry the build machine's
+/// path, which doesn't exist on a user's machine — that's the whole
+/// local/release split the frontend branches on. The local-rebuild flow is
+/// macOS-only (update.sh swaps the .app bundle); other platforms always read
+/// as release installs.
 #[tauri::command]
 async fn update_source_available() -> Result<bool, String> {
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .ok_or("no parent")?;
-    Ok(repo.join("package.json").exists())
+    #[cfg(not(target_os = "macos"))]
+    return Ok(false);
+    #[cfg(target_os = "macos")]
+    {
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .ok_or("no parent")?;
+        Ok(repo.join("package.json").exists())
+    }
 }
 
 /// The version a release update would install, or None when this install is
@@ -924,6 +950,9 @@ fn format_bytes(n: u64) -> String {
 // retrying briefly while AeroSpace is still attaching us. `on` is idempotent;
 // wherever AeroSpace isn't installed the first command simply fails and this
 // is a silent no-op (DayApp is public-source — not every machine tiles).
+// The whole ritual is macOS-only: AeroSpace is a macOS tiler, so non-macOS
+// builds never spawn a shell for placement at all.
+#[cfg(target_os = "macos")]
 fn aerospace_fullscreen() {
     let pid = std::process::id().to_string();
     std::thread::spawn(move || {
@@ -1032,6 +1061,7 @@ pub fn run() {
             // AeroSpace placement (see aerospace_fullscreen): the workspace-10
             // half is ~/.aerospace.toml's on-window-detected; this asks for the
             // fullscreen half once AeroSpace has attached the window.
+            #[cfg(target_os = "macos")]
             aerospace_fullscreen();
             log::info!("DayApp ready");
             Ok(())

@@ -2169,7 +2169,10 @@ function DayAppBody() {
   return (
     <FeaturesContext.Provider value={features}>
     <div className="app">
-      <header className="header">
+      {/* data-tauri-drag-region makes the bar draggable on every platform —
+          Linux WebKitGTK doesn't honor the -webkit-app-region CSS that macOS
+          rides on. Buttons carry no attribute, so they stay clickable. */}
+      <header className="header" data-tauri-drag-region>
         {/* The list view carries the brand — "Live @ Faraz" is home, and every
             2 minutes it steps out to a random MASTHEAD_THEMES word and back
             (keyed so each swap fades in; see title-in in index.css). The
@@ -2181,7 +2184,7 @@ function DayAppBody() {
             Demo mode outranks both: the masthead reads "Live @ Demo" in every
             view while the disposable demo db is active — the one unmissable
             (but calm) signal of which data is on screen. */}
-        <span className="title" key={demoMode ? "demo" : view === "list" ? liveAt : view}>
+        <span className="title" data-tauri-drag-region key={demoMode ? "demo" : view === "list" ? liveAt : view}>
           {demoMode ? "Live @ Demo" : view === "analytics" ? "Analytics" : view === "journal" ? "Journal" : view === "quotes" ? "Quotes" : view === "settings" ? "Settings" : `Live @ ${liveAt}`}
         </span>
         <div className="header-right">

@@ -539,6 +539,24 @@ carry the build machine's path, which never exists on a user's Mac)?
   first release that carries `latest.json` (0.3.0's doesn't — installs of it
   simply never see an icon until the next release).
 
+### Linux (CI AppImage)
+
+The Linux build rides CI, not a local ritual: every push to `main` runs
+`.github/workflows/linux.yml` on ubuntu-22.04 (glibc 2.35 — forward-compatible
+everywhere) and refreshes a rolling `linux-dev` prerelease with the AppImage
+(bundle targets come from `tauri.linux.conf.json`, merged via `--config`; no
+updater artifacts — the in-app release channel is still macOS-only, and on
+Linux the updater check just finds no artifact and stays quiet until Linux
+artifacts join `latest.json`). Host runtime dependency: `webkit2gtk-4.1`
+(`pacman -S webkit2gtk-4.1` on Arch/Omarchy). The macOS-only paths are
+cfg-gated: AeroSpace placement is macOS-compiled only, `self_update` errors
+loudly off-macOS (`update_source_available` returns `false`, so the palette
+entry never shows), backups reveal uses `xdg-open` off-macOS, and the CLI
+resolves the db through `${XDG_DATA_HOME:-~/.local/share}/<identifier>` — the
+same dir Tauri's `app_data_dir` resolves on Linux. The header drags via
+`data-tauri-drag-region` (WebKitGTK ignores the `-webkit-app-region` CSS
+macOS uses; both mechanisms coexist harmlessly).
+
 ---
 
 ## Logging
@@ -615,6 +633,9 @@ dayapp/
 ├── AGENTS.md                       ← this file
 ├── README.md                       ← run/build instructions (keep in sync)
 ├── icon-source.svg                 ← icon master; regenerate others via `npx tauri icon`
+├── .github/
+│   └── workflows/
+│       └── linux.yml               ← CI AppImage on every main push → rolling linux-dev prerelease
 ├── scripts/
 │   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
 │   └── release.sh                  ← release artifacts: signed updater bundle + latest.json (npm run release)
@@ -668,6 +689,7 @@ dayapp/
     ├── Cargo.toml
     ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target, updater pubkey/endpoints
     ├── tauri.release.conf.json     ← release-only override: createUpdaterArtifacts (signed; used by scripts/release.sh)
+    ├── tauri.linux.conf.json       ← CI-only override: bundle targets ["appimage"] (passed via --config in linux.yml)
     └── capabilities/default.json
 ```
 

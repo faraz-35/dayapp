@@ -57,12 +57,13 @@ pub fn capture(db: &Db) -> anyhow::Result<PathBuf> {
     Ok(dest)
 }
 
-/// Open the backups folder in Finder, creating it first so the reveal works
-/// even before the first capture.
+/// Open the backups folder in the file manager, creating it first so the
+/// reveal works even before the first capture.
 pub fn reveal(real_path: &Path) -> anyhow::Result<()> {
     let dir = backups_dir(real_path);
     std::fs::create_dir_all(&dir)?;
-    std::process::Command::new("open").arg(&dir).spawn()?;
+    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    std::process::Command::new(opener).arg(&dir).spawn()?;
     log::info!("backup: revealed backups folder");
     Ok(())
 }

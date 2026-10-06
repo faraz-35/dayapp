@@ -1048,17 +1048,25 @@ fn peek(db: &Db) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Open the shared db. Tauri's app_data_dir is ~/Library/Application Support/
-/// <identifier>; older installs may have used the product name, so accept both.
+/// Open the shared db — the same path the GUI resolves through Tauri's
+/// app_data_dir: ~/Library/Application Support/<identifier> on macOS,
+/// ${XDG_DATA_HOME:-~/.local/share}/<identifier> elsewhere. Older macOS
+/// installs may have used the product name, so accept both there.
 /// With `demo`, opens the sibling demo db instead (created + seeded on first
 /// use — the same dataset as ⌘P → Enter Demo Mode).
 fn real_db_path() -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
-    let base = std::path::PathBuf::from(home).join("Library/Application Support");
-    let candidates = [
-        base.join("com.farazshah.dayapp").join("dayapp.db"),
-        base.join("DayApp").join("dayapp.db"),
-    ];
+    let base = if cfg!(target_os = "macos") {
+        std::path::PathBuf::from(home).join("Library/Application Support")
+    } else {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(&home).join(".local/share"))
+    };
+    let mut candidates = vec![base.join("com.farazshah.dayapp").join("dayapp.db")];
+    if cfg!(target_os = "macos") {
+        candidates.push(base.join("DayApp").join("dayapp.db"));
+    }
     Some(
         candidates
             .iter()
