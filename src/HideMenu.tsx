@@ -9,11 +9,14 @@
 //
 // Keyboard (usePopoverKeys): the open menu holds focus — ↑/↓ move the
 // highlight, Enter hides. One Escape closes back onto the row/note, which
-// never lost its focus.
+// never lost its focus. A pick goes further: it fires POPOVER_PICK_EVENT so
+// the grammar stands down to nothing-focused — the keystroke after a pick
+// was aimed at the menu and must never fire the row.
 
 import { useEffect, useRef, useState } from "react";
 import type { HideDuration } from "./lib";
 import { trace } from "./devlog";
+import { firePopoverPick } from "./focusNav";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
 
@@ -47,15 +50,18 @@ export default function HideMenu({ onHide, kb, verb = "Hide" }: { onHide: (durat
     };
   }, [open]);
 
+  const pick = (duration: HideDuration) => {
+    setOpen(false);
+    firePopoverPick();
+    onHide(duration);
+  };
+
   const { hi, setHi, onKeyDown } = usePopoverKeys({
     open,
     menuRef,
     count: OPTIONS.length,
     initialIndex: () => 0,
-    onPick: (i) => {
-      setOpen(false);
-      onHide(OPTIONS[i].id);
-    },
+    onPick: (i) => pick(OPTIONS[i].id),
   });
 
   return (
@@ -87,8 +93,7 @@ export default function HideMenu({ onHide, kb, verb = "Hide" }: { onHide: (durat
               onMouseEnter={() => setHi(i)}
               onClick={(e) => {
                 e.stopPropagation();
-                setOpen(false);
-                onHide(o.id);
+                pick(o.id);
               }}
             >
               <span className="hide-menu-label">{o.label}</span>

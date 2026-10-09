@@ -1001,7 +1001,16 @@ borrows the keyboard from the grammar entirely (`usePopoverKeys`): focus moves
 into the menu on open (like digit `5` focusing the details body), ↑/↓ move a
 highlight, Enter picks, ProjectMenu routes printable keys into its create
 field, and App's handler stands down while `popoverOpen()` — digits/Enter/e
-never act on the row underneath a menu the user is inside. ⌘P → Keyboard
+never act on the row underneath a menu the user is inside. **A pick is the
+terminal, not a pass-through**: it closes the menu and fires
+`POPOVER_PICK_EVENT` (`focusNav.ts`), which clears grammar focus to
+nothing-focused — the keystroke after a pick (a key-repeat, a confirming
+second Enter) was aimed at the menu, and Enter's row verb is complete, which
+on a done Backlog row is destructive and invisible (2026-10-07, two tasks
+lost this way). Escape and outside-click stay the walk-backs that leave the
+row focused. While a row's popover is open the row itself keeps the hover
+state (`.item:has(.hide-menu)` / `.note:has(.hide-menu)` — same tint, buttons
+revealed), whoever opened it and wherever the pointer went. ⌘P → Keyboard
 Shortcuts is the in-app reference card (`KeyboardHelp.tsx`); the DOM side lives
 in `focusNav.ts` (digits dispatch through `data-kb` markers, so a hover button and
 its digit share the one real onClick handler).

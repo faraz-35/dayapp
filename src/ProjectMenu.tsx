@@ -10,7 +10,9 @@
 // Keyboard (usePopoverKeys): the open menu holds focus — ↑/↓ move the
 // highlight (it starts on the current project), Enter assigns it, and any
 // printable key lands in the create field. One Escape closes back onto the
-// row, which never lost its focus.
+// row, which never lost its focus. A pick goes further: it fires
+// POPOVER_PICK_EVENT so the grammar stands down to nothing-focused — the
+// keystroke after a pick was aimed at the menu and must never fire the row.
 //
 // The list and creation come from the parent (App's projects state): the row's
 // project label renders from that same state, so a project created here must
@@ -20,6 +22,7 @@
 import { useEffect, useRef, useState } from "react";
 import { type Project } from "./lib";
 import { trace } from "./devlog";
+import { firePopoverPick } from "./focusNav";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
 
@@ -61,6 +64,7 @@ export default function ProjectMenu({
     trace("project.assign", { project: id === null ? null : projects.find((p) => p.id === id)?.name });
     setOpen(false);
     setDraft("");
+    firePopoverPick();
     onAssign(id);
   };
 

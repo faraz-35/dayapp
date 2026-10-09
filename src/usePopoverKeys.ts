@@ -7,7 +7,9 @@
 // the menu borrows the keystrokes, not the focus grammar: App's handler
 // stands down while a popover is open, and Escape is each menu's own
 // document-level closer, so one Esc closes the menu and leaves the row
-// focused.
+// focused. A PICK goes one rung further down the ladder: it closes the menu
+// and fires POPOVER_PICK_EVENT, so App clears grammar focus — the keystroke
+// after a pick was aimed at the menu, and must never fire the row.
 
 import { useEffect, useRef, useState } from "react";
 

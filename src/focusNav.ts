@@ -98,6 +98,19 @@ export function popoverOpen(): boolean {
   return document.querySelector(".hide-menu") !== null;
 }
 
+// A pick inside a row popover (project assign, reminder set, hide duration).
+// The pick unmounts the menu, and the row underneath must not stay
+// Enter-armed: the next keystroke was aimed at the menu, and Enter's row verb
+// (complete) is destructive and — on a done Backlog row — invisible. App
+// hears this and clears grammar focus to nothing-focused, where Enter does
+// nothing. Escape and outside-click don't fire it: the deliberate walk-back
+// leaves the row focused.
+export const POPOVER_PICK_EVENT = "dayapp-popover-pick";
+
+export function firePopoverPick(): void {
+  document.dispatchEvent(new CustomEvent(POPOVER_PICK_EVENT));
+}
+
 // After a React commit lands the newly focused element, bring it on screen.
 export function scrollIntoViewEl(el: Element | null): void {
   requestAnimationFrame(() => el?.scrollIntoView({ block: "nearest", behavior: "smooth" }));

@@ -25,7 +25,7 @@ import MobileView from "./MobileView";
 import MobileSyncSettings from "./MobileSyncSettings";
 import KeyboardHelp from "./KeyboardHelp";
 import NamePrompt from "./NamePrompt";
-import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, popoverOpen, scrollIntoViewEl } from "./focusNav";
+import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, POPOVER_PICK_EVENT, popoverOpen, scrollIntoViewEl } from "./focusNav";
 import { BUILT_IN_THEMES, applyTheme, resolveTheme, type Theme } from "./themes";
 import { MIGRATED_KEYS, externallyChanged, initSettings, sget, sset, ssetMany } from "./settings";
 import { FeaturesContext, type Features } from "./features";
@@ -1865,6 +1865,19 @@ function DayAppBody() {
     setFocusNoteId(null);
     setFocusGoalId(null);
   }, []);
+
+  // A popover pick stands the grammar down to nothing-focused: the menu that
+  // absorbed the keystrokes just unmounted, and the row underneath must not
+  // stay Enter-armed (see POPOVER_PICK_EVENT in focusNav.ts). Esc and
+  // outside-click are the walk-backs and keep the row focused.
+  useEffect(() => {
+    const onPopoverPick = () => {
+      trace("focus.clear", { via: "popover-pick" });
+      clearFocus();
+    };
+    document.addEventListener(POPOVER_PICK_EVENT, onPopoverPick);
+    return () => document.removeEventListener(POPOVER_PICK_EVENT, onPopoverPick);
+  }, [clearFocus]);
 
   const focusItem = useCallback((id: string) => {
     setSelectedId(id);

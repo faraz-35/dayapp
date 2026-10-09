@@ -91,7 +91,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
         <Row keys={["1–4"]}>note: ⌃ expand · ⬇ download .txt{hi ? " · ◐ hide" : ""} · × delete</Row>
         {features.goals && <Row keys={[`1–${goalDigits}`]}>goal: {goalVerbList}</Row>}
         {(p || rm || hi) && (
-          <Row keys={["↑", "↓", "Enter"]}>inside an open popover ({popoverList}): move · pick{p ? " — typing in # creates" : ""} · Esc returns to the row</Row>
+          <Row keys={["↑", "↓", "Enter"]}>inside an open popover ({popoverList}): move · pick — a pick clears focus, Esc returns to the row{p ? " · typing in # creates" : ""}</Row>
         )}
         <Row keys={["e"]}>edit it</Row>
         <Row keys={["Enter"]}>complete the focused task</Row>

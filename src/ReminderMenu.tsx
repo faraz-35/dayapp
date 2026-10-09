@@ -9,12 +9,16 @@
 //
 // Keyboard (usePopoverKeys): the open menu holds focus — ↑/↓ move the
 // highlight across the presets (and Clear, when set), Enter picks. One Escape
-// closes back onto the row. The date input stays native: Tab reaches it and
-// its keys are its own (the hook leaves input-targeted events alone).
+// closes back onto the row. A pick goes further: it fires POPOVER_PICK_EVENT
+// so the grammar stands down to nothing-focused — the keystroke after a pick
+// was aimed at the menu and must never fire the row. The date input stays
+// native: Tab reaches it and its keys are its own (the hook leaves
+// input-targeted events alone).
 
 import { useEffect, useRef, useState } from "react";
 import { todayOffset } from "./lib";
 import { trace } from "./devlog";
+import { firePopoverPick } from "./focusNav";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
 
@@ -56,6 +60,7 @@ export default function ReminderMenu({
   const pick = (v: string | null) => {
     trace("reminder.set", { remind: v });
     setOpen(false);
+    firePopoverPick();
     onSet(v);
   };
 

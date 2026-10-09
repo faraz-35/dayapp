@@ -323,8 +323,10 @@ button {
   transition: background 0.08s ease;
   cursor: default;
 }
-.item:hover { background: var(--bg-hover); }
-.item.selected { background: var(--bg-hover); }
+.item:hover, .item.selected { background: var(--bg-hover); }
+/* A row with an open popover stays lit: the pointer sits on the menu, so
+   :hover has ended — and the menu holds the keyboard instead of the row. */
+.item:has(.hide-menu) { background: var(--bg-hover); }
 /* UI option (Settings → UI): task rows with the notes-card fill. Hover keeps
    its tint (rows don't resize, so :hover is safe here). */
 .sections-card .item { background: var(--bg-soft); }
@@ -347,7 +349,7 @@ button {
 /* Hover OR keyboard focus reveals the actions: the grammar's digits target
    those buttons, so the focused row/note/goal must show them (focus mirrors
    hover exactly — same tint, same buttons, same metadata fades). */
-:is(.item:hover, .item.selected, .item.focused) .item-check { border-color: var(--accent); }
+:is(.item:hover, .item.selected, .item.focused, .item:has(.hide-menu)) .item-check { border-color: var(--accent); }
 .item-check.checked {
   border-color: var(--accent) !important;
   background: var(--accent);
@@ -415,7 +417,7 @@ button {
   font-size: 17px;
   line-height: 1;
 }
-:is(.item:hover, .item.selected, .item.focused) .item-action { opacity: 1; }
+:is(.item:hover, .item.selected, .item.focused, .item:has(.hide-menu)) .item-action { opacity: 1; }
 .item-action:hover { background: var(--bg-elev); color: var(--text); }
 .item-action.danger:hover { color: var(--danger); }
 
@@ -427,7 +429,7 @@ button {
   padding: 0 1px;
   line-height: 1;
 }
-:is(.item:hover, .item.selected, .item.dragging) .grip { opacity: 0.6; }
+:is(.item:hover, .item.selected, .item.dragging, .item:has(.hide-menu)) .grip { opacity: 0.6; }
 .item.dragging { opacity: 0.3; }
 
 /* ---- Capture input (the notes bar + the one task bus) ------------------ */
@@ -1145,7 +1147,7 @@ button {
   padding-right: 2px;
   transition: padding-right 0.08s ease;
 }
-:is(.note.hovered, .note.focused) .note-preview {
+:is(.note.hovered, .note.focused, .note:has(.hide-menu)) .note-preview {
   padding-right: 100px;        /* the ⌄ ⬇ ◐ × cluster (~94px incl. its corner offset) */
 }
 .note-preview-text {
@@ -1178,7 +1180,7 @@ button {
    pointer (see the reveal rules). Focus underline, reveals, tier dividers:
    all unchanged. */
 .notes-bare .note { background: none; }
-.notes-bare .note.hovered { background: var(--bg-hover); }
+.notes-bare .note.hovered, .notes-bare .note:has(.hide-menu) { background: var(--bg-hover); }
 
 /* Keyboard-focused note (the grammar's `n1-9` + digits target) — the same
    resting tint a selected row gets, so every focusable surface reads alike.
@@ -1322,7 +1324,7 @@ button {
    auto-growing textareas resize under a stationary pointer, leaving buttons
    stuck on a note the pointer already left. */
 /* Focused reveals like hovered (the digits' targets must be visible). */
-:is(.note.hovered, .note.focused) .note-delete { opacity: 1; }
+:is(.note.hovered, .note.focused, .note:has(.hide-menu)) .note-delete { opacity: 1; }
 .note-delete:hover { background: var(--bg-hover); color: var(--danger); }
 
 /* Two corner buttons (hide + delete) sit side by side. */
@@ -1343,7 +1345,7 @@ button {
 /* The HideMenu trigger inherits .item-action's hover-reveal, but a note isn't an
    .item, so reveal it on .note hover explicitly. */
 .note-actions .item-action { opacity: 0; }
-:is(.note.hovered, .note.focused) .note-actions .item-action { opacity: 1; }
+:is(.note.hovered, .note.focused, .note:has(.hide-menu)) .note-actions .item-action { opacity: 1; }
 
 /* ---- Hide menu (shared by item rows + notes) -------------------------- */
 
@@ -1422,7 +1424,7 @@ button {
   flex-shrink: 0;
 }
 .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { transition: opacity 0.08s ease; }
-:is(.item:hover, .item.selected, .item.focused) .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { opacity: 0; }
+:is(.item:hover, .item.selected, .item.focused, .item:has(.hide-menu)) .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { opacity: 0; }
 
 /* The identity columns (ItemRow): priority, then agent, then project, as
    fixed-width slots right-anchored against the action buttons — an axis a
