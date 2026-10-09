@@ -883,10 +883,12 @@ function DayAppBody() {
   const effAgentFilter: "agent" | "mine" | null =
     agentEnabled && activeView && activeView.agent !== "all" ? activeView.agent : agentFilter;
   // The effective project scope, as a set of ids: a view overrides the
-  // session filter with its (possibly multiple) selection; null = all.
+  // session filter with its (possibly multiple) selection; null = all. A
+  // view's EMPTY selection is all projects too (the form's default) — an
+  // empty array passed through would match no row at all.
   const effProjectFilter: string[] | null = projectsEnabled
     ? activeView
-      ? activeView.projectIds
+      ? (activeView.projectIds.length > 0 ? activeView.projectIds : null)
       : projectFilter
         ? [projectFilter]
         : null
