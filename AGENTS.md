@@ -1253,8 +1253,10 @@ into Notes or edit fields isn't hijacked.
   after ≥N hours — the daily-reset's render-time-comparison idiom), never
   wall-clock — and still never as a modal.
 - **The quote screensaver (default on; the persisted `dayapp-quote-screensaver`
-  key is the off switch, read once at mount — no in-app toggle):** two minutes of
-  focused stillness summons the modal unprompted. The idle clock runs only while
+  key is the off switch, read once at mount — no in-app toggle):** focused
+  stillness summons the modal unprompted — after the idle wait set in Settings
+  → UI ("Quote screensaver", pills 1/2/5/10; store key `dayapp-screensaver-mins`,
+  default 2 minutes, any whole minute readable over `--settings`). The idle clock runs only while
   the window is focused — away time never counts (Faraz's call, 2026-08-26: it's
   for sitting with the app, not having left it; `blur` restarts the clock,
   `document.hasFocus()` gates the trigger) — and only real user input resets it:
@@ -1262,7 +1264,7 @@ into Notes or edit fields isn't hijacked.
   1s tick, the 60s sweep, the masthead rotation) deliberately don't — DOM churn
   is not attention. The open **lingers until input** — a screensaver that
   dismisses itself back into blank idleness defeats itself (one quote per idle
-  stretch, and the input that wakes it restarts the 2-min clock). The waking
+  stretch, and the input that wakes it restarts the clock). The waking
   keystroke is already consumed by the dismissal handler's `preventDefault`, so
   it can't also type into whatever sat beneath. Gates: pool non-empty and no
   other floating surface open. The watcher lives in `App.tsx` (event bumpers +

@@ -216,6 +216,7 @@ fn settings_cmd(rest: &[String]) -> anyhow::Result<()> {
             println!("ui:");
             println!("  notes-bg   {}", on("dayapp-notes-card"));
             println!("  tasks-bg   {}", on("dayapp-tasks-card"));
+            println!("  screensaver {} min idle", get("dayapp-screensaver-mins").unwrap_or_else(|| "2".into()));
             println!("  header     {}", get("dayapp-header-buttons").unwrap_or_else(|| "{}".into()));
             println!("theme:      {}", get("dayapp-theme").unwrap_or_else(|| "dark".into()));
             let views = get("dayapp-views").unwrap_or_else(|| "[]".into());

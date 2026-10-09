@@ -49,10 +49,6 @@ const clampZoom = (z: number) =>
 // Masthead brand rotation: the "Live @ " words the header steps out to, one
 // picked at random every 2 minutes before returning to "Faraz" (home).
 const MASTHEAD_THEMES = ["growth", "money", "journey", "learn"] as const;
-// The quote screensaver's threshold: two minutes of focused stillness (no
-// key, click, pointer movement, or scroll) summons the quote modal unprompted.
-const SCREENSAVER_IDLE_MS = 120_000;
-
 // The address prefixes of the focus grammar: n (notes + captures), t/d
 // (Today/Daily rows), b (Backlog rows, two digits: tier then index), g
 // (goals). Typed directly, no mode — see the key handler below.
@@ -485,11 +481,18 @@ function DayAppBody() {
   const [agentTasksVisible, setAgentTasksVisible] = useState(
     () => sget("dayapp-agent-tasks-visible", "1") !== "0",
   );
-  // The quote screensaver — two minutes of focused stillness summons the
-  // quote modal (the idle watcher below). Default on; no palette entry since
-  // 2026-09-15 — `dayapp-quote-screensaver=0` in the settings store is the off
-  // switch, read once at mount. With an empty pool it can't fire.
+  // The quote screensaver — focused stillness summons the quote modal (the
+  // idle watcher below). Default on; no palette entry since 2026-09-15 —
+  // `dayapp-quote-screensaver=0` in the settings store is the off switch,
+  // read once at mount. With an empty pool it can't fire.
   const quoteScreensaver = sget("dayapp-quote-screensaver", "1") !== "0";
+  // How long it waits (Settings → UI): idle minutes before the modal may
+  // open. Default 2 — the shipped behavior; a junk store value falls back to
+  // it, and the persist effect rewrites the store clean on launch.
+  const [screensaverMins, setScreensaverMins] = useState(() => {
+    const n = parseInt(sget("dayapp-screensaver-mins", "2"), 10);
+    return Number.isFinite(n) && n >= 1 ? n : 2;
+  });
   // The quote moment: App owns the open boolean (the floating-surface gate in
   // the key handler needs it) and the pool size (Quotes reports it up; the
   // idle watcher won't fire on an empty pool). Quotes.tsx owns the rest —
@@ -744,6 +747,7 @@ function DayAppBody() {
     sset("dayapp-sec-backlog-enabled", sectionsEnabled.backlog ? "1" : "0");
     sset("dayapp-notes-card", notesCard ? "1" : "0");
     sset("dayapp-tasks-card", tasksCard ? "1" : "0");
+    sset("dayapp-screensaver-mins", String(screensaverMins));
     sset("dayapp-header-buttons", JSON.stringify(headerBtns));
     sset("dayapp-journal-enabled", journalEnabled ? "1" : "0");
     sset("dayapp-quotes-enabled", quotesEnabled ? "1" : "0");
@@ -760,7 +764,7 @@ function DayAppBody() {
     // quote line the modal replaced — one-time cleanups. (The quote
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.)
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, hideEnabled, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, hideEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -806,7 +810,7 @@ function DayAppBody() {
   }, []);
 
   // ---- Quote screensaver --------------------------------------------------
-  // SCREENSAVER_IDLE_MS of focused stillness summons the quote modal — the
+  // screensaverMins of focused stillness summons the quote modal — the
   // screensaver idiom, not a push notification: it only arrives when nothing
   // is happening, and any key or click ends it through the modal's existing
   // dismissal (which preventDefaults, so the waking key can't also type into
@@ -833,12 +837,12 @@ function DayAppBody() {
         quoteOpen || quoteCount === 0 ||
         paletteOpen || searchOpen || helpOpen || syncSettingsOpen || updateStatus ||
         !document.hasFocus() ||
-        Date.now() - lastInputAt.current < SCREENSAVER_IDLE_MS
+        Date.now() - lastInputAt.current < screensaverMins * 60_000
       ) return;
       openQuote();
     }, 5_000);
     return () => clearInterval(id);
-  }, [quoteScreensaver, quoteOpen, quoteCount, paletteOpen, searchOpen, helpOpen, syncSettingsOpen, updateStatus, openQuote, quotesEnabled]);
+  }, [quoteScreensaver, quoteOpen, quoteCount, paletteOpen, searchOpen, helpOpen, syncSettingsOpen, updateStatus, openQuote, quotesEnabled, screensaverMins]);
 
   // What the user sees: items narrowed by the ⌘P hidden priority tiers, the ⌘P
   // agent-tasks toggle, and/or the ⌘F project/agent filters, if any — plus the
@@ -2465,6 +2469,8 @@ function DayAppBody() {
             notesCard={notesCard}
             tasksCard={tasksCard}
             onSetCard={setCardStyle}
+            screensaverMins={screensaverMins}
+            onSetScreensaverMins={setScreensaverMins}
             headerBtns={headerBtns}
             onToggleHeaderBtn={toggleHeaderBtn}
             themeId={themeId}

@@ -138,7 +138,7 @@ const FEATURES: { key: FeatureKey; label: string; hint: string }[] = [
 export default function SettingsView({
   features, onToggleFeature, projects, views, activeViewId,
   onToggleViewActive, onCreateView, onUpdateView, onDeleteView,
-  notesCard, tasksCard, onSetCard, headerBtns, onToggleHeaderBtn,
+  notesCard, tasksCard, onSetCard, screensaverMins, onSetScreensaverMins, headerBtns, onToggleHeaderBtn,
   themeId, customThemes, onActivateTheme, onCreateTheme, onDeleteTheme,
 }: {
   features: Record<FeatureKey, boolean>;
@@ -153,6 +153,8 @@ export default function SettingsView({
   notesCard: boolean;
   tasksCard: boolean;
   onSetCard: (surface: "notes" | "tasks", card: boolean) => void;
+  screensaverMins: number;
+  onSetScreensaverMins: (mins: number) => void;
   headerBtns: Record<HeaderBtn, boolean>;
   onToggleHeaderBtn: (btn: HeaderBtn) => void;
   themeId: string;
@@ -310,6 +312,24 @@ export default function SettingsView({
               );
             },
           )}
+          <div className="settings-row">
+            <div className="settings-main">
+              <span className="settings-name">Quote screensaver</span>
+              <span className="settings-hint">
+                {screensaverMins} min idle before a quote appears
+              </span>
+            </div>
+            {[1, 2, 5, 10].map((m) => (
+              <button
+                key={m}
+                className={`pill${screensaverMins === m ? " active" : ""}`}
+                onClick={() => {
+                  trace("ui.screensaver", { mins: m });
+                  onSetScreensaverMins(m);
+                }}
+              >{m}m</button>
+            ))}
+          </div>
         </div>
       </div>
 
