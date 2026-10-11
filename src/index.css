@@ -131,6 +131,20 @@ button {
 }
 .icon-btn:hover { background: var(--bg-hover); color: var(--text); }
 .icon-btn.active { color: var(--accent); }
+/* The theme cycle's subscript: the position in the ladder, tucked into the
+   button's corner off the droplet's shoulder. */
+.theme-cycle { position: relative; }
+.theme-cycle svg { margin-top: -3px; }
+.theme-idx {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.theme-cycle:hover .theme-idx { color: var(--text); }
 /* The release-update door (mounts only while a newer release exists) — the
    one accent icon at rest, since its whole job is to be noticed. */
 .icon-btn.update-ready { color: var(--accent); }
@@ -407,14 +421,13 @@ button {
 .item-action {
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: 5px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-faint);
   opacity: 0;
   transition: opacity 0.08s ease, background 0.08s ease, color 0.08s ease;
-  font-size: 17px;
   line-height: 1;
 }
 :is(.item:hover, .item.selected, .item.focused, .item:has(.hide-menu)) .item-action { opacity: 1; }
@@ -821,6 +834,57 @@ button {
 }
 .an-seg-legend .leg.zero { color: var(--text-faint); }
 
+/* The projects card's bottom reveal: the roster continues past the fold —
+   the tenth row sinks under a fade + blur with a chip riding it; expanding
+   unfolds the rest (a quiet chevron-up row folds it back). */
+.an-proj-body { position: relative; }
+.an-proj-fade {
+  position: absolute;
+  left: -18px;
+  right: -18px;
+  bottom: -16px;
+  height: 36px;
+  background: linear-gradient(to bottom, transparent, var(--bg-elev));
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+.an-proj-more {
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: color 0.08s ease, background 0.08s ease;
+}
+.an-proj-more:hover { color: var(--text); background: var(--bg-hover); }
+.an-proj-more .dd-chev { opacity: 1; }
+.an-proj-less {
+  margin-top: 4px;
+  width: 100%;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.08s ease;
+}
+.an-proj-less:hover { color: var(--text); }
+.an-proj-less .dd-chev { opacity: 1; }
+
 /* Day ledger and the day card it opens. The list is counts only, never the
    raw action rows (the log's textual home is the CLI's --journal); clicking
    a row — or a calendar cell, the date field, or the Today pill — swaps the
@@ -858,6 +922,18 @@ button {
 }
 .an-day .s .done { color: var(--text); }
 .an-day .s .time { color: var(--accent); }
+/* The ledger's pager: ten days a page, the minimal ‹ n/m › strip centered
+   under the rows. */
+.an-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
 /* The picked day's card: the ledger row's expansion promoted to a card. The
    back chevron sits before the day label in the title row, the counts read
    in the hint, and the rows sit flush with the card's padding. */
@@ -953,10 +1029,12 @@ button {
 .an-day:hover .dd-chev { opacity: 1; }
 .dd-chev.open { transform: rotate(90deg); }
 .dd-chev.left { transform: rotate(180deg); }
+/* Dropdown-trigger orientations: closed points down, open points up. */
+.dd-chev.down { transform: rotate(90deg); }
+.dd-chev.up { transform: rotate(270deg); }
 /* Card-head icon buttons — the inner action button language carrying an
-   always-on chevron: the projects card's zero-rows reveal and the day
-   card's back arrow. */
-.an-expand,
+   always-on chevron: the day card's back arrow, the month pagers, the
+   ledger's pager. */
 .an-back {
   display: inline-flex;
   align-items: center;
@@ -971,9 +1049,7 @@ button {
   cursor: pointer;
   transition: color 0.08s ease, background 0.08s ease;
 }
-.an-expand:hover,
 .an-back:hover { color: var(--text); background: var(--bg-hover); }
-.an-expand .dd-chev,
 .an-back .dd-chev { opacity: 1; }
 .dash-empty {
   color: var(--text-faint);
@@ -1006,42 +1082,104 @@ button {
 }
 .pill:hover { color: var(--text); background: var(--bg-hover); }
 .pill.active { color: var(--accent); }
-/* The subject toggle (Done | Created): the same pill language, set off from
-   the range pills by a hairline. */
-.subj {
+/* The from–to range picker: two pill fields that always show the effective
+   window (a pill's included) over one floating month-grid popover. The
+   selected day fills with the accent, today is ringed, the days between the
+   two sides carry a faint accent tint. */
+.dp {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  border-right: 1px solid var(--border);
-  padding-right: 6px;
-  margin-right: 8px;
+  gap: 2px;
 }
-/* The date jump is a native date input. Stripped to a faint, borderless label
-   that picks up the accent when it's the active source. */
-.date-jump {
-  font: inherit;
+.dp-sep { color: var(--text-faint); font-size: 11px; }
+.dp-pop {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 60;
+  width: 224px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: var(--shadow-md);
+}
+.dp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.dp-month {
   font-size: 11px;
+  font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: none;
-  background: none;
+  color: var(--text-dim);
+}
+.dp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.dp-wk {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-faint);
-  width: auto;
-  color-scheme: dark;
+  text-align: center;
+  padding: 2px 0;
+}
+.dp-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.08s ease;
+}
+.dp-cell:hover { background: var(--bg-hover); }
+.dp-cell.blank { pointer-events: none; }
+.dp-cell.future {
+  color: var(--text-faint);
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+.dp-cell.inrange { background: rgba(var(--accent-rgb), 0.14); border-radius: 0; }
+.dp-cell.inrange:hover { background: rgba(var(--accent-rgb), 0.24); }
+.dp-cell.sel { background: var(--accent); color: var(--bg); font-weight: 600; }
+.dp-cell.today:not(.sel) { box-shadow: inset 0 0 0 1px var(--accent); }
+.dp-clear {
+  margin-top: 6px;
+  width: 100%;
+  padding: 4px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-faint);
   cursor: pointer;
   transition: color 0.08s ease, background 0.08s ease;
 }
-.date-jump:hover { color: var(--text); background: var(--bg-hover); }
-.date-jump.active { color: var(--accent); }
+.dp-clear:hover { color: var(--text); background: var(--bg-hover); }
 
-/* Axis scope filters — the range pills' language extended to the two
-   organising axes: a `#` project picker (multi-select popover, the hide-menu
-   look) and tier chips (the PriorityBars glyphs, the tier dividers' label
-   language; the empty track is the unmarked tier). Right-aligned on the bar
-   so the range scope and the axis scope read as two groups. Active tier
-   chips light their bars with the accent on a hover bg — the pill language's
-   "active = accent" carried by the glyphs themselves. */
+/* Axis scope filters — the range pills' language extended to the three
+   organising axes: Projects, Priority, and Delegation, each a multi-select
+   dropdown (the hide-menu look under a pill trigger with a chevron). Right-
+   aligned on the bar so the range scope and the axis scope read as two
+   groups. An active dropdown tints accent — the pill language's "active =
+   accent" — with the selection count beside the label. */
 .anf {
   margin-left: auto;
   display: inline-flex;
@@ -1049,12 +1187,20 @@ button {
   gap: 2px;
 }
 .anf-wrap { position: relative; display: inline-flex; }
+.anf-dd {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.anf-dd .dd-chev { opacity: 1; }
 .anf-menu {
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
   z-index: 60;
   min-width: 200px;
+  max-height: 320px;
+  overflow-y: auto;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1063,6 +1209,14 @@ button {
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+/* The axis dropdowns sit at the bar's right edge, so their menus grow
+   leftward (right-anchored). The subject/range dropdowns sit at the LEFT
+   edge — their menus anchor to the trigger's left edge, or they'd grow off
+   the window. */
+.anf-menu.left {
+  left: 0;
+  right: auto;
 }
 .anf-menu-item {
   display: flex;
@@ -1077,6 +1231,7 @@ button {
 }
 .anf-menu-item:hover, .anf-menu-item.hi { background: var(--bg-hover); }
 .anf-menu-item .anf-name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anf-bars { display: inline-flex; flex-shrink: 0; }
 .anf-dot {
   width: 8px;
   height: 8px;
@@ -1085,10 +1240,6 @@ button {
 }
 .anf-dot.hollow { border: 1px solid var(--text-faint); background: none; }
 .anf-check { color: var(--accent); font-size: 11px; }
-.anf-tier { display: inline-flex; align-items: center; padding: 4px 7px; }
-.anf-tier.active { background: var(--bg-hover); }
-.anf-tier.active .priority-bars .bar { background: rgba(var(--accent-rgb), 0.35); }
-.anf-tier.active .priority-bars .bar.filled { background: var(--accent); }
 .anf-clear { color: var(--text-dim); }
 .anf-clear:hover { color: var(--text); }
 
@@ -1308,12 +1459,11 @@ button {
 .note-mirror .tok-fitted { display: inline-block; }
 
 .note-delete {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
   color: var(--text-faint);
   opacity: 0;
-  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1413,9 +1563,10 @@ button {
 /* Right-aligned row metadata. Pushed to the far edge (margin-left:auto) so the
    project name + reminder sit flush right. Priority + project label stay
    visible on hover — they're the row's identity, wanted while its actions are
-   on screen — while time / reminder / hidden-status fade so the buttons take
-   their place. Everything is opacity-only with reserved slots, so nothing
-   reflows on hover. */
+   on screen — and so do time + reminder (2026-10-12: they used to fade with
+   the buttons' arrival, but they're facts worth reading while acting). Only
+   the hidden-status chip fades. Everything is opacity-only with reserved
+   slots, so nothing reflows on hover. */
 .item-meta {
   display: flex;
   align-items: center;
@@ -1423,8 +1574,8 @@ button {
   margin-left: auto;
   flex-shrink: 0;
 }
-.item-meta :is(.time-label, .reminder-chip, .hidden-chip) { transition: opacity 0.08s ease; }
-:is(.item:hover, .item.selected, .item.focused, .item:has(.hide-menu)) .item-meta :is(.time-label, .reminder-chip, .hidden-chip) { opacity: 0; }
+.item-meta .hidden-chip { transition: opacity 0.08s ease; }
+:is(.item:hover, .item.selected, .item.focused, .item:has(.hide-menu)) .item-meta .hidden-chip { opacity: 0; }
 
 /* The identity columns (ItemRow): priority, then agent, then project, as
    fixed-width slots right-anchored against the action buttons — an axis a
@@ -2558,4 +2709,5 @@ button {
   align-items: center;
   gap: 10px;
 }
-.an-cal-nav .an-back:disabled { opacity: 0.25; cursor: default; }
+.an-back:disabled { opacity: 0.25; cursor: default; }
+.an-back:disabled:hover { color: var(--text-faint); background: none; }

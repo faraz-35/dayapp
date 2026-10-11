@@ -31,6 +31,7 @@ import { useFeatures } from "./features";
 import ProjectMenu from "./ProjectMenu";
 import TokenField from "./TokenField";
 import { EditInput } from "./components/ItemRow";
+import { IconX } from "./components/icons";
 
 // Display order: constitution → career → now. A group with no goals renders
 // no divider (derived from the rendered list, like the Backlog's tier
@@ -213,7 +214,7 @@ export default function Goals({
               onClick={(e) => { e.stopPropagation(); handleDelete(goal); }}
               title="Delete goal"
               aria-label="Delete goal"
-            >×</button>
+            ><IconX /></button>
           </>
         )}
       </div>

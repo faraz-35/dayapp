@@ -21,6 +21,7 @@ import { trace } from "./devlog";
 import { firePopoverPick } from "./focusNav";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
+import { IconClock } from "./components/icons";
 
 const PRESETS: { days: number; label: string }[] = [
   { days: 1, label: "Tomorrow" },
@@ -87,7 +88,7 @@ export default function ReminderMenu({
         title="Remind me"
         aria-label="Remind me"
         aria-expanded={open}
-      >◷</button>
+      ><IconClock /></button>
       {open && (
         <div
           className={`hide-menu${flip ? " flip" : ""}`}

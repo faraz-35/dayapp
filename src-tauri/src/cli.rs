@@ -806,8 +806,8 @@ fn analytics(db: &Db, rest: &[String]) -> anyhow::Result<()> {
     };
     let iso = |d: Option<NaiveDate>| d.map(|x| x.format("%Y-%m-%d").to_string());
 
-    // The agent axis reads the items' current flags — assignments are
-    // unlogged, the one "currently" read (see dashboard.rs).
+    // The agent axis rides the actions.agent write-time snapshot (see
+    // dashboard.rs).
     let filter = crate::dashboard::ScopeFilter {
         projects: project.as_ref().map(|_| vec![project.clone()]),
         priorities: None,

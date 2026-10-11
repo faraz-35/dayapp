@@ -15,6 +15,10 @@ export interface Features {
   timer: boolean;
   reminders: boolean;
   hide: boolean;
+  /** Task details (the ⋯ spec body) and the notes' ⬇ .txt export — content
+   *  features Faraz can switch off like any other existence toggle. */
+  taskDetails: boolean;
+  noteDownload: boolean;
   /** The surfaces (already state-backed in App — mirrored here for parsing
    *  flags so one context answers every "does this exist" question). */
   tasks: boolean;
@@ -29,7 +33,7 @@ export interface Features {
 
 export const FeaturesContext = createContext<Features>({
   projects: true, taskPriorities: true, notePriorities: true, agent: true,
-  timer: true, reminders: true, hide: true,
+  timer: true, reminders: true, hide: true, taskDetails: true, noteDownload: true,
   tasks: true, today: true, daily: true, backlog: true,
   notes: true, goals: true, journal: true, quotes: true,
 });

@@ -21,6 +21,7 @@ import { log } from "./log";
 import { clip, trace } from "./devlog";
 import TokenField from "./TokenField";
 import { EditInput } from "./components/ItemRow";
+import { IconX } from "./components/icons";
 
 // The display order, mirroring list_entries' ORDER BY (journal.rs): newest day
 // first, and within a day oldest → newest (ULID text order breaks same-second
@@ -141,7 +142,7 @@ export default function EntriesPage({
           e.stopPropagation();
           handleDelete(entry);
         }}
-      >×</button>
+      ><IconX /></button>
     </div>
   );
 

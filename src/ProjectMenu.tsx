@@ -25,6 +25,7 @@ import { trace } from "./devlog";
 import { firePopoverPick } from "./focusNav";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
+import { IconHash } from "./components/icons";
 
 export default function ProjectMenu({
   projects, projectId, onAssign, onCreateProject, kb,
@@ -107,7 +108,7 @@ export default function ProjectMenu({
         title="Set project"
         aria-label="Set project"
         aria-expanded={open}
-      >#</button>
+      ><IconHash /></button>
       {open && (
         <div
           className={`hide-menu${flip ? " flip" : ""}`}

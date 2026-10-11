@@ -19,6 +19,7 @@ import { trace } from "./devlog";
 import { firePopoverPick } from "./focusNav";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
+import { IconHalfMoon } from "./components/icons";
 
 const OPTIONS: { id: HideDuration; label: string; sub: string }[] = [
   { id: "forever", label: "Forever", sub: "until unhidden" },
@@ -77,7 +78,7 @@ export default function HideMenu({ onHide, kb, verb = "Hide" }: { onHide: (durat
         title={verb}
         aria-label={verb}
         aria-expanded={open}
-      >◐</button>
+      ><IconHalfMoon /></button>
       {open && (
         <div
           className={`hide-menu${flip ? " flip" : ""}`}

@@ -47,6 +47,7 @@ import { clip, trace } from "./devlog";
 import HideMenu from "./HideMenu";
 import TokenField from "./TokenField";
 import { PriorityBars } from "./components/PriorityBars";
+import { IconChevron, IconDownload, IconX } from "./components/icons";
 import { useFeatures } from "./features";
 
 // Collapsed-note ids, persisted like the UI zoom — a display preference.
@@ -718,9 +719,9 @@ function NoteInput({
           <span className="note-find-count">
             {findQuery ? (matches.length > 0 ? `${cur + 1}/${matches.length}` : "0/0") : ""}
           </span>
-          <button className="note-find-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => step(-1)} title="Previous match (↑)"><FindChevron up /></button>
-          <button className="note-find-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => step(1)} title="Next match (Enter)"><FindChevron /></button>
-          <button className="note-find-btn" onMouseDown={(e) => e.preventDefault()} onClick={closeFind} title="Close (Esc)">×</button>
+          <button className="note-find-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => step(-1)} title="Previous match (↑)"><IconChevron up /></button>
+          <button className="note-find-btn" onMouseDown={(e) => e.preventDefault()} onClick={() => step(1)} title="Next match (Enter)"><IconChevron /></button>
+          <button className="note-find-btn" onMouseDown={(e) => e.preventDefault()} onClick={closeFind} title="Close (Esc)"><IconX /></button>
         </div>
       )}
       {collapsed ? (
@@ -789,7 +790,7 @@ function NoteInput({
           onClick={onToggleCollapse}
           title={collapsed ? "Expand note" : "Collapse note"}
           aria-label={collapsed ? "Expand note" : "Collapse note"}
-        >{collapsed ? <FindChevron size={12} /> : <FindChevron up size={12} />}</button>
+        >{collapsed ? <IconChevron /> : <IconChevron up />}</button>
         {/* ⬇ exports the body as a .txt via the native save panel — the slot
             after collapse. Only for notes with content, like the delete slot;
             hidden notes skip it entirely (their slots are restore/delete
@@ -806,20 +807,20 @@ function NoteInput({
             slots.unhide = next();
             slots.delete = next();
           } else {
-            slots.download = next();
+            if (features.noteDownload) slots.download = next();
             if (features.hide) slots.hide = next();
             slots.delete = next();
           }
           return (
             <>
-              {!note.hidden && val.trim() && (
+              {!note.hidden && features.noteDownload && val.trim() && (
                 <button
                   className="item-action"
                   data-kb={slots.download}
                   onClick={handleDownload}
                   title="Download as .txt"
                   aria-label="Download as .txt"
-                ><DownloadIcon /></button>
+                ><IconDownload /></button>
               )}
               {note.hidden ? (
                 <button
@@ -839,7 +840,7 @@ function NoteInput({
                   onClick={onDelete}
                   title="Delete note"
                   aria-label="Delete note"
-                >×</button>
+                ><IconX /></button>
               )}
             </>
           );
@@ -863,40 +864,3 @@ const exportName = (body: string) => {
   return base && /\.txt$/i.test(base) ? base : `${base || "note"}.txt`;
 };
 
-// The export glyph — an arrow into a tray, stroked SVG in the same family as
-// ItemRow's chevron/arrow (unicode ⬇ rides the font's baseline and sizes
-// inconsistently across it).
-function DownloadIcon() {
-  return (
-    <svg className="action-chevron" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
-      <path
-        d="M6 1.9v5.4M3.4 5.1 6 7.7 8.6 5.1M2.6 10.4h6.8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-// Prev/next-match chevrons for the find bar — the details chevron's geometry,
-// a size down for the smaller buttons. Also the collapse/expand button's glyph
-// (slot 1): one consistent stroked shape, flipped by the `up` prop — unicode
-// ⌃/⌄ are two different glyphs riding the font baseline, so they never
-// matched each other or centered in the button.
-function FindChevron({ up, size = 11 }: { up?: boolean; size?: number }) {
-  return (
-    <svg className="action-chevron" viewBox="0 0 12 12" width={size} height={size} aria-hidden="true">
-      <path
-        d={up ? "M2.8 7.6 6 4.4 9.2 7.6" : "M2.8 4.4 6 7.6 9.2 4.4"}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}

@@ -68,10 +68,14 @@ CREATE TABLE IF NOT EXISTS actions (
     -- project/priority splits read history that survives reassignment and
     -- deletion. `project` is the project NAME (a snapshot like item_text, not
     -- an FK — the projects row may not survive); goal rows snapshot the goal's
-    -- project name and carry no priority. Pre-existing rows were backfilled
-    -- once from then-current state (see db.rs migrate).
+    -- project name and carry no priority. `agent` snapshots the delegation
+    -- flag the same way (goal rows carry none) — without it the axis read the
+    -- item's CURRENT flag, and every completed agent task whose row had been
+    -- swept or unflagged read as the owner's. Pre-existing rows were
+    -- backfilled once from then-current state (see db.rs migrate).
     project      TEXT,
     priority     INTEGER,
+    agent        INTEGER,
     CHECK (item_id IS NOT NULL OR goal_id IS NOT NULL)
 );
 

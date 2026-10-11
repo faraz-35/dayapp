@@ -228,6 +228,21 @@ impl Db {
             let n = backfill_action_axes(conn)?;
             log::info!("migrate: snapshotted project/priority onto {n} action row(s)");
         }
+        // `agent` snapshots the delegation flag the same way — its absence was
+        // the analytics bug where every completed agent task whose row had
+        // been swept or unflagged read as the owner's (the axis used to read
+        // the item's CURRENT flag through a subselect). Backfilled once from
+        // the item's current flag; deleted subjects stay NULL and read as the
+        // owner's — the same honest best effort as the other axes.
+        if ensure_column(conn, "actions", "agent", "INTEGER")? {
+            let n = conn.execute(
+                "UPDATE actions SET agent = (
+                     SELECT i.assigned_to_agent FROM items i WHERE i.id = actions.item_id)
+                 WHERE agent IS NULL AND item_id IS NOT NULL",
+                [],
+            )?;
+            log::info!("migrate: snapshotted agent onto {n} action row(s)");
+        }
         // Actions v3: paused/unpaused — the dated record of an item's hide.
         // The daily-miss replay folds them instead of reading the hidden flag
         // (which can't say WHEN a pause started). Runs after the ensure_columns
@@ -267,11 +282,12 @@ impl Db {
                         timestamp    TEXT NOT NULL,
                         project      TEXT,
                         priority     INTEGER,
+                        agent        INTEGER,
                         CHECK (item_id IS NOT NULL OR goal_id IS NOT NULL)
                     );
                     INSERT INTO actions_v3
-                        (id,item_id,goal_id,item_text,action,from_section,to_section,from_status,to_status,timestamp,project,priority)
-                    SELECT id,item_id,goal_id,item_text,action,from_section,to_section,from_status,to_status,timestamp,project,priority
+                        (id,item_id,goal_id,item_text,action,from_section,to_section,from_status,to_status,timestamp,project,priority,agent)
+                    SELECT id,item_id,goal_id,item_text,action,from_section,to_section,from_status,to_status,timestamp,project,priority,agent
                     FROM actions;
                     DROP TABLE actions;
                     ALTER TABLE actions_v3 RENAME TO actions;
@@ -326,7 +342,8 @@ impl Db {
                    project = (SELECT p.name FROM items i
                               LEFT JOIN projects p ON p.id = i.project_id
                               WHERE i.id = actions.item_id),
-                   priority = (SELECT i.priority FROM items i WHERE i.id = actions.item_id)
+                   priority = (SELECT i.priority FROM items i WHERE i.id = actions.item_id),
+                   agent = (SELECT i.assigned_to_agent FROM items i WHERE i.id = actions.item_id)
                  WHERE action = 'created' AND item_id IS NOT NULL
                    AND project IS NULL AND priority IS NULL
                    AND item_id IN (SELECT id FROM items)",
@@ -921,16 +938,17 @@ fn log_action(
     from_status: Option<&str>, to_status: Option<&str>,
     timestamp: &str,
 ) -> anyhow::Result<()> {
-    // The trailing subqueries snapshot the item's project NAME and priority
-    // tier at write time — the same deletion-proofing as item_text, so the
-    // dashboard's splits read history that survives reassignment. They read
-    // the live row, so callers must log while it still exists (delete_item
-    // logs before its DELETE for exactly this reason).
+    // The trailing subqueries snapshot the item's project NAME, priority tier,
+    // and delegation flag at write time — the same deletion-proofing as
+    // item_text, so the dashboard's splits read history that survives
+    // reassignment. They read the live row, so callers must log while it still
+    // exists (delete_item logs before its DELETE for exactly this reason).
     tx.execute(
-        "INSERT INTO actions (item_id,item_text,action,from_section,to_section,from_status,to_status,timestamp,project,priority)
+        "INSERT INTO actions (item_id,item_text,action,from_section,to_section,from_status,to_status,timestamp,project,priority,agent)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,
                  (SELECT p.name FROM items i LEFT JOIN projects p ON p.id = i.project_id WHERE i.id = ?1),
-                 (SELECT i.priority FROM items i WHERE i.id = ?1))",
+                 (SELECT i.priority FROM items i WHERE i.id = ?1),
+                 (SELECT i.assigned_to_agent FROM items i WHERE i.id = ?1))",
         params![item_id, item_text, action, from_section, to_section, from_status, to_status, timestamp])?;
     Ok(())
 }

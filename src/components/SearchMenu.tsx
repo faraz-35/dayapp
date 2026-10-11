@@ -26,6 +26,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { clip, trace } from "../devlog";
 import { projectColor, type Item, type Project, type Section } from "../lib";
 import { useFeatures } from "../features";
+import { IconPencil, IconX } from "./icons";
 
 export interface SearchHit {
   item: Item;
@@ -303,13 +304,13 @@ export default function SearchMenu({
                     title="Rename project"
                     aria-label="Rename project"
                     onClick={(e) => { e.stopPropagation(); startRename(p); }}
-                  >✎</button>
+                  ><IconPencil /></button>
                   <button
                     className="item-action danger"
                     title="Delete project (unassigns its tasks, notes and goals — keeps them)"
                     aria-label="Delete project"
                     onClick={(e) => { e.stopPropagation(); deleteProject(p); }}
-                  >×</button>
+                  ><IconX /></button>
                 </>
               )}
             </div>

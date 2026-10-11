@@ -20,10 +20,12 @@ import { useState } from "react";
 import { type Project } from "./lib";
 import { clip, trace } from "./devlog";
 import { BUILT_IN_THEMES, COLOR_FIELDS, applyTheme, type Theme, type ThemeColors } from "./themes";
+import { IconPencil, IconX } from "./components/icons";
 
 export type FeatureKey =
   | "tasks" | "today" | "daily" | "backlog" | "notes" | "goals" | "journal" | "quotes"
-  | "projects" | "taskPriorities" | "notePriorities" | "agent" | "timer" | "reminders" | "hide";
+  | "projects" | "taskPriorities" | "notePriorities" | "agent" | "timer" | "reminders" | "hide"
+  | "taskDetails" | "noteDownload";
 
 // The header's icon buttons — each an On/Off choice in the Header group.
 export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes" | "settings" | "theme";
@@ -34,7 +36,7 @@ const HEADER_BUTTONS: { key: HeaderBtn; label: string; hint: string }[] = [
   { key: "journal", label: "Journal", hint: "the prose icon" },
   { key: "quotes", label: "Quotes", hint: "the quote icon" },
   { key: "settings", label: "Settings", hint: "the gear icon" },
-  { key: "theme", label: "Theme toggle", hint: "the moon icon — dark/light in one click" },
+  { key: "theme", label: "Theme cycle", hint: "the droplet — walks every theme, subscript = position" },
 ];
 
 export interface CustomView {
@@ -133,6 +135,8 @@ const FEATURES: { key: FeatureKey; label: string; hint: string }[] = [
   { key: "timer", label: "Timer", hint: "per-task time tracking (▶ / ⏱)" },
   { key: "reminders", label: "Reminders", hint: "the ◷ date that pulls a row to Today" },
   { key: "hide", label: "Hide", hint: "soft-archive rows and notes (◐)" },
+  { key: "taskDetails", label: "Task details", hint: "the ⋯ spec body under a task" },
+  { key: "noteDownload", label: "Note download", hint: "the ⬇ .txt export on notes" },
 ];
 
 export default function SettingsView({
@@ -392,7 +396,7 @@ export default function SettingsView({
                       trace("theme.delete", { id: t.id });
                       onDeleteTheme(t.id);
                     }}
-                  >×</button>
+                  ><IconX /></button>
                 )}
               </div>
             );
@@ -481,7 +485,7 @@ export default function SettingsView({
                   title="Edit view"
                   aria-label={`Edit ${v.name}`}
                   onClick={() => edit(v.id)}
-                >✎</button>
+                ><IconPencil /></button>
                 <button
                   className="settings-x"
                   title="Delete view"
@@ -490,7 +494,7 @@ export default function SettingsView({
                     trace("views.delete", { name: clip(v.name) });
                     onDeleteView(v.id);
                   }}
-                >×</button>
+                ><IconX /></button>
               </div>
             );
           })}

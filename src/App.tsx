@@ -27,6 +27,7 @@ import KeyboardHelp from "./KeyboardHelp";
 import NamePrompt from "./NamePrompt";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, POPOVER_PICK_EVENT, popoverOpen, scrollIntoViewEl } from "./focusNav";
 import { BUILT_IN_THEMES, applyTheme, resolveTheme, type Theme } from "./themes";
+import { IconMoon, IconSun, IconThemes, IconX } from "./components/icons";
 import { MIGRATED_KEYS, externallyChanged, initSettings, sget, sset, ssetMany } from "./settings";
 import { FeaturesContext, type Features } from "./features";
 
@@ -176,21 +177,9 @@ function SettingsIcon() {
   );
 }
 
-// The theme toggle's glyph: a crescent moon — dark/light in one mark
-// (a bisected circle was taken: it's the hidden-entries mark).
-function ThemeToggleIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <path
-        d="M13.2 9.3A5.6 5.6 0 1 1 6.7 2.8a4.4 4.4 0 0 0 6.5 6.5Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+// The theme cycle's glyph rides the shared family: dark wears the moon,
+// light the sun, and a custom theme the swatch card with its position
+// subscript (see the header button).
 
 // The release-update door's glyph: an arrow dropping into a tray — the one
 // header icon that isn't a view, so it reads as "something to receive", not
@@ -392,6 +381,12 @@ function DayAppBody() {
   );
   const [hideEnabled, setHideEnabled] = useState(
     () => sget("dayapp-hide-enabled", "1") !== "0",
+  );
+  const [taskDetailsEnabled, setTaskDetailsEnabled] = useState(
+    () => sget("dayapp-task-details-enabled", "1") !== "0",
+  );
+  const [noteDownloadEnabled, setNoteDownloadEnabled] = useState(
+    () => sget("dayapp-note-download-enabled", "1") !== "0",
   );
   // Theme (Settings → Appearance): the active id resolves against the
   // built-ins plus the user's custom themes; the apply effect writes the
@@ -758,13 +753,15 @@ function DayAppBody() {
     sset("dayapp-timer-enabled", timerEnabled ? "1" : "0");
     sset("dayapp-reminders-enabled", remindersEnabled ? "1" : "0");
     sset("dayapp-hide-enabled", hideEnabled ? "1" : "0");
+    sset("dayapp-task-details-enabled", taskDetailsEnabled ? "1" : "0");
+    sset("dayapp-note-download-enabled", noteDownloadEnabled ? "1" : "0");
     sset("dayapp-views", JSON.stringify(views));
     sset("dayapp-active-view", activeViewId ?? "");
     // Retired keys: the single-tier "only" filter era, and the rotating
     // quote line the modal replaced — one-time cleanups. (The quote
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.)
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, hideEnabled, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, hideEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -1607,9 +1604,12 @@ function DayAppBody() {
   };
 
   const handleToggleDetails = useCallback((id: string) => {
+    // The existence switch gates the verb too — digit 5 and the button both
+    // land here, so a switched-off feature can't be opened by either.
+    if (!taskDetailsEnabled) return;
     trace("details.toggle", { open: detailsOpenId !== id });
     setDetailsOpenId((cur) => (cur === id ? null : id));
-  }, [detailsOpenId]);
+  }, [detailsOpenId, taskDetailsEnabled]);
 
   // Toggle the single active timer on `id`. Starting B auto-stops A (the
   // backend finalizes any open session first). Optimistic: show the timer with
@@ -1783,8 +1783,16 @@ function DayAppBody() {
       setHideEnabled((v) => !v);
       setShowHiddenItems(false);
       setShowHiddenNotes(false);
-    } else setGoalsEnabled((v) => !v);
-  }, [journalEnabled, quotesEnabled, view]);
+    } else if (key === "taskDetails") {
+      // Details off while a body is open: close it — the feature can't leave
+      // an invisible surface editing.
+      setTaskDetailsEnabled((v) => {
+        if (v && detailsOpenId) setDetailsOpenId(null);
+        return !v;
+      });
+    } else if (key === "noteDownload") setNoteDownloadEnabled((v) => !v);
+    else setGoalsEnabled((v) => !v);
+  }, [journalEnabled, quotesEnabled, view, detailsOpenId]);
   const setCardStyle = useCallback((surface: "notes" | "tasks", card: boolean) => {
     if (surface === "notes") setNotesCard(card);
     else setTasksCard(card);
@@ -1792,17 +1800,15 @@ function DayAppBody() {
   const toggleHeaderBtn = useCallback((btn: HeaderBtn) => {
     setHeaderBtns((b) => ({ ...b, [btn]: !b[btn] }));
   }, []);
-  // The header theme toggle: to the opposite side of the ladder. A custom
-  // theme goes by its background's luminance (a light-feeling custom lands
-  // on Dark, and vice versa).
-  const toggleTheme = useCallback(() => {
-    const current = resolveTheme(themeId, customThemes);
-    const lightNow = resolveTheme("light", customThemes);
-    const target = current.colors.bg.toLowerCase() === lightNow.colors.bg.toLowerCase() || current.id === "light"
-      ? "dark"
-      : "light";
-    trace("theme.toggle", { from: themeId, to: target });
-    setThemeId(target);
+  // The header theme button walks the whole ladder — Dark → Light → each
+  // custom theme in store order, wrapping. The Settings page stays the direct
+  // door (activate/delete/create); the button is the one-click cycle.
+  const cycleTheme = useCallback(() => {
+    const all = [...BUILT_IN_THEMES, ...customThemes];
+    const i = all.findIndex((t) => t.id === themeId);
+    const next = all[(i + 1 + all.length) % all.length] ?? all[0];
+    trace("theme.cycle", { from: themeId, to: next.id });
+    setThemeId(next.id);
   }, [themeId, customThemes]);
   // Themes (Settings → Appearance). Activating stores the id (the apply
   // effect skins the app); deleting the active theme falls back to Dark.
@@ -2175,6 +2181,8 @@ function DayAppBody() {
     timer: timerEnabled,
     reminders: remindersEnabled,
     hide: hideEnabled,
+    taskDetails: taskDetailsEnabled,
+    noteDownload: noteDownloadEnabled,
     tasks: tasksEnabled && tasksVisible,
     today: tasksEnabled && sectionsEnabled.today,
     daily: tasksEnabled && sectionsEnabled.daily,
@@ -2227,7 +2235,7 @@ function DayAppBody() {
                 onClick={handleDiscardTimer}
                 title="Discard session (don't save)"
                 aria-label="Discard timer"
-              >×</button>
+              ><IconX /></button>
             </div>
           )}
           {/* ◐ toggles both hidden surfaces (tasks + notes) at once — the
@@ -2303,17 +2311,24 @@ function DayAppBody() {
           )}
           {/* The Settings door (the gear) — same per-button toggle as the
               other view doors: active reads the close X and returns. */}
-          {/* The theme toggle — one click to the other side of the ladder. */}
+          {/* The theme cycle — one click to the next theme in the ladder. Each
+              kind wears its own mark: dark the moon, light the sun, a custom
+              theme the swatch card with its position subscript. */}
           {headerBtns.theme && (
           <button
-            className="icon-btn"
-            onClick={toggleTheme}
-            title={themeId === "light" || resolveTheme(themeId, customThemes).colors.bg.toLowerCase() === "#f7f7f8"
-              ? "Switch to dark"
-              : "Switch to light"}
-            aria-label="Toggle theme"
+            className="icon-btn theme-cycle"
+            onClick={cycleTheme}
+            title={`Theme: ${resolveTheme(themeId, customThemes).name}`}
+            aria-label="Cycle theme"
           >
-            <ThemeToggleIcon />
+            {themeId === "dark" ? <IconMoon /> : themeId === "light" ? <IconSun /> : (
+              <>
+                <IconThemes />
+                <span className="theme-idx" aria-hidden="true">{
+                  Math.max(0, [...BUILT_IN_THEMES, ...customThemes].findIndex((t) => t.id === themeId)) + 1
+                }</span>
+              </>
+            )}
           </button>
           )}
           {headerBtns.settings && (
@@ -2465,6 +2480,8 @@ function DayAppBody() {
               timer: timerEnabled,
               reminders: remindersEnabled,
               hide: hideEnabled,
+              taskDetails: taskDetailsEnabled,
+              noteDownload: noteDownloadEnabled,
             }}
             onToggleFeature={toggleFeature}
             projects={projects}

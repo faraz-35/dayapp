@@ -26,6 +26,9 @@ import ProjectMenu from "../ProjectMenu";
 import ReminderMenu from "../ReminderMenu";
 import TokenField from "../TokenField";
 import { PriorityBars } from "./PriorityBars";
+import {
+  IconArrowUp, IconChevron, IconDots, IconPause, IconPlay, IconUndo, IconX,
+} from "./icons";
 import { useFeatures } from "../features";
 
 export default function ItemRow({
@@ -95,7 +98,7 @@ export default function ItemRow({
       if (features.projects) slots.project = next();
       if (features.reminders) slots.remind = next();
       if (features.hide) slots.hide = next();
-      slots.details = next();
+      if (features.taskDetails) slots.details = next();
       slots.delete = next();
     }
   }
@@ -238,7 +241,7 @@ export default function ItemRow({
                 onClick={(e) => { e.stopPropagation(); onPromote(); }}
                 title="Send to Today"
                 aria-label="Send to Today"
-              ><ArrowUp /></button>
+              ><IconArrowUp /></button>
             ) : (
               <button
                 className="item-action timer-btn"
@@ -246,7 +249,7 @@ export default function ItemRow({
                 onClick={(e) => { e.stopPropagation(); onToggleTimer(); }}
                 title={isTiming ? "Stop timer" : "Start timer"}
                 aria-label={isTiming ? "Stop timer" : "Start timer"}
-              >{isTiming ? "⏸" : "▶"}</button>
+              >{isTiming ? <IconPause /> : <IconPlay />}</button>
             ))}
           {item.hidden ? (
             <>
@@ -256,14 +259,14 @@ export default function ItemRow({
                 onClick={(e) => { e.stopPropagation(); onUnhide(); }}
                 title={item.section === "daily" ? "Unpause" : "Unhide"}
                 aria-label={item.section === "daily" ? "Unpause" : "Unhide"}
-              >↺</button>
+              ><IconUndo /></button>
               <button
                 className="item-action danger"
                 data-kb={slots.delete}
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 title="Delete"
                 aria-label="Delete"
-              >×</button>
+              ><IconX /></button>
             </>
           ) : (
             <>
@@ -282,24 +285,26 @@ export default function ItemRow({
               {features.hide && (
                 <HideMenu kb={slots.hide} onHide={onHide} verb={item.section === "daily" ? "Pause" : "Hide"} />
               )}
-              <button
-                className={`item-action${detailsOpen ? " active" : ""}`}
-                data-kb={slots.details}
-                onClick={(e) => { e.stopPropagation(); onToggleDetails(); }}
-                title={detailsOpen
-                  ? "Collapse details"
-                  : item.details
-                    ? "Expand details"
-                    : "Add details — the task's spec (for agent tasks, the prompt)"}
-                aria-label={detailsOpen ? "Collapse details" : item.details ? "Expand details" : "Add details"}
-              >{detailsOpen ? <Chevron up /> : item.details ? <Chevron /> : "⋯"}</button>
+              {features.taskDetails && (
+                <button
+                  className={`item-action${detailsOpen ? " active" : ""}`}
+                  data-kb={slots.details}
+                  onClick={(e) => { e.stopPropagation(); onToggleDetails(); }}
+                  title={detailsOpen
+                    ? "Collapse details"
+                    : item.details
+                      ? "Expand details"
+                      : "Add details — the task's spec (for agent tasks, the prompt)"}
+                  aria-label={detailsOpen ? "Collapse details" : item.details ? "Expand details" : "Add details"}
+                >{detailsOpen ? <IconChevron up /> : item.details ? <IconChevron /> : <IconDots />}</button>
+              )}
               <button
                 className="item-action danger"
                 data-kb={slots.delete}
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 title="Delete"
                 aria-label="Delete"
-              >×</button>
+              ><IconX /></button>
             </>
           )}
         </>
@@ -335,54 +340,9 @@ function AgentBadge() {
   );
 }
 
-// The Backlog's send-to-Today arrow. Stroked SVG like the details chevron —
-// same weight, centers in the 22×22 .item-action — rather than a unicode ↑,
-// whose glyph metrics vary by font (the reason Chevron is drawn too).
-function ArrowUp() {
-  return (
-    <svg
-      className="action-chevron"
-      viewBox="0 0 12 12"
-      width="12"
-      height="12"
-      aria-hidden="true"
-    >
-      <path
-        d="M6 9.4V2.6M3.2 5.4 6 2.6 8.8 5.4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-// The expand/collapse chevron for the details button. Drawn as SVG rather
-// than the ⌄/⌃ unicode arrowheads — those fall back to an odd font and render
-// at different sizes/baselines per direction; a stroked path is identical in
-// both directions and centers exactly in the 22×22 .item-action (flex).
-function Chevron({ up }: { up?: boolean }) {
-  return (
-    <svg
-      className="action-chevron"
-      viewBox="0 0 12 12"
-      width="12"
-      height="12"
-      aria-hidden="true"
-    >
-      <path
-        d={up ? "M2.8 7.6 6 4.4 9.2 7.6" : "M2.8 4.4 6 7.6 9.2 4.4"}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+// The glyphs live in ./icons — one stroked family shared with the header
+// buttons (the unicode ↑/⌄/⌃/×/▶ they replaced rode font metrics and each
+// sat a size off its neighbors).
 
 // Controlled input that commits on Enter/blur, cancels on Escape.
 // Focus lands at the end of the text (not a full select) so a click-to-edit

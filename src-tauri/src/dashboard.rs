@@ -43,13 +43,13 @@ const HEATMAP_LOOKBACK_DAYS: i64 = 380;
 // The analytics page's axis filters: which projects / priority tiers the whole
 // dashboard derives over — stats, heatmap, splits, ledger, and day detail.
 // OR within an axis, AND across the two. Everything reads the write-time
-// snapshots, so filtered history stays deletion-proof. Two deliberate edges:
-// tracked time does NOT follow the filter (sessions carry no axes — Faraz's
-// call, 2026-08-25, the timer is barely used), and the daily-miss replay keys
-// habits' population off their CURRENT axes (assignments are unlogged —
-// "currently" is the best the log can say) while their done-check reads the
-// unfiltered completion set, so a habit reassigned mid-history never reads as
-// a phantom miss.
+// snapshots (project / priority / agent on `actions`), so filtered history
+// stays deletion-proof. Two deliberate edges: tracked time does NOT follow
+// the filter (sessions carry no axes — Faraz's call, 2026-08-25, the timer is
+// barely used), and the daily-miss replay keys habits' population off their
+// CURRENT axes (the population is who the habit is now) while their done-
+// check reads the unfiltered completion set, so a habit reassigned mid-
+// history never reads as a phantom miss.
 /// The IPC shape: each axis is None (unfiltered) or a selection of values,
 /// where a None *inside* the selection is the "no project" / "unmarked"
 /// bucket. The empty selection (Some(vec![])) matches nothing.
@@ -58,11 +58,6 @@ const HEATMAP_LOOKBACK_DAYS: i64 = 380;
 pub struct ScopeFilter {
     pub projects: Option<Vec<Option<String>>>,
     pub priorities: Option<Vec<Option<i64>>>,
-    /// The delegation axis: Some(true) = 🤖 rows only, Some(false) = Faraz's
-    /// own. Not a snapshot — assignments are unlogged — so this reads the
-    /// item's CURRENT flag (the same "currently" exception the miss-replay
-    /// population uses); a deleted subject can't answer the axis and drops
-    /// out while the filter is on.
     pub agent: Option<bool>,
 }
 
@@ -108,13 +103,14 @@ impl Scope {
         self.projects.is_none() && self.priorities.is_none() && self.agent.is_none()
     }
 
-    /// The SQL half of the filter: predicates over the `project`/`priority`
-    /// snapshot columns, appended to a dynamically built query (fell counts,
-    /// sessions). Unfiltered axes append nothing, so unfiltered queries are
-    /// byte-identical to what they were before the filter existed. The agent
-    /// axis has no snapshot column — it reads the item's current flag through
-    /// a correlated subselect; a deleted subject's NULL coalesces to "mine",
-    /// so agent-filtered views exclude history whose row is gone.
+    /// The SQL half of the filter: predicates over the `project`/`priority`/
+    /// `agent` snapshot columns, appended to a dynamically built query (fell
+    /// counts, day detail). Unfiltered axes append nothing, so unfiltered
+    /// queries are byte-identical to what they were before the filter
+    /// existed. `agent` snapshotted at write time like the other axes
+    /// (2026-10-12) — before that it read the item's current flag, and every
+    /// completion whose row had been swept or unflagged read as the owner's.
+    /// A row older than snapshots (NULL) coalesces to "mine".
     pub fn push_sql(
         &self,
         sql: &mut String,
@@ -123,10 +119,8 @@ impl Scope {
         push_axis_pred("project", self.projects.as_ref(), sql, pv);
         push_axis_pred("priority", self.priorities.as_ref(), sql, pv);
         if let Some(a) = self.agent {
-            sql.push_str(
-                " AND COALESCE((SELECT assigned_to_agent FROM items WHERE id = actions.item_id), 0) = ?",
-            );
-            pv.push(Box::new(a));
+            sql.push_str(" AND COALESCE(agent, 0) = ?");
+            pv.push(Box::new(a as i64));
         }
     }
 }
@@ -373,12 +367,14 @@ fn fetch_life_events(conn: &rusqlite::Connection) -> anyhow::Result<Vec<LifeEv>>
 }
 
 /// Current items' axes (project name + priority), for the daily-miss replay's
-/// population under a scope filter. Assignments are unlogged, so "currently"
-/// is the best the log can say. Deleted habits fall back to their folded
-/// life-event snapshots.
-/// The delegation axis as it stands right now. Assignments are unlogged, so —
-/// the same "currently" exception as fetch_item_axes — the agent scope filter
-/// reads the live rows, never history.
+/// population under a scope filter. The population is who the habit IS now —
+/// its current axes, whatever its birth snapshots said (the replay's done-
+/// check reads the unfiltered completions, so a reassigned habit never reads
+/// as a phantom miss). Deleted habits fall back to their folded life-event
+/// snapshots.
+/// The delegation axis as it stands right now — the same "currently"
+/// population rule as fetch_item_axes (the axis's done/split reads snapshot
+/// actions.agent; only the replay's population walks the live rows).
 fn fetch_agent_flags(conn: &rusqlite::Connection) -> anyhow::Result<HashMap<String, bool>> {
     let mut stmt = conn.prepare("SELECT id, assigned_to_agent FROM items")?;
     let rows = stmt.query_map([], |r| {
@@ -597,7 +593,7 @@ impl Db {
             let scan_lo = if scan_start.is_empty() { scan_start } else { day_start_prefix(&scan_start) };
             let mut stmt = conn.prepare(
                 "SELECT timestamp, item_id, action, from_section, project, priority,
-                        COALESCE((SELECT assigned_to_agent FROM items WHERE id = actions.item_id), 0)
+                        COALESCE(agent, 0)
                  FROM actions
                  WHERE item_id IS NOT NULL AND action IN ('completed','uncompleted')
                    AND timestamp >= ?1 AND timestamp < ?2
@@ -827,8 +823,7 @@ impl Db {
         let mut agent_counts = AgentCounts { agent: 0, mine: 0 };
         {
             let mut sql = String::from(
-                "SELECT timestamp, project, priority,
-                        COALESCE((SELECT assigned_to_agent FROM items WHERE id = actions.item_id), 0)
+                "SELECT timestamp, project, priority, COALESCE(agent, 0)
                  FROM actions
                  WHERE item_id IS NOT NULL AND action = 'created'
                    AND timestamp >= ? AND timestamp < ?",
@@ -907,7 +902,7 @@ impl Db {
         {
             let mut stmt = conn.prepare(
                 "SELECT item_id, item_text, action, timestamp, from_section, project, priority,
-                        COALESCE((SELECT assigned_to_agent FROM items WHERE id = actions.item_id), 0)
+                        COALESCE(agent, 0)
                  FROM actions
                  WHERE item_id IS NOT NULL AND action IN ('completed','uncompleted')
                    AND timestamp >= ?1 AND timestamp < ?2
@@ -1352,6 +1347,7 @@ mod tests {
         let filter = ScopeFilter {
             projects: Some(vec![Some("meridian".into())]),
             priorities: None,
+            agent: None,
         };
         let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter, Subject::Done).unwrap();
         assert_eq!(s.days[0].count, 2); // H1 + T1; T2 is unattributed
@@ -1371,6 +1367,7 @@ mod tests {
         let filter = ScopeFilter {
             projects: None,
             priorities: Some(vec![Some(1)]),
+            agent: None,
         };
         let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter, Subject::Done).unwrap();
         assert_eq!(s.days[0].count, 1);
@@ -1381,6 +1378,7 @@ mod tests {
         let filter = ScopeFilter {
             projects: Some(vec![None]),
             priorities: None,
+            agent: None,
         };
         let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter, Subject::Done).unwrap();
         assert_eq!(s.days[0].count, 1); // T2 only
@@ -1391,6 +1389,7 @@ mod tests {
         let filter = ScopeFilter {
             projects: Some(vec![Some("meridian".into())]),
             priorities: None,
+            agent: None,
         };
         let d = db.day_detail("2026-01-02", &filter, Subject::Done).unwrap();
         let texts: Vec<&str> = d.tasks.iter().map(|t| t.text.as_str()).collect();
@@ -1425,6 +1424,7 @@ mod tests {
         let filter = ScopeFilter {
             projects: None,
             priorities: Some(vec![Some(2)]),
+            agent: None,
         };
         let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &filter, Subject::Done).unwrap();
         // H is in the population (current priority 2) and was completed —
@@ -1464,7 +1464,7 @@ mod tests {
         assert_eq!(names, [(Some("meridian"), 2), (Some("growth"), 1), (None, 1)]);
 
         // Scope: meridian only — A and B's births, not C/D.
-        let filter = ScopeFilter { projects: Some(vec![Some("meridian".into())]), priorities: None };
+        let filter = ScopeFilter { projects: Some(vec![Some("meridian".into())]), priorities: None, agent: None };
         let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-04"), &filter, Subject::Created).unwrap();
         assert_eq!(s.totals.count, 2);
 

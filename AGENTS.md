@@ -151,11 +151,16 @@ meta    key, value           — currently holds last_sweep_date
 - **`actions.item_text` is snapshotted at write time.** History must survive edits and
   deletions — if it referenced the live row, renaming a task would silently rewrite the
   past.
-- **`actions.project` / `actions.priority` snapshot the subject's organising axes at write
+- **`actions.project` / `actions.priority` / `actions.agent` snapshot the subject's
+  organising axes at write
   time** (same deletion-proofing as `item_text` — `project` holds the project *name*, not
   an FK, because the projects row may not survive; goal rows snapshot the goal's project
-  name and carry no priority). The Analytics view's project/priority splits read these,
-  so reassigning a task never rewrites the past. The snapshot lives inside `log_action` /
+  name and carry no priority or agent). The Analytics view's project/priority/agent
+  splits read these,
+  so reassigning a task never rewrites the past. `agent` landed 2026-10-12: before it,
+  the delegation axis read the item's CURRENT flag, and every completed agent task whose
+  row had been swept or unflagged read as the owner's (the "Agent 0" analytics bug).
+  The snapshot lives inside `log_action` /
   `log_goal_action`'s INSERT as a subquery on the live row — which is why `delete_item` /
   `delete_goal` log *before* their DELETE. Rows older than the columns were backfilled once
   from then-current state (best effort; deleted subjects stay unattributed).
@@ -668,6 +673,7 @@ dayapp/
 │       ├── SectionView.tsx         ← one section (head + sortable items + dropzone; Backlog tier dividers)
 │       ├── ItemRow.tsx             ← one item row (▶/⏸ timer control) + inline EditInput + ItemDetailsBody
 │       ├── PriorityBars.tsx        ← the tier signal bars (rows, tier dividers, analytics legend, the token display)
+│       ├── icons.tsx               ← the ONE action-icon family (16-box stroked, the header's language) — every button glyph
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
 └── src-tauri/
     ├── src/
@@ -786,6 +792,10 @@ keyboard-first.** Every choice below is intentional.
    a visible button to be discoverable, reconsider whether it needs a button or a keybinding.
 2. **Reveal actions on hover, not by default.** Icon-only buttons appear on row hover and
    carry a `title` tooltip. Resting state shows only content. This keeps the list scannable.
+   Every action glyph renders from `components/icons.tsx` — one stroked family, the
+   header buttons' language (16-box, 1.7 stroke, round caps, drawn at 14px). Never a
+   unicode glyph in a button: they rode font metrics, and each sat a size off its
+   neighbors (the 2026-10-12 unification).
 3. **Keyboard-first, but not keyboard-everything.** DnD exists, but `j`/`k`/`Enter`/`e`/digits
    are the primary path. A feature that's mouse-only is incomplete — but minor actions get
    small hover buttons, not dedicated keybinds. Keybindings are for the frequent core
@@ -800,7 +810,11 @@ keyboard-first.** Every choice below is intentional.
    `applyTheme` in `themes.ts` writing the custom properties onto `<html>`.
    Everything renders through the tokens, so a theme is one paint; the derived
    layer (scrims, shadows, the accent's alpha triplet, `color-scheme`) is
-   computed from the eleven shades, never stored.
+   computed from the eleven shades, never stored. The header's theme button
+   (2026-10-12) cycles the whole ladder — Dark → Light → each custom theme in
+   store order, wrapping — and each kind wears its own mark: dark the moon,
+   light the sun, a custom theme the swatch card with a tiny subscript (its
+   position in the ladder); Settings → Appearance stays the direct door.
 7. **Identity first, then capture.** Goals — the identity layer — at the very top of
    the content; Notes, the lowest-friction capture surface, right below.
    There is always a ready textarea. (The quote moment is a summoned modal, not
@@ -935,7 +949,9 @@ overlay there), so its footer bars render width-fitted to the raw `!N`
   to Today — the deliberate "pull this into my day" action; timing belongs to Today/Daily,
   where work happens) + project/reminder/hide + delete (×) buttons
   fade in. The robot badge + priority bars + project label stay visible (the row's identity,
-  wanted while its actions are on screen); the time / reminder / hidden metadata fades out.
+  wanted while its actions are on screen); time + reminder chips stay visible too
+  (2026-10-12 — they used to fade with the buttons' arrival, but they're facts worth
+  reading while acting); only the hidden-status chip fades out.
   Checkbox circle
   border → `--accent`. Editing is reached by single-click or the `e` key — there is no explicit
   edit button.
@@ -959,7 +975,9 @@ overlay there), so its footer bars render width-fitted to the raw `!N`
   Enter/blur, cancels on Escape.
 - Details: the spec under the title — a full-width, full-strength writing surface
   under the open row (the hover button — ⋯ when empty, ⌄ once it has a body — or
-  digit `5` on the focused row; Escape saves + collapses); zero chrome, the expanded task reads as a small
+  digit `5` on the focused row; Escape saves + collapses; Settings → Features can
+  switch the whole feature off — button, digit, and open body go with it, data
+  stays); zero chrome, the expanded task reads as a small
   document (headline + body) — **primary content, never styled secondary** (no dim
   text, no rail/border, no indent). The body sits on the row's own grid: same
   padding/gap/radius plus mirrored leading slots (a real invisible grip glyph + the
@@ -1056,7 +1074,11 @@ the store from localStorage once and removed the old keys.
 **Settings (⌘P → Settings):** the settings page owns what exists at all and the custom
 views. **Features** are EXISTENCE switches — `Tasks` (the whole tasks area in one
 toggle: the capture input plus all three sections — the section toggles refine inside
-it), `Today`/`Daily`/`Backlog` sections, `Notes`, `Goals` — persisted in the
+it), `Today`/`Daily`/`Backlog` sections, `Notes`, `Goals`, the axes
+(`Projects`, `Task priorities`, `Note priorities`, `Agent delegation`), the actions
+(`Timer`, `Reminders`, `Hide`), the entry pages (`Journal`, `Quotes`), and the two
+content features — `Task details` (the ⋯ spec body; 2026-10-12) and `Note download`
+(the ⬇ .txt export; 2026-10-12) — persisted in the
 `dayapp-*-enabled` keys (default on; 2026-10-04, two layers after Faraz's correction:
 Settings is high-level configuration, ⌘P is the working door). A disabled surface
 renders nothing, isn't searchable or keyboard-navigable, and its whole ⌘P option family
@@ -1204,6 +1226,8 @@ into Notes or edit fields isn't hijacked.
   preview shows), sanitized, `.txt` appended. Shown on hover / focused like every
   action, only when the note has content (like ×); hidden notes skip it. Exporting
   flushes any debounced edit first, so the file always matches what's on screen.
+  Settings → Features → `Note download` (2026-10-12) removes the button; the digit
+  slots renumber around it.
 - **⌘F is note-local while editing:** when a note's textarea (or the find bar itself)
   has focus, ⌘F opens a find bar on that note instead of the global item search —
   `Notes.tsx` captures the key on window (capture phase) ahead of App's global ⌘F.
@@ -1311,18 +1335,23 @@ Journal / Quotes icons):**
   view switch so it always renders fresh data; `reloadEpoch` covers demo-mode swaps.
 
 **Analytics view (⌘P → View Analytics, or the header chart icon):**
-- The toolbar's date selector is a FROM–TO pair (2026-10-05, replacing the single
-  date jump): the fields always show the effective window (a pill's included), and
-  editing either switches to a session-only Custom range — empty side = open-ended,
-  from>to auto-swaps. The pills stay one-click presets whose windows refill the
-  fields; the picked-day card flow is unchanged (ledger rows and calendar cells).
+- The toolbar's date selector is a **from–to picker** (a custom month-grid
+  popover since 2026-10-11; the native `<input type=date>` pair before that): the
+  two fields always show the effective window (a pill's included), and picking a
+  day on either side switches to a session-only Custom range — an empty side is
+  open-ended (its "Clear" empties that side), from>to auto-swaps, days between the
+  two sides carry a faint accent tint. The pills stay one-click presets whose
+  windows refill the fields; the picked-day card flow is unchanged (ledger rows
+  and calendar cells).
 - The analytics page is **synthesis, never the log**: it answers questions over the
   append-only `actions` history, it does not enumerate events. The raw action log's
   textual home is the CLI (`--journal`); the GUI shows aggregates only. The masthead
-  reads `Analytics`; the default range is **Week** (Today/Week/Month/All pills + the
-  date jump).
-- **Subject toggle (the toolbar's left end, session-only like the range)**: `Done |
-  Created` — what every card counts. Done is the effective completion set with the
+  reads `Analytics`; the default range is **Week**. The whole toolbar is dropdowns
+  now (2026-10-12): subject · range (Today/Week/Month/All, a radio menu — Custom is
+  reached only through the from–to fields) · the from–to picker · the three axes + Clear.
+- **Subject dropdown (the toolbar's left end, session-only like the range)**: `Done |
+  Created` — what every card counts; a radio menu, a pick applies and closes (2026-10-12;
+  the pill pair before that). Done is the effective completion set with the
   miss verdicts; Created is the tasks that entered the list (one `created` action
   each, nothing to fold — no uncomplete inverse exists). Same shapes, same scope
   filter (creations snapshot their axes at birth like every action); the done-only
@@ -1330,16 +1359,18 @@ Journal / Quotes icons):**
   ledger surfaces creations only (time is done-flavored and isn't fetched), and the
   expanded day lists the creations with a `+` mark. The dashboard fields are neutral
   (`count`/`tasks`) for exactly this reason. The CLI's `--journal` stays Done-only.
-- **Axis scope filters (the toolbar's right end, session-only like the range)**: a `#`
-  project picker (multi-select popover, color dots, "No project" as a value), four
-  tier chips (the PriorityBars glyphs, empty track = unmarked), and the delegation
-  pair — 🤖 and Mine (one axis: the active chip filters to agent-only or own-only,
-  re-click clears; 2026-10-05) + Clear. OR within an axis, AND across the axes. Every derivation follows (`journal_dashboard` /
-  `journal_day_detail` take a `ScopeFilter` over the `actions` write-time snapshots, so
+- **Axis scope filters (the toolbar's right end, session-only like the range)**: three
+  multi-select dropdowns — **Projects** (color dots, "No project" as a value), **Priority**
+  (the PriorityBars glyphs, empty track = unmarked), and **Delegation** (one axis whose
+  two values are `Agent` and the owner's name — a single selected side filters to
+  agent-only or own-only, both sides together are everyone) + Clear while any
+  selection stands. OR within an axis, AND across the axes. Every derivation follows (`journal_dashboard` /
+  `journal_day_detail` take a `ScopeFilter` over the `actions` write-time snapshots —
+  project, priority, and (2026-10-12) agent — so
   filtered history stays deletion-proof): done/streak/avg, heatmap intensities, splits,
   ledger counts, day-detail rows, and the miss replay — a habit outside the filter is
-  neither expected nor missed (population = the habit's current axes, since assignments
-  are unlogged — the one remaining "currently" call; the done-check
+  neither expected nor missed (population = the habit's current axes — the one
+  remaining "currently" call; the done-check
   reads the unfiltered completion set, so a reassigned habit never reads as a phantom
   miss). A split card whose axis is filtered hides (the filtered view already answers
   it — a card scoped to the selection would restate the filter while disagreeing with
@@ -1372,22 +1403,25 @@ Journal / Quotes icons):**
   unmounts its split card and frees the track) can't stretch the squares across the
   row — the cap is on the calendar, never the card: an auto-margin grid item sizes to
   fit-content and collapses the cells (the 2026-09-21 oval-cells regression).
-- **Splits**: an **Agent vs Mine** card stacked under Priority in the third column
+- **Splits**: an **Agent vs <owner>** card stacked under Priority in the third column
   (Priority takes half height — 2026-10-05), rendered in the priority card's own
-  shape (one segmented accent-intensity bar + a count legend: `🤖 N · <owner> N`,
+  shape (one segmented accent-intensity bar + a count legend: `Agent N · <owner> N`,
   the masthead's name). It splits the range's rows across the delegation axis read
   at the item's CURRENT flag — assignments are unlogged, the same "currently"
   exception as the miss-replay population; a deleted subject can't answer the axis
   and drops out while filtered — and, per the split-card rule, hides while the
-  agent axis chip is active. Every project's share of the range's completions as label/bar/count rows
-  (zero-filled from the roster, but zero-count rows hide by default — the chevron in
-  the card head reveals the whole roster; a trailing "none" bucket when unprojected
-  work exists), and the priority card — one segmented bar (tier
+  agent axis names one side. Every project's share of the range's completions as label/bar/count rows
+  (zero-filled from the roster, sorted by count; the card shows the **top ten**, the
+  tenth row sinking under a fade whose chip expands to the full roster and a
+  chevron-up row folds it back — 2026-10-11; a trailing "none"
+  bucket when unprojected work exists), and the priority card — one segmented bar (tier
   proportions as intensity steps of the accent, P1 the strongest) plus a signal-bars
   glyph legend. Both read the `actions.project`/`actions.priority` write-time snapshots.
 - **Days ledger → day cards**: one line per day that had any signal — `MON, AUG 24 · 7
-  done · 1 missed · 2h 7m` (time only when tracked). Selecting a day — a ledger row, a
-  calendar cell, the date field, or the Today pill (which scopes the range to today and
+  done · 1 missed · 2h 7m` (time only when tracked) — paginated client-side, ten days
+  a page under a minimal `‹ n/m ›` pager (2026-10-11; any fresh derivation resets to
+  page 1). Selecting a day — a ledger row, a calendar cell, or the Today pill (which
+  scopes the range to today and
   opens its card) — replaces the ledger with that one day's card: day label + counts in
   the title row, a back button (←) returning to the ledger (back from a Today-picked
   card restores the Week range), and the day at task level (`journal_day_detail`): the
@@ -1408,9 +1442,10 @@ Journal / Quotes icons):**
   grid columns are in-flow content, never nested scrollers.
 - **No time stats in the stats row** (time appears only as the ledger's per-day total
   when it exists), and the page is mouse-first: no focus-grammar wiring (free-mode `j`/`k`
-  scrolling still works, like every view). The one keyboard path is the project picker
-  itself — `#` opens it (capture phase, inputs skipped), ↑/↓ walk the highlight, Enter
-  toggles, `#`/Esc close; still not an addressable surface.
+  scrolling still works, like every view). The one keyboard path is the filter
+  dropdowns themselves — `#` opens the Projects menu (capture phase, inputs
+  skipped), ↑/↓ walk the highlight, Enter toggles, Esc closes; still not an
+  addressable surface.
 
 - Derivation lives in `src-tauri/src/dashboard.rs` (`journal_dashboard` +
   `journal_day_detail`, behind commands of the same names); the UI is `AnalyticsView.tsx`
