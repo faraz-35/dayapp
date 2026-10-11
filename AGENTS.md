@@ -553,7 +553,12 @@ everywhere) and refreshes a rolling `linux-dev` prerelease with the AppImage
 updater artifacts — the in-app release channel is still macOS-only, and on
 Linux the updater check just finds no artifact and stays quiet until Linux
 artifacts join `latest.json`). Host runtime dependency: `webkit2gtk-4.1`
-(`pacman -S webkit2gtk-4.1` on Arch/Omarchy). The macOS-only paths are
+(`pacman -S webkit2gtk-4.1` on Arch/Omarchy). A post-build workflow step
+strips the bundler's `libwayland-*` out of the AppImage and repacks it — the
+runner's wayland 1.20 otherwise shadows the host's newer copy through the
+AppImage RPATH and kills EGL init on Mesa 25+ hosts (tauri#15665); the host
+copy is guaranteed present on every graphical install. Removing the strip
+re-breaks those machines. The macOS-only paths are
 cfg-gated: AeroSpace placement is macOS-compiled only, `self_update` errors
 loudly off-macOS (`update_source_available` returns `false`, so the palette
 entry never shows), backups reveal uses `xdg-open` off-macOS, and the CLI

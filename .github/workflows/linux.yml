@@ -40,6 +40,49 @@ jobs:
           npm ci
           npm run tauri build -- --config src-tauri/tauri.linux.conf.json
 
+      # The bundler ships the runner's libwayland-* (wayland 1.20), and the
+      # AppImage's RPATH ($ORIGIN/../lib) makes that stale copy shadow the
+      # host's. A current Mesa (25+) binds against it, misses the wayland-1.22
+      # symbols, and dies in EGL init — tauri-apps/tauri#15665. Repack without
+      # them so the host's copy is used: every Wayland session has it, and on
+      # X11-only boxes the installer's webkit2gtk-4.1 check pulls it in
+      # (libwebkit2gtk → libgtk-3 → libwayland-client). Don't remove this
+      # step — a stock repack re-breaks those machines.
+      - name: Strip bundled Wayland libs and repack
+        run: |
+          set -eu
+          img="$(readlink -f src-tauri/target/release/bundle/appimage/*.AppImage)"
+          chmod +x "$img"
+          work="$(mktemp -d)"
+          (
+            cd "$work"
+            "$img" --appimage-extract >/dev/null
+            rm -f squashfs-root/usr/lib/libwayland-*.so*
+            curl -fsSL -o appimagetool \
+              https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+            chmod +x appimagetool
+            ARCH=x86_64 ./appimagetool --appimage-extract-and-run --comp zstd \
+              squashfs-root "$img"
+          )
+
+      - name: Assert the Wayland libs are gone
+        run: |
+          set -eu
+          img="$(readlink -f src-tauri/target/release/bundle/appimage/*.AppImage)"
+          verify="$(mktemp -d)"
+          (
+            cd "$verify"
+            "$img" --appimage-extract >/dev/null
+            leftover="$(find squashfs-root/usr/lib -name 'libwayland-*' || true)"
+            if [ -n "$leftover" ]; then
+              echo "::error::bundled libwayland survived the strip — refusing to ship"
+              echo "$leftover"
+              exit 1
+            fi
+            test -f squashfs-root/usr/lib/libwebkit2gtk-4.1.so.0
+            echo "clean: no bundled wayland libs, the host's copy will be used"
+          )
+
       - name: Refresh the rolling linux-dev prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
