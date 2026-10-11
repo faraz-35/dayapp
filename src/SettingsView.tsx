@@ -116,24 +116,32 @@ export const viewSummary = (v: CustomView, projects: Project[]): string => {
   return parts.join(" · ");
 };
 
-const FEATURES: { key: FeatureKey; label: string; hint: string }[] = [
-  { key: "tasks", label: "Tasks", hint: "capture + all three sections" },
-  { key: "today", label: "Today", hint: "section" },
-  { key: "daily", label: "Daily", hint: "section" },
-  { key: "backlog", label: "Backlog", hint: "section" },
-  { key: "notes", label: "Notes", hint: "the notepad surface" },
-  { key: "goals", label: "Goals", hint: "the identity layer" },
-  { key: "journal", label: "Journal", hint: "##j entries + the page" },
-  { key: "quotes", label: "Quotes", hint: "##q entries, the page + the idle moment" },
-  { key: "projects", label: "Projects", hint: "the #tag axis for tasks, notes, goals" },
-  { key: "taskPriorities", label: "Task priorities", hint: "the !1–!3 tiers + signal bars" },
-  { key: "notePriorities", label: "Note priorities", hint: "the !N footer tiers on notes" },
-  { key: "agent", label: "Agent delegation", hint: "the @ axis — 🤖 badge + the agent queue" },
-  { key: "timer", label: "Timer", hint: "per-task time tracking (▶ / ⏱)" },
-  { key: "reminders", label: "Reminders", hint: "the ◷ date that pulls a row to Today" },
-  { key: "hide", label: "Hide", hint: "soft-archive rows and notes (◐)" },
-  { key: "taskDetails", label: "Task details", hint: "the ⋯ spec body under a task" },
-  { key: "noteDownload", label: "Note download", hint: "the ⬇ .txt export on notes" },
+// The Features area is three cards: the surfaces (what exists at all), then
+// the actions that belong to one surface — tasks, then notes.
+const FEATURE_GROUPS = [
+  { id: "features", title: "Features" },
+  { id: "taskActions", title: "Task actions" },
+  { id: "noteActions", title: "Note actions" },
+] as const;
+
+const FEATURES: { key: FeatureKey; label: string; hint: string; group: (typeof FEATURE_GROUPS)[number]["id"] }[] = [
+  { key: "tasks", label: "Tasks", hint: "capture + all three sections", group: "features" },
+  { key: "today", label: "Today", hint: "section", group: "features" },
+  { key: "daily", label: "Daily", hint: "section", group: "features" },
+  { key: "backlog", label: "Backlog", hint: "section", group: "features" },
+  { key: "notes", label: "Notes", hint: "the notepad surface", group: "features" },
+  { key: "goals", label: "Goals", hint: "the identity layer", group: "features" },
+  { key: "journal", label: "Journal", hint: "##j entries + the page", group: "features" },
+  { key: "quotes", label: "Quotes", hint: "##q entries, the page + the idle moment", group: "features" },
+  { key: "projects", label: "Projects", hint: "the #tag axis for tasks, notes, goals", group: "features" },
+  { key: "agent", label: "Agent delegation", hint: "the @ axis — 🤖 badge + the agent queue", group: "features" },
+  { key: "timer", label: "Timer", hint: "per-task time tracking (▶ / ⏱)", group: "taskActions" },
+  { key: "reminders", label: "Reminders", hint: "the ◷ date that pulls a row to Today", group: "taskActions" },
+  { key: "hide", label: "Hide", hint: "soft-archive rows and notes (◐)", group: "taskActions" },
+  { key: "taskDetails", label: "Task details", hint: "the ⋯ spec body under a task", group: "taskActions" },
+  { key: "taskPriorities", label: "Task priorities", hint: "the !1–!3 tiers + signal bars", group: "taskActions" },
+  { key: "notePriorities", label: "Note priorities", hint: "the !N footer tiers on notes", group: "noteActions" },
+  { key: "noteDownload", label: "Note download", hint: "the ⬇ .txt export on notes", group: "noteActions" },
 ];
 
 // Rows whose switch is pointless while another feature is off — the row goes
@@ -375,29 +383,35 @@ export default function SettingsView({
 
   return (
     <div className="settings">
-      {/* ---- Features: what exists at all, one flat list. The three
-              section toggles go inert while Tasks is off. ---- */}
-      <Group
-        title="Features"
-        count={`${FEATURES.filter((f) => features[f.key]).length} of ${FEATURES.length} on`}
-      >
-        <div className="set-rows">
-          {FEATURES.map(({ key, label, hint }) => {
-            const gate = GATED_BY[key];
-            return (
-              <ToggleRow
-                key={key}
-                label={label}
-                hint={hint}
-                on={features[key]}
-                needs={gate && !features[gate] ? true : undefined}
-                needsLabel={gate ? FEATURES.find((f) => f.key === gate)?.label : undefined}
-                onToggle={() => toggle(key)}
-              />
-            );
-          })}
-        </div>
-      </Group>
+      {/* ---- The Features area: surfaces first, then each surface's
+              actions. The three section toggles go inert while Tasks is off. ---- */}
+      {FEATURE_GROUPS.map((g) => {
+        const rows = FEATURES.filter((f) => f.group === g.id);
+        return (
+          <Group
+            key={g.id}
+            title={g.title}
+            count={`${rows.filter((f) => features[f.key]).length} of ${rows.length} on`}
+          >
+            <div className="set-rows">
+              {rows.map(({ key, label, hint }) => {
+                const gate = GATED_BY[key];
+                return (
+                  <ToggleRow
+                    key={key}
+                    label={label}
+                    hint={hint}
+                    on={features[key]}
+                    needs={gate && !features[gate] ? true : undefined}
+                    needsLabel={gate ? FEATURES.find((f) => f.key === gate)?.label : undefined}
+                    onToggle={() => toggle(key)}
+                  />
+                );
+              })}
+            </div>
+          </Group>
+        );
+      })}
 
       {/* ---- Interface: the resting fills and the idle moment. ---- */}
       <Group title="Interface">
