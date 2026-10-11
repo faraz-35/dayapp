@@ -513,12 +513,13 @@ export default function SettingsView({
         {!draft && (
           <button
             className="set-new"
+            title="Eleven shades, previewed live"
             onClick={() => {
               const base = [...BUILT_IN_THEMES, ...customThemes].find((t) => t.id === themeId);
               setDraft({ name: "", colors: { ...(base ?? BUILT_IN_THEMES[0]).colors } });
             }}
           >
-            <b>+</b> New theme <span className="set-new-hint">— eleven shades, previewed live</span>
+            <b>+</b> New theme
           </button>
         )}
         {draft && (
@@ -609,8 +610,12 @@ export default function SettingsView({
           })}
         </div>
         {!creatingView && (
-          <button className="set-new" onClick={() => setCreatingView(true)}>
-            <b>+</b> New view <span className="set-new-hint">— combine priorities, agent, project, notes</span>
+          <button
+            className="set-new"
+            title="Combine priorities, agent, project, notes"
+            onClick={() => setCreatingView(true)}
+          >
+            <b>+</b> New view
           </button>
         )}
         {creatingView && (

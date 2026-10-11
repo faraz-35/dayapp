@@ -2751,23 +2751,23 @@ button {
 .set-x:hover { color: var(--danger); }
 .set-edit:hover { color: var(--text); }
 
-/* The quiet "+ New …" row under a group's rows — the row language, no box. */
+/* The "+ New …" affordance under a group's rows: a compact chip-button —
+   accent plus, hairline like the segs; the detail rides its tooltip. */
 .set-new {
-  width: 100%;
-  text-align: left;
-  padding: 8px 10px;
-  margin-top: 4px;
-  border-radius: 6px;
-  color: var(--text-faint);
-  font-size: 12.5px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  transition: color 0.08s ease, background 0.08s ease;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  transition: color 0.08s ease, border-color 0.08s ease, background 0.08s ease;
 }
-.set-new b { color: var(--accent); font-weight: 600; }
-.set-new:hover { color: var(--text-dim); background: var(--bg-hover); }
-.set-new-hint { opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-new b { color: var(--accent); font-weight: 600; font-size: 13px; line-height: 1; }
+.set-new:hover { color: var(--text); border-color: var(--text-faint); background: var(--bg-hover); }
 
 /* The builder (new/edit view) and the theme editor: flat under the group's
    rows — no box, the name field's capture-line underline is the frame; the
