@@ -667,7 +667,7 @@ dayapp/
 │   ├── MobileView.tsx              ← Android client: read-only list + capture bar (GitHub fetch, renders when UA is Android)
 │   ├── MobileSyncSettings.tsx      ← ⌘P sync-config modal (repo/branch/token + validate-by-deploy)
 │   ├── AnalyticsView.tsx           ← the analytics page: stats + heatmap + splits + day ledger/day cards over dashboard.rs (no raw log)
-│   ├── SettingsView.tsx            ← the settings page (⌘P → Settings): Features toggles + custom view create/enter/delete
+│   ├── SettingsView.tsx            ← the settings page (⌘P → Settings): group cards — switches, segs, theme ladder cards, view cards + builder
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← the ONE task capture (##t/##d/##b routing) + DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + sortable items + dropzone; Backlog tier dividers)
@@ -717,7 +717,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
 | `AnalyticsView.tsx` | the analytics page: range/day-pick state, dashboard + time fetch, stats/heatmap/splits/day-card render | derivation (all in `dashboard.rs`), item state |
-| `SettingsView.tsx` | the settings page: Features toggles (the six surface switches) + custom views create/enter/delete | the toggle/view state (App's — the palette reads it too) |
+| `SettingsView.tsx` | the settings page: full-width group cards in the analytics card language (2026-10-12, the settings-look v2 mockup) — switches, segmented controls, theme ladder cards, view cards with Active/Enter, the builder's live `shows …` summary; dependency-dimmed rows (sections need Tasks, Header's Hidden/Journal/Quotes need their features, screensaver needs Quotes) | the toggle/view state (App's — the palette reads it too) |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---

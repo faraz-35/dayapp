@@ -2538,79 +2538,253 @@ button {
 
 
 /* ---- Settings view ------------------------------------------------------ */
-/* The settings page (⌘P → Settings): the feature toggles (what exists at
-   all) and the custom views — named lenses over the display axes, the
-   Focus Mode contract. Groups ride the analytics card; rows are the item
-   language: hover tint, state at the right, delete on hover only. */
+/* The settings page (⌘P → Settings): group cards in the analytics card
+   language, full width like every view (2026-10-12, the settings-look v2
+   mockup's main column) — real switches and segmented controls instead of
+   ON/OFF text, themes as ladder cards (the eleven shades in editor order),
+   views as cards with an Active/Enter state, and the view builder with a
+   live "shows …" summary. Rows are dependency-aware: a feature that's off
+   sends its dependents inert with a hint saying why (sections need Tasks,
+   the Header's Hidden/Journal/Quotes buttons need their features, the
+   screensaver needs Quotes). Mouse-first like Analytics; the one .scroll
+   container scrolls. */
 
 .settings {
-  padding: 12px 16px 48px;
+  padding: 12px 16px 56px;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
-.settings-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.set-count {
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
 }
-.settings-row {
+.set-rows { display: flex; flex-direction: column; gap: 2px; }
+
+/* Rows: label over hint, control at the right; a switch row's whole surface
+   is the click target. Hover is the row tint, per the item language. */
+.set-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 4px;
+  gap: 12px;
+  padding: 7px 8px;
   border-radius: 6px;
+  transition: background 0.08s ease;
 }
-.settings-row:hover { background: var(--bg-hover); }
-.settings-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 6px 4px;
-  text-align: left;
-}
-.settings-name { font-size: 13px; }
-.settings-hint {
-  flex: 1;
-  font-size: 12px;
+.set-row:hover { background: var(--bg-hover); }
+.set-row-text { flex: 1; min-width: 0; }
+.set-name { display: block; font-size: 13px; }
+.set-hint {
+  display: block;
+  font-size: 11.5px;
   color: var(--text-faint);
+  margin-top: 1px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.settings-state {
+/* A dependent row whose gate feature is off: inert, and the hint says why. */
+.dep { opacity: 0.38; pointer-events: none; }
+
+/* The switch: track + knob, accent when on. The knob stays white on every
+   theme — it sits on the accent, which is saturated in every theme. */
+.set-sw {
+  width: 30px;
+  height: 17px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  position: relative;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.set-sw::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.set-sw.on { background: var(--accent); border-color: transparent; }
+.set-sw.on::after { transform: translateX(13px); background: #fff; }
+
+/* Segmented control — exclusive choices in one hairline box (Card/Bare, the
+   screensaver wait, the builder's Tasks-from). */
+.set-seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.set-seg button {
+  padding: 3px 10px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  transition: color 0.08s ease, background 0.08s ease;
+}
+.set-seg button + button { border-left: 1px solid var(--border); }
+.set-seg button:hover { color: var(--text); background: var(--bg-hover); }
+.set-seg button.on { color: var(--accent); background: rgba(var(--accent-rgb), 0.08); }
+
+/* The Card/Bare swatch: a well of the app background — Card fills it with
+   the soft chip, Bare shows a dashed empty frame. Show, don't tell. */
+.set-swatch {
+  width: 26px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  position: relative;
+  flex-shrink: 0;
+}
+.set-swatch::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 2px;
+}
+.set-swatch.filled::after { background: var(--bg-soft); border: 1px solid var(--border); }
+.set-swatch.empty::after { border: 1px dashed var(--text-faint); opacity: 0.5; }
+
+/* Theme cards: the ladder as a strip. */
+.set-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+.set-theme-card {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-align: left;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.1s ease, background 0.08s ease;
+}
+.set-theme-card:hover { background: var(--bg-hover); }
+.set-theme-card.on { border-color: rgba(var(--accent-rgb), 0.55); }
+.set-strip {
+  display: flex;
+  height: 14px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.set-strip i { flex: 1; }
+.set-theme-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.set-theme-card.on .set-theme-foot { color: var(--text); }
+.set-theme-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* View cards: name + one-line summary, Enter/Active state at the right,
+   edit/delete on hover only. */
+.set-views { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.set-view-card {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.1s ease, background 0.08s ease;
+}
+.set-view-card:hover { background: var(--bg-hover); }
+.set-view-card.on { border-color: rgba(var(--accent-rgb), 0.5); background: rgba(var(--accent-rgb), 0.05); }
+.set-view-text { flex: 1; min-width: 0; }
+.set-view-name { display: block; font-size: 13px; }
+.set-view-sum {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.set-view-act { display: inline-flex; gap: 2px; flex-shrink: 0; }
+
+/* The Active/Enter state chip — the old settings-state language. */
+.set-state {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
   flex-shrink: 0;
 }
-.settings-state.on { color: var(--accent); }
-.settings-x {
-  width: 22px;
-  height: 22px;
+.set-state.on { color: var(--accent); }
+
+/* Hover-revealed card actions (pencil edits, x deletes). */
+.set-x, .set-edit {
+  width: 20px;
+  height: 20px;
   border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-faint);
-  font-size: 14px;
-  line-height: 1;
   flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.08s ease, color 0.08s ease;
 }
-.settings-row:hover .settings-x { opacity: 1; }
-.settings-x:hover { color: var(--danger); }
+.set-theme-card:hover .set-x, .set-view-card:hover .set-x, .set-view-card:hover .set-edit { opacity: 1; }
+.set-x:hover { color: var(--danger); }
+.set-edit:hover { color: var(--text); }
 
-/* The create form: a label + pill chips per axis, reusing the analytics
-   pill; the name field is the capture-line underline input. */
+/* The quiet "+ New …" card under a group's rows. */
+.set-new {
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-faint);
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.08s ease, border-color 0.08s ease;
+}
+.set-new b { color: var(--accent); font-weight: 600; }
+.set-new:hover { border-color: var(--text-faint); color: var(--text-dim); }
+.set-new-hint { opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The builder (new/edit view) and the theme editor: an elevated card under
+   the group; the name field is the capture-line underline input; the summary
+   line describes the lens as you click. */
 .settings-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px 4px 4px;
+  gap: 11px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
 }
+.set-form-summary { font-size: 11.5px; color: var(--text-dim); padding: 0 2px; }
+.set-form-summary::before { content: "shows  "; color: var(--text-faint); }
 .settings-name-input {
   width: 100%;
   background: none;
@@ -2631,13 +2805,32 @@ button {
   flex-wrap: wrap;
 }
 .settings-field-label {
-  width: 88px;
+  width: 84px;
   flex-shrink: 0;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
+}
+/* Builder chips — multi-select tiers/sections/projects; the exclusive axes
+   use the Seg. */
+.set-chip {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  color: var(--text-faint);
+  transition: color 0.08s ease, background 0.08s ease, border-color 0.08s ease;
+}
+.set-chip:hover { color: var(--text); background: var(--bg-hover); }
+.set-chip.on {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: rgba(var(--accent-rgb), 0.35);
 }
 .settings-form-actions {
   display: flex;
@@ -2646,30 +2839,19 @@ button {
   gap: 10px;
 }
 .settings-save {
-  padding: 4px 10px;
-  border-radius: 4px;
+  padding: 5px 12px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.14);
+  transition: background 0.08s ease;
 }
-.settings-save:hover { background: var(--bg-hover); }
-.settings-save:disabled { color: var(--text-faint); cursor: default; background: none; }
+.settings-save:hover { background: rgba(var(--accent-rgb), 0.22); }
+.settings-save:disabled { color: var(--text-faint); background: none; cursor: default; }
 
-/* Appearance: the theme rows carry four swatch dots (bg · elevated · accent ·
-   text) so a theme reads at a glance; the editor is a two-column grid of
-   labeled native color wells. */
-.settings-theme-dots {
-  display: inline-flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.settings-theme-dots i {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-}
+/* The theme editor: a two-column grid of labeled native color wells. */
 .settings-colors {
   display: grid;
   grid-template-columns: 1fr 1fr;
