@@ -5,11 +5,11 @@
 // Active/Enter state, and the view builder with a live "shows …" summary.
 //
 // Rows are dependency-aware: a feature that's off sends its dependents inert
-// with a hint saying why — the section toggles need Tasks, the Header's
-// Hidden button needs either hide axis, Journal/Quotes need their features,
-// the screensaver needs Quotes. The same gates App applies when rendering
-// (headerBtns.hidden && (taskHideEnabled || noteHideEnabled) etc.), now
-// visible at the control itself.
+// with a hint saying why — the section toggles and Agent delegation need
+// Tasks, daily pause needs Daily, the Goal actions need Goals, the Header's
+// Hidden button needs any archive axis, Journal/Quotes need their features,
+// the screensaver needs Quotes. The same gates App applies when rendering,
+// now visible at the control itself.
 //
 // Mouse-first like Analytics: no focus-grammar wiring (free-mode j/k
 // scrolling works globally, Esc closes the page).
@@ -139,7 +139,6 @@ const FEATURES: { key: FeatureKey; label: string; hint: string; group: (typeof F
   { key: "goals", label: "Goals", hint: "the identity layer", group: "features" },
   { key: "journal", label: "Journal", hint: "##j entries + the page", group: "features" },
   { key: "quotes", label: "Quotes", hint: "##q entries, the page + the idle moment", group: "features" },
-  { key: "agent", label: "Agent delegation", hint: "the @ axis — 🤖 badge + the agent queue", group: "features" },
   { key: "timer", label: "Timer", hint: "per-task time tracking (▶ / ⏱)", group: "taskActions" },
   { key: "reminders", label: "Reminders", hint: "the ◷ date that pulls a row to Today", group: "taskActions" },
   { key: "taskProjects", label: "Task projects", hint: "the #tag axis + the row's label", group: "taskActions" },
@@ -147,6 +146,7 @@ const FEATURES: { key: FeatureKey; label: string; hint: string; group: (typeof F
   { key: "dailyPause", label: "Pause daily tasks", hint: "the ◐ pause on Daily habits — auto-resumes at its date", group: "taskActions" },
   { key: "taskDetails", label: "Task details", hint: "the ⋯ spec body under a task", group: "taskActions" },
   { key: "taskPriorities", label: "Task priorities", hint: "the !1–!3 tiers + signal bars", group: "taskActions" },
+  { key: "agent", label: "Agent delegation", hint: "the @ axis — 🤖 badge + the agent queue", group: "taskActions" },
   { key: "noteProjects", label: "Note projects", hint: "the #tag footer token + the collapsed label", group: "noteActions" },
   { key: "notePriorities", label: "Note priorities", hint: "the !N footer tiers on notes", group: "noteActions" },
   { key: "noteHide", label: "Note hide", hint: "soft-archive notes (◐)", group: "noteActions" },
@@ -162,6 +162,7 @@ const GATED_BY: Partial<Record<FeatureKey, FeatureKey>> = {
   today: "tasks",
   daily: "tasks",
   backlog: "tasks",
+  agent: "tasks",
   dailyPause: "daily",
   goalProjects: "goals",
   goalPause: "goals",
@@ -427,8 +428,34 @@ export default function SettingsView({
         );
       })}
 
-      {/* ---- Interface: the resting fills and the idle moment. ---- */}
-      <Group title="Interface">
+      {/* ---- Header: which icon buttons mount top-right. Off hides only the
+              button; the view stays in ⌘P (the two-layers rule). ---- */}
+      <Group
+        title="Header"
+        count={`${HEADER_BUTTONS.filter((b) => headerBtns[b.key]).length} of ${HEADER_BUTTONS.length} shown`}
+      >
+        <div className="set-rows">
+          {HEADER_BUTTONS.map(({ key, label, hint, need }) => (
+            <ToggleRow
+              key={key}
+              label={label}
+              hint={hint}
+              on={headerBtns[key]}
+              needs={need && need.every((k) => !features[k]) ? true : undefined}
+              needsLabel={need ? need.map((k) => FEATURES.find((f) => f.key === k)?.label).join(" or ") : undefined}
+              onToggle={() => {
+                trace("toggle.header", { btn: key, to: !headerBtns[key] });
+                onToggleHeaderBtn(key);
+              }}
+            />
+          ))}
+        </div>
+      </Group>
+
+      {/* ---- Appearance: one look card — the resting fills, the idle
+              moment, then themes as ladder cards (the eleven shades in
+              editor order, so a theme reads at a glance). ---- */}
+      <Group title="Appearance">
         <div className="set-rows">
           <InfoRow label="Notes background" hint="the fill behind each note">
             <span className={`set-swatch${notesCard ? " filled" : " empty"}`} />
@@ -459,35 +486,6 @@ export default function SettingsView({
             />
           </InfoRow>
         </div>
-      </Group>
-
-      {/* ---- Header: which icon buttons mount top-right. Off hides only the
-              button; the view stays in ⌘P (the two-layers rule). ---- */}
-      <Group
-        title="Header"
-        count={`${HEADER_BUTTONS.filter((b) => headerBtns[b.key]).length} of ${HEADER_BUTTONS.length} shown`}
-      >
-        <div className="set-rows">
-          {HEADER_BUTTONS.map(({ key, label, hint, need }) => (
-            <ToggleRow
-              key={key}
-              label={label}
-              hint={hint}
-              on={headerBtns[key]}
-              needs={need && need.every((k) => !features[k]) ? true : undefined}
-              needsLabel={need ? need.map((k) => FEATURES.find((f) => f.key === k)?.label).join(" or ") : undefined}
-              onToggle={() => {
-                trace("toggle.header", { btn: key, to: !headerBtns[key] });
-                onToggleHeaderBtn(key);
-              }}
-            />
-          ))}
-        </div>
-      </Group>
-
-      {/* ---- Appearance: themes as ladder cards — the eleven shades in
-              editor order, so a theme reads at a glance. ---- */}
-      <Group title="Appearance">
         <div className="set-theme-grid">
           {[...BUILT_IN_THEMES, ...customThemes].map((t) => {
             const active = themeId === t.id;

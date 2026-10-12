@@ -754,7 +754,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
 | `AnalyticsView.tsx` | the analytics page: range/day-pick state, dashboard + time fetch, stats/heatmap/splits/day-card render | derivation (all in `dashboard.rs`), item state |
-| `SettingsView.tsx` | the settings page: full-width group cards in the analytics card language (2026-10-12, the settings-look v2 mockup) — switches, segmented controls, theme ladder cards (the only bordered cards inside a group), borderless view rows with Active/Enter, the builder's live `shows …` summary; the Features area splits into Features / Task actions / Note actions / Goal actions cards; dependency-dimmed rows (sections need Tasks, daily pause needs Daily, the goal actions need Goals, the Header's Hidden button needs any archive axis, Journal/Quotes need their features, screensaver needs Quotes) | the toggle/view state (App's — the palette reads it too) |
+| `SettingsView.tsx` | the settings page: full-width group cards in the analytics card language (2026-10-12, the settings-look v2 mockup) — switches, segmented controls, theme ladder cards (the only bordered cards inside a group), borderless view rows with Active/Enter, the builder's live `shows …` summary; the Features area splits into Features / Task actions / Note actions / Goal actions cards; dependency-dimmed rows (sections and Agent delegation need Tasks, daily pause needs Daily, the goal actions need Goals, the Header's Hidden button needs any archive axis, Journal/Quotes need their features, screensaver needs Quotes) | the toggle/view state (App's — the palette reads it too) |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---
@@ -1111,17 +1111,17 @@ the store from localStorage once and removed the old keys.
 **Settings (⌘P → Settings):** the settings page owns what exists at all and the custom
 views. **Features** are EXISTENCE switches — `Tasks` (the whole tasks area in one
 toggle: the capture input plus all three sections — the section toggles refine inside
-it), `Today`/`Daily`/`Backlog` sections, `Notes`, `Goals`, the axes —
-`Task projects` / `Note projects` / `Goal projects` (2026-10-13: one shared
-`Projects` switch split per surface, the old `dayapp-projects-enabled` key seeding
-all three once and leaving the store; off, that surface never parses, labels, or
-filters its `#tag`) plus `Task priorities`, `Note priorities`, `Agent delegation` —
-the actions (`Timer`, `Reminders`, `Task hide`, `Pause daily tasks`, `Task details`,
-`Task priorities` on the Task actions card; `Note projects`, `Note priorities`,
-`Note hide`, `Note download` on the Note actions card; `Goal projects`, `Goal pause`
-on the Goal actions card — 2026-10-13: the archive completed its per-surface split,
-Daily habits pausing under their own switch, and the entry pages (`Journal`,
-`Quotes`)). Either off leaves the
+it), `Today`/`Daily`/`Backlog` sections, `Notes`, `Goals`, `Journal`, `Quotes` —
+nothing else: the Features card is pure surfaces (agent was its last non-surface
+row, 2026-10-13). The axes and actions live in the surface cards — `Timer`,
+`Reminders`, `Task projects`, `Task hide`, `Pause daily tasks`, `Task details`,
+`Task priorities`, `Agent delegation` on the Task actions card; `Note projects`,
+`Note priorities`, `Note hide`, `Note download` on the Note actions card;
+`Goal projects`, `Goal pause` on the Goal actions card. The projects axes came
+from one shared `Projects` switch (2026-10-13: the old `dayapp-projects-enabled`
+key seeded all three once and left the store; off, a surface never parses,
+labels, or filters its `#tag`); the archive completed its per-surface split the
+same day, Daily habits pausing under their own switch. Either off leaves the
 other axes' buttons, reveal toggles, and the header ◐ fully working — and the two
 content features (`Task details`, the ⋯ spec body; `Note download`, the ⬇ .txt
 export; 2026-10-12) — persisted in the
@@ -1129,7 +1129,9 @@ export; 2026-10-12) — persisted in the
 Settings is high-level configuration, ⌘P is the working door). A disabled surface
 renders nothing, isn't searchable or keyboard-navigable, and its whole ⌘P option family
 disappears with it — and none of its data moves: the rows stay in the db; Analytics,
-the CLI, and the phone mirror read them regardless. **UI:** the resting fill behind
+the CLI, and the phone mirror read them regardless. **Appearance** is one look
+card (2026-10-13 — it absorbed the old Interface card; rows first, theme grid
+after): the resting fill behind
 notes and task rows — each surface picks Card (the `--bg-soft` fill; notes' default) or
 Bare (the row language: nothing at rest, hover/focus tint instead; tasks' default).
 Notes' Bare hover tint keys off the JS-tracked `.hovered` class, never `:hover` (the
@@ -1336,7 +1338,7 @@ into Notes or edit fields isn't hijacked.
 - **The quote screensaver (default on; the persisted `dayapp-quote-screensaver`
   key is the off switch, read once at mount — no in-app toggle):** focused
   stillness summons the modal unprompted — after the idle wait set in Settings
-  → UI ("Quote screensaver", pills 1/2/5/10; store key `dayapp-screensaver-mins`,
+  → Appearance ("Quote screensaver", pills 1/2/5/10; store key `dayapp-screensaver-mins`,
   default 2 minutes, any whole minute readable over `--settings`). The idle clock runs only while
   the window is focused — away time never counts (Faraz's call, 2026-08-26: it's
   for sitting with the app, not having left it; `blur` restarts the clock,
