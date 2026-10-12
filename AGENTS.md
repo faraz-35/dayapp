@@ -267,7 +267,8 @@ managed in the ⌘F `#` picker (see "Project filter" under UI/UX guidance).
 ### Goals (the identity layer — logged like items)
 
 ```
-goals    id, text, horizon, status, project_id, sort_order, created_at, updated_at, achieved_at
+goals    id, text, horizon, status, project_id, sort_order, created_at, updated_at, achieved_at,
+         hidden, hidden_until
 ```
 
 Statements of direction at three horizons — the top of the app's timescale stack
@@ -291,6 +292,23 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
   undoes it. **Timeless goals can never be achieved** — a direction, not a
   destination (`achieve_goal` rejects them); their slot renders ∞ and their
   only exit is × (delete).
+- `hidden` / `hidden_until` — the pause axis (2026-10-12): the same
+  soft-archive items and notes carry, worded **"Pause"** on this surface (a
+  goal set down with intent to come back — dropping a goal stays ×'s job).
+  Columns landed via `ensure_column`, deliberately NOT a new `status` value —
+  that would have rebuilt the `goals` CHECK, and goal rows log the pause
+  window under the **same `paused`/`unpaused` verbs items use** (goal_id on
+  the rows), so the actions CHECK and the journal's verb renderer are
+  untouched. `pause_goal`/`resume_goal` mirror hide/unhide; the day-boundary
+  sweep resumes expired pauses (logging the close). The ◐ button (the shared
+  `HideMenu`, verb Pause) sits on active goal rows only — an achieved row has
+  nothing to pause — and paused rows render ↺/× only with the ◐ expiry chip.
+  `list_goals` takes the `HiddenFilter`; ⌘P → **Show/Hide Paused Goals**
+  reveals them inline dimmed in their horizon groups. Pause rides the Goals
+  feature itself — no separate Settings switch (unlike task/note hide).
+  Digit slots: ✓1 · #2 · ◐3 · ×4 (compacting when projects are off;
+  paused rows: ↺1 · ×2). `--goals` excludes paused rows; `--hidden` adds
+  them, marked ⏸.
 - `project_id` — optional link to a `projects` row (housekeeping, **not**
   logged; deleting a project nulls it, same as items).
 - The section renders at the very top of the main page, above Notes — the
@@ -415,7 +433,9 @@ tagged `#X`, and the whole chain (goal → tasks → who executes) reads from th
 alone. `--task <query>` prints one row in full including its details body — the prompt
 surface for the hourly zcode automation that picks a 🤖 task and works it. `--goals`
 is read-only — the agent-context view
-of the identity layer, grouped timeless → long → short with achieved last.
+of the identity layer, grouped timeless → long → short with achieved last; paused
+rows are excluded and `--goals --hidden` reveals them, marked ⏸ (the `--list`
+pattern).
 
 The read flags deliberately mirror the GUI's surfaces — what the app renders as panels,
 the CLI renders as text — so a remote session can access any information in any format:
@@ -1048,7 +1068,7 @@ its digit share the one real onClick handler).
 | `g1`–`9` | focus a goal (DOM order = visual order) |
 | `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row (hidden rows: `4` = ↺, `6` = ×) |
 | `1`–`4` (note) | ⌃/⌄ expand · ⬇ download .txt · ◐ hide · × delete — ⬇ and × need content (hidden notes: `3` = ↺, `4` = ×) |
-| `1`–`3` (goal) | ✓ achieve · # project · × delete |
+| `1`–`4` (goal) | ✓ achieve · # project · ◐ pause · × delete — paused rows: `1` = ↺ resume, `2` = × (digits compact when projects are off) |
 | `↑`/`↓` + `Enter` (popover open) | move the highlight · pick — # project routes typing to its create field; the date input stays native (Tab reaches it) |
 | `j` / `↓` | select next — the walk spans the page's rows in visual order (notes first, then tasks); clamped at the ends; never drops focus |
 | `k` / `↑` | select previous — same walk, clamped at the first note |
@@ -1119,12 +1139,15 @@ while its feature is ON in Settings, so the "Show" state is reachable and a disa
 feature has nothing to toggle), plus the per-feature options, under the same gate:
 `Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
 dimmed, ↺/× actions — each gated on its own hide feature, so a switched-off axis's
-entry disappears), the per-tier `Priority 1/2/3 Tasks` toggles, the notes' own
+entry disappears), `Paused Goals` (the same inline reveal over the goals' pause axis —
+gated on the Goals feature, which pause rides), the per-tier `Priority 1/2/3 Tasks`
+toggles, the notes' own
 `Priority 1/2/3 Notes` toggles (independent of the task tiers, like Hidden Notes ≠
 Hidden Tasks), and `Agent Tasks` (hides the 🤖-marked rows — the "what's actually mine"
 focus view). All persist in localStorage (display preferences, like zoom). The header ◐
-button mounts while either hide axis exists and toggles exactly the enabled surfaces
-(both when both are on, the one otherwise). There is no hidden-only mode and no separate
+button mounts while any hide axis exists (tasks, notes, or goals — the third rides the
+Goals feature) and toggles exactly the enabled surfaces; its Settings row dims only
+when all three are off. There is no hidden-only mode and no separate
 archive screen — inline-or-excluded is the whole visibility story.
 
 **Demo mode (⌘P):** `Enter/Exit Demo Mode` swaps the whole database to the disposable
@@ -1264,13 +1287,16 @@ into Notes or edit fields isn't hijacked.
   plain text defaulting to short. Same parse on edit — no word leaves the tier alone.
 - Rows are the `.item` language minus the grip's function: the leading grip slot is
   mirrored (invisible at every state — a spacer aligning the circle/text columns with
-  task rows, never a handle), and there's no DnD, no timer, no hide, no priority.
+  task rows, never a handle), and there's no DnD, no timer, no priority (pause — the
+  hide axis — arrived 2026-10-12, see the data model).
   Short/long rows carry a checkbox (achieve / unachieve, month-granular date on the
   achieved row); timeless rows show ∞ in that slot and can only be edited or deleted (×).
-  Single-click enters edit; hover reveals # project assign + × delete — the same
-  `ProjectMenu` items use. ⌘P → Show/Hide Goals toggles the whole section (persisted,
-  hidden by default).
-  Every mutation is logged to `actions` (goal_* values) — see the data model.
+  Single-click enters edit; hover reveals # project assign + ◐ pause (active rows) +
+  × delete — the same `ProjectMenu`/`HideMenu` items use. ⌘P → Show/Hide Goals toggles
+  the whole section (persisted, hidden by default); ⌘P → Show/Hide Paused Goals is the
+  pause reveal.
+  Every mutation is logged to `actions` (goal_* values, plus paused/unpaused for a
+  pause) — see the data model.
 
 **Quote modal (the screensaver's moment):**
 - One quote at a time on a dim, blurred backdrop (`rgba(0,0,0,0.65)` +
