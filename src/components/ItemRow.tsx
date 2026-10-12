@@ -97,7 +97,7 @@ export default function ItemRow({
       if (item.section === "backlog" || features.timer) slots.timer = next();
       if (features.projects) slots.project = next();
       if (features.reminders) slots.remind = next();
-      if (features.hide) slots.hide = next();
+      if (features.taskHide) slots.hide = next();
       if (features.taskDetails) slots.details = next();
       slots.delete = next();
     }
@@ -282,7 +282,7 @@ export default function ItemRow({
               {features.reminders && (
                 <ReminderMenu kb={slots.remind} remindAt={item.remindAt} onSet={onSetReminder} />
               )}
-              {features.hide && (
+              {features.taskHide && (
                 <HideMenu kb={slots.hide} onHide={onHide} verb={item.section === "daily" ? "Pause" : "Hide"} />
               )}
               {features.taskDetails && (

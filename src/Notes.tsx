@@ -808,7 +808,7 @@ function NoteInput({
             slots.delete = next();
           } else {
             if (features.noteDownload) slots.download = next();
-            if (features.hide) slots.hide = next();
+            if (features.noteHide) slots.hide = next();
             slots.delete = next();
           }
           return (
@@ -831,7 +831,7 @@ function NoteInput({
                   aria-label="Unhide note"
                 >↺</button>
               ) : (
-                features.hide && <HideMenu kb={slots.hide} onHide={onHide} />
+                features.noteHide && <HideMenu kb={slots.hide} onHide={onHide} />
               )}
               {val.trim() && (
                 <button

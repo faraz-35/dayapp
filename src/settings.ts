@@ -25,8 +25,30 @@ const canon = (m: Record<string, string>) =>
  *  the caller's one-time cue to seed an upgrade's localStorage prefs in. */
 export async function initSettings(): Promise<boolean> {
   cache = await invoke<Record<string, string>>("settings_get");
+  migrate();
   known = canon(cache);
   return Object.keys(cache).length === 0;
+}
+
+// 2026-10-12: the shared Hide switch split per surface — tasks and notes each
+// got their own existence toggle. The old key seeds both new ones once, then
+// leaves the file: a stale key in the store would read as a live switch to
+// `--settings` and the CLI.
+function migrate() {
+  const old = "dayapp-hide-enabled";
+  if (!(old in cache)) return;
+  if (!("dayapp-task-hide-enabled" in cache)) cache["dayapp-task-hide-enabled"] = cache[old];
+  if (!("dayapp-note-hide-enabled" in cache)) cache["dayapp-note-hide-enabled"] = cache[old];
+  delete cache[old];
+  invoke("settings_set", {
+    entries: {
+      "dayapp-task-hide-enabled": cache["dayapp-task-hide-enabled"],
+      "dayapp-note-hide-enabled": cache["dayapp-note-hide-enabled"],
+    },
+  }).catch((e) => console.error("[dayapp] hide-key split write failed", e));
+  invoke("settings_remove", { keys: [old] }).catch((e) =>
+    console.error("[dayapp] hide-key removal failed", e),
+  );
 }
 
 /** Synchronous read — valid only after initSettings (App gates on it). */

@@ -56,6 +56,18 @@ pub fn set_many(db_path: &Path, entries: HashMap<String, String>) -> anyhow::Res
     write(&path_for(db_path), &map)
 }
 
+/// Drop keys in one locked pass (the GUI's one-time key migrations — a
+/// replaced key must leave the file, or `--settings` would show a switch
+/// that no longer does anything).
+pub fn remove(db_path: &Path, keys: &[String]) -> anyhow::Result<()> {
+    let _guard = LOCK.lock().unwrap();
+    let mut map = read(db_path)?;
+    for k in keys {
+        map.remove(k);
+    }
+    write(&path_for(db_path), &map)
+}
+
 fn write(path: &Path, map: &HashMap<String, String>) -> anyhow::Result<()> {
     let json = serde_json::to_string_pretty(map)?;
     let tmp = path.with_extension("json.tmp");

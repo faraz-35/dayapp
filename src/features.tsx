@@ -14,7 +14,11 @@ export interface Features {
   /** The measurement/action features. */
   timer: boolean;
   reminders: boolean;
-  hide: boolean;
+  /** Soft-archive (◐) is per surface: tasks and notes hide independently —
+   *  either off leaves the other's buttons, reveal toggles, and header ◐
+   *  fully working. */
+  taskHide: boolean;
+  noteHide: boolean;
   /** Task details (the ⋯ spec body) and the notes' ⬇ .txt export — content
    *  features Faraz can switch off like any other existence toggle. */
   taskDetails: boolean;
@@ -33,7 +37,8 @@ export interface Features {
 
 export const FeaturesContext = createContext<Features>({
   projects: true, taskPriorities: true, notePriorities: true, agent: true,
-  timer: true, reminders: true, hide: true, taskDetails: true, noteDownload: true,
+  timer: true, reminders: true, taskHide: true, noteHide: true,
+  taskDetails: true, noteDownload: true,
   tasks: true, today: true, daily: true, backlog: true,
   notes: true, goals: true, journal: true, quotes: true,
 });

@@ -6,9 +6,10 @@
 //
 // Rows are dependency-aware: a feature that's off sends its dependents inert
 // with a hint saying why — the section toggles need Tasks, the Header's
-// Hidden/Journal/Quotes buttons need their features, the screensaver needs
-// Quotes. The same gates App applies when rendering (headerBtns.hidden &&
-// hideEnabled etc.), now visible at the control itself.
+// Hidden button needs either hide axis, Journal/Quotes need their features,
+// the screensaver needs Quotes. The same gates App applies when rendering
+// (headerBtns.hidden && (taskHideEnabled || noteHideEnabled) etc.), now
+// visible at the control itself.
 //
 // Mouse-first like Analytics: no focus-grammar wiring (free-mode j/k
 // scrolling works globally, Esc closes the page).
@@ -21,17 +22,20 @@ import { IconPencil, IconX } from "./components/icons";
 
 export type FeatureKey =
   | "tasks" | "today" | "daily" | "backlog" | "notes" | "goals" | "journal" | "quotes"
-  | "projects" | "taskPriorities" | "notePriorities" | "agent" | "timer" | "reminders" | "hide"
+  | "projects" | "taskPriorities" | "notePriorities" | "agent" | "timer" | "reminders"
+  | "taskHide" | "noteHide"
   | "taskDetails" | "noteDownload";
 
 // The header's icon buttons — each an On/Off choice in the Header group.
 export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes" | "settings" | "theme";
 
-const HEADER_BUTTONS: { key: HeaderBtn; label: string; hint: string; need?: FeatureKey }[] = [
-  { key: "hidden", label: "Hidden entries", hint: "the ◐ archive peek", need: "hide" },
+// `need` lists the features the button reads — the row goes inert only when
+// ALL of them are off (the ◐ button works while either hide axis exists).
+const HEADER_BUTTONS: { key: HeaderBtn; label: string; hint: string; need?: FeatureKey[] }[] = [
+  { key: "hidden", label: "Hidden entries", hint: "the ◐ archive peek", need: ["taskHide", "noteHide"] },
   { key: "analytics", label: "Analytics", hint: "the chart icon" },
-  { key: "journal", label: "Journal", hint: "the prose icon", need: "journal" },
-  { key: "quotes", label: "Quotes", hint: "the quote icon", need: "quotes" },
+  { key: "journal", label: "Journal", hint: "the prose icon", need: ["journal"] },
+  { key: "quotes", label: "Quotes", hint: "the quote icon", need: ["quotes"] },
   { key: "settings", label: "Settings", hint: "the gear icon" },
   { key: "theme", label: "Theme cycle", hint: "the droplet — walks every theme, subscript = position" },
 ];
@@ -137,10 +141,11 @@ const FEATURES: { key: FeatureKey; label: string; hint: string; group: (typeof F
   { key: "agent", label: "Agent delegation", hint: "the @ axis — 🤖 badge + the agent queue", group: "features" },
   { key: "timer", label: "Timer", hint: "per-task time tracking (▶ / ⏱)", group: "taskActions" },
   { key: "reminders", label: "Reminders", hint: "the ◷ date that pulls a row to Today", group: "taskActions" },
-  { key: "hide", label: "Hide", hint: "soft-archive rows and notes (◐)", group: "taskActions" },
+  { key: "taskHide", label: "Hide", hint: "soft-archive tasks (◐)", group: "taskActions" },
   { key: "taskDetails", label: "Task details", hint: "the ⋯ spec body under a task", group: "taskActions" },
   { key: "taskPriorities", label: "Task priorities", hint: "the !1–!3 tiers + signal bars", group: "taskActions" },
   { key: "notePriorities", label: "Note priorities", hint: "the !N footer tiers on notes", group: "noteActions" },
+  { key: "noteHide", label: "Note hide", hint: "soft-archive notes (◐)", group: "noteActions" },
   { key: "noteDownload", label: "Note download", hint: "the ⬇ .txt export on notes", group: "noteActions" },
 ];
 
@@ -179,7 +184,7 @@ function ToggleRow({
       <span className="set-row-text">
         <span className="set-name">{label}</span>
         <span className="set-hint">
-          {needs ? `needs ${needsLabel} — it's off in Features` : hint}
+          {needs ? `needs ${needsLabel} — off in Features` : hint}
         </span>
       </span>
       <span className={`set-sw${on ? " on" : ""}`} />
@@ -201,7 +206,7 @@ function InfoRow({ label, hint, needs, needsLabel, children }: {
       <span className="set-row-text">
         <span className="set-name">{label}</span>
         <span className="set-hint">
-          {needs ? `needs ${needsLabel} — it's off in Features` : hint}
+          {needs ? `needs ${needsLabel} — off in Features` : hint}
         </span>
       </span>
       {children}
@@ -460,8 +465,8 @@ export default function SettingsView({
               label={label}
               hint={hint}
               on={headerBtns[key]}
-              needs={need && !features[need] ? true : undefined}
-              needsLabel={need ? FEATURES.find((f) => f.key === need)?.label : undefined}
+              needs={need && need.every((k) => !features[k]) ? true : undefined}
+              needsLabel={need ? need.map((k) => FEATURES.find((f) => f.key === k)?.label).join(" or ") : undefined}
               onToggle={() => {
                 trace("toggle.header", { btn: key, to: !headerBtns[key] });
                 onToggleHeaderBtn(key);

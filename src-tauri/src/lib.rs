@@ -501,6 +501,11 @@ fn settings_set(
 }
 
 #[tauri::command]
+fn settings_remove(app: AppHandle, keys: Vec<String>) -> Result<(), String> {
+    settings::remove(&db_path(&app), &keys).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn today_totals(
     db: State<'_, DbState>, item_ids: Vec<String>,
 ) -> Result<std::collections::HashMap<String, i64>, String> {
@@ -1079,7 +1084,7 @@ pub fn run() {
             list_goals, create_goal, edit_goal, set_goal_project,
             achieve_goal, unachieve_goal, delete_goal,
             start_timer, stop_timer, discard_timer, get_active_timer,
-            settings_get, settings_set,
+            settings_get, settings_set, settings_remove,
             time_totals, today_totals, session_time_by_day,
             sync_get_config, sync_set_config, sync_deploy,
             sync_pull_captures, sync_mark_ingested, sync_status,

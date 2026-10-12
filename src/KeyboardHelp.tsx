@@ -39,30 +39,39 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
   const ag = features.agent;
   const tm = features.timer;
   const rm = features.reminders;
-  const hi = features.hide;
+  const th = features.taskHide;
+  const nh = features.noteHide;
 
   // The task-row digit range: however many buttons render, left to right.
   const taskDigits = 1
     + (tm ? 1 : 0)
     + (p ? 1 : 0)
     + (rm ? 1 : 0)
-    + (hi ? 1 : 0)
+    + (th ? 1 : 0)
     + 1 /* details */
     + 1; /* delete */
+  // The note card's slots: collapse, then download / hide per feature, delete.
+  const noteDigits = 1 + (features.noteDownload ? 1 : 0) + (nh ? 1 : 0) + 1;
   const goalDigits = 2 + (p ? 1 : 0);
   const taskVerbList = [
     ...(tm ? ["▶ timer (Backlog: ↑ send to Today)"] : []),
     ...(p ? ["# project"] : []),
     ...(rm ? ["◷ remind"] : []),
-    ...(hi ? ["◐ hide"] : []),
+    ...(th ? ["◐ hide"] : []),
     "⋯ details",
+    "× delete",
+  ].join(" · ");
+  const noteVerbList = [
+    "⌃ expand",
+    ...(features.noteDownload ? ["⬇ download .txt"] : []),
+    ...(nh ? ["◐ hide"] : []),
     "× delete",
   ].join(" · ");
   const goalVerbList = ["✓ achieve", ...(p ? ["# project"] : []), "× delete"].join(" · ");
   const popoverList = [
     ...(p ? ["# project"] : []),
     ...(rm ? ["◷ remind"] : []),
-    ...(hi ? ["◐ hide"] : []),
+    ...(th ? ["◐ hide"] : []),
   ].join(" / ");
 
   return (
@@ -88,9 +97,9 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
 
         <div className="help-section">Act on the focused thing</div>
         <Row keys={[`1–${taskDigits}`]}>task: {taskVerbList}</Row>
-        <Row keys={["1–4"]}>note: ⌃ expand · ⬇ download .txt{hi ? " · ◐ hide" : ""} · × delete</Row>
+        <Row keys={[`1–${noteDigits}`]}>note: {noteVerbList}</Row>
         {features.goals && <Row keys={[`1–${goalDigits}`]}>goal: {goalVerbList}</Row>}
-        {(p || rm || hi) && (
+        {(p || rm || th) && (
           <Row keys={["↑", "↓", "Enter"]}>inside an open popover ({popoverList}): move · pick — a pick clears focus, Esc returns to the row{p ? " · typing in # creates" : ""}</Row>
         )}
         <Row keys={["e"]}>edit it</Row>

@@ -380,8 +380,14 @@ function DayAppBody() {
   const [remindersEnabled, setRemindersEnabled] = useState(
     () => sget("dayapp-reminders-enabled", "1") !== "0",
   );
-  const [hideEnabled, setHideEnabled] = useState(
-    () => sget("dayapp-hide-enabled", "1") !== "0",
+  // Soft-archive is per surface: tasks and notes hide independently, so
+  // either switch off leaves the other's buttons, reveal toggles, and the
+  // header ◐ fully working.
+  const [taskHideEnabled, setTaskHideEnabled] = useState(
+    () => sget("dayapp-task-hide-enabled", "1") !== "0",
+  );
+  const [noteHideEnabled, setNoteHideEnabled] = useState(
+    () => sget("dayapp-note-hide-enabled", "1") !== "0",
   );
   const [taskDetailsEnabled, setTaskDetailsEnabled] = useState(
     () => sget("dayapp-task-details-enabled", "1") !== "0",
@@ -596,7 +602,10 @@ function DayAppBody() {
   // ---- Load -------------------------------------------------------------
 
   const refresh = useCallback(async () => {
-    const hidden = showHiddenItems ? "include" : "exclude";
+    // The reveal only reaches the db while the hide feature exists for that
+    // surface — feature off, archived rows stay excluded (nothing can unhide
+    // them, so nothing may show them).
+    const hidden = taskHideEnabled && showHiddenItems ? "include" : "exclude";
     const [today, daily, backlog, projs] = await Promise.all([
       // Completed Today rows stay in the list — crossed out, like a done
       // daily — until the day-boundary sweep retires them, so only Today
@@ -608,7 +617,7 @@ function DayAppBody() {
     ]);
     setItems({ today, daily, backlog });
     setProjects(projs);
-  }, [showHiddenItems]);
+  }, [showHiddenItems, taskHideEnabled]);
 
   useEffect(() => {
     refresh().catch((e) => log.error("initial load failed", e));
@@ -753,7 +762,8 @@ function DayAppBody() {
     sset("dayapp-agent-enabled", agentEnabled ? "1" : "0");
     sset("dayapp-timer-enabled", timerEnabled ? "1" : "0");
     sset("dayapp-reminders-enabled", remindersEnabled ? "1" : "0");
-    sset("dayapp-hide-enabled", hideEnabled ? "1" : "0");
+    sset("dayapp-task-hide-enabled", taskHideEnabled ? "1" : "0");
+    sset("dayapp-note-hide-enabled", noteHideEnabled ? "1" : "0");
     sset("dayapp-task-details-enabled", taskDetailsEnabled ? "1" : "0");
     sset("dayapp-note-download-enabled", noteDownloadEnabled ? "1" : "0");
     sset("dayapp-views", JSON.stringify(views));
@@ -762,7 +772,7 @@ function DayAppBody() {
     // quote line the modal replaced — one-time cleanups. (The quote
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.)
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, hideEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, noteHideEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -1112,13 +1122,13 @@ function DayAppBody() {
           setSectionsVisible((v) => ({ ...v, [s]: !v[s] }));
         },
       })),
-    ...(tasksEnabled && hideEnabled ? [{
+    ...(tasksEnabled && taskHideEnabled ? [{
       id: "toggle-hidden-items",
       label: showHiddenItems ? "Hide Hidden Tasks" : "Show Hidden Tasks",
       hint: "inline, dimmed",
       run: () => { setView("list"); setShowHiddenItems((v) => !v); },
     }] : []),
-    ...(notesEnabled && hideEnabled ? [{
+    ...(notesEnabled && noteHideEnabled ? [{
       id: "toggle-hidden-notes",
       label: showHiddenNotes ? "Hide Hidden Notes" : "Show Hidden Notes",
       hint: "inline, dimmed",
@@ -1319,7 +1329,7 @@ function DayAppBody() {
           },
         ]
       : []),
-  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects, themeId, customThemes]);
+  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects, themeId, customThemes, taskHideEnabled, noteHideEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1780,9 +1790,11 @@ function DayAppBody() {
         return !v;
       });
     } else if (key === "reminders") setRemindersEnabled((v) => !v);
-    else if (key === "hide") {
-      setHideEnabled((v) => !v);
+    else if (key === "taskHide") {
+      setTaskHideEnabled((v) => !v);
       setShowHiddenItems(false);
+    } else if (key === "noteHide") {
+      setNoteHideEnabled((v) => !v);
       setShowHiddenNotes(false);
     } else if (key === "taskDetails") {
       // Details off while a body is open: close it — the feature can't leave
@@ -2181,7 +2193,8 @@ function DayAppBody() {
     agent: agentEnabled,
     timer: timerEnabled,
     reminders: remindersEnabled,
-    hide: hideEnabled,
+    taskHide: taskHideEnabled,
+    noteHide: noteHideEnabled,
     taskDetails: taskDetailsEnabled,
     noteDownload: noteDownloadEnabled,
     tasks: tasksEnabled && tasksVisible,
@@ -2193,6 +2206,11 @@ function DayAppBody() {
     journal: journalEnabled,
     quotes: quotesEnabled,
   };
+
+  // The header ◐'s state, over only the hide axes that exist: both surfaces
+  // when both features are on, the one otherwise.
+  const hiddenShown =
+    (taskHideEnabled && showHiddenItems) || (noteHideEnabled && showHiddenNotes);
 
   return (
     <FeaturesContext.Provider value={features}>
@@ -2239,19 +2257,20 @@ function DayAppBody() {
               ><IconX /></button>
             </div>
           )}
-          {/* ◐ toggles both hidden surfaces (tasks + notes) at once — the
-              one-click archive peek over the ⌘P per-surface toggles.
-              Settings → Header picks which icon buttons mount at all. */}
-          {headerBtns.hidden && hideEnabled && (
+          {/* ◐ toggles the hidden surfaces that exist (Settings → Features
+              owns hide per surface — a switched-off axis never flips): both
+              when both are on, the one otherwise. Settings → Header picks
+              whether the button mounts at all. */}
+          {headerBtns.hidden && (taskHideEnabled || noteHideEnabled) && (
             <button
-              className={`icon-btn ${showHiddenItems || showHiddenNotes ? "active" : ""}`}
+              className={`icon-btn ${hiddenShown ? "active" : ""}`}
               onClick={() => {
-                const next = !(showHiddenItems || showHiddenNotes);
+                const next = !hiddenShown;
                 trace("toggle.hidden", { show: next });
-                setShowHiddenItems(next);
-                setShowHiddenNotes(next);
+                if (taskHideEnabled) setShowHiddenItems(next);
+                if (noteHideEnabled) setShowHiddenNotes(next);
               }}
-              title={showHiddenItems || showHiddenNotes ? "Hide hidden entries" : "Show hidden entries inline"}
+              title={hiddenShown ? "Hide hidden entries" : "Show hidden entries inline"}
               aria-label="Toggle hidden entries"
             >
               {/* The ◐ mark, drawn at the set's size — the text glyph rode
@@ -2391,7 +2410,7 @@ function DayAppBody() {
                 toggles, and the Focus/Fun Mode lenses. */}
             {notesEnabled && notesVisible && (!activeView || activeView.notes) && (
               <Notes
-                hiddenFilter={showHiddenNotes ? "include" : "exclude"}
+                hiddenFilter={noteHideEnabled && showHiddenNotes ? "include" : "exclude"}
                 cardBg={notesCard}
                 entryRoutes={{ journal: journalEnabled, quotes: quotesEnabled }}
                 focusedId={focusNoteId}
@@ -2480,7 +2499,8 @@ function DayAppBody() {
               agent: agentEnabled,
               timer: timerEnabled,
               reminders: remindersEnabled,
-              hide: hideEnabled,
+              taskHide: taskHideEnabled,
+              noteHide: noteHideEnabled,
               taskDetails: taskDetailsEnabled,
               noteDownload: noteDownloadEnabled,
             }}

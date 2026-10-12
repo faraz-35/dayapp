@@ -722,7 +722,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
 | `AnalyticsView.tsx` | the analytics page: range/day-pick state, dashboard + time fetch, stats/heatmap/splits/day-card render | derivation (all in `dashboard.rs`), item state |
-| `SettingsView.tsx` | the settings page: full-width group cards in the analytics card language (2026-10-12, the settings-look v2 mockup) — switches, segmented controls, theme ladder cards (the only bordered cards inside a group), borderless view rows with Active/Enter, the builder's live `shows …` summary; the Features area splits into Features / Task actions / Note actions cards; dependency-dimmed rows (sections need Tasks, Header's Hidden/Journal/Quotes need their features, screensaver needs Quotes) | the toggle/view state (App's — the palette reads it too) |
+| `SettingsView.tsx` | the settings page: full-width group cards in the analytics card language (2026-10-12, the settings-look v2 mockup) — switches, segmented controls, theme ladder cards (the only bordered cards inside a group), borderless view rows with Active/Enter, the builder's live `shows …` summary; the Features area splits into Features / Task actions / Note actions cards; dependency-dimmed rows (sections need Tasks, the Header's Hidden button needs either hide axis, Journal/Quotes need their features, screensaver needs Quotes) | the toggle/view state (App's — the palette reads it too) |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---
@@ -1081,7 +1081,11 @@ views. **Features** are EXISTENCE switches — `Tasks` (the whole tasks area in 
 toggle: the capture input plus all three sections — the section toggles refine inside
 it), `Today`/`Daily`/`Backlog` sections, `Notes`, `Goals`, the axes
 (`Projects`, `Task priorities`, `Note priorities`, `Agent delegation`), the actions
-(`Timer`, `Reminders`, `Hide`), the entry pages (`Journal`, `Quotes`), and the two
+(`Timer`, `Reminders`, `Task details`, `Task priorities`, `Hide` — 2026-10-12 split
+per surface: `Note hide` rides the Note actions card, and either off leaves the
+other's buttons, reveal toggles, and the header ◐ fully working; the old shared
+`dayapp-hide-enabled` key seeded both new keys once, then left the store), the entry
+pages (`Journal`, `Quotes`), and the two
 content features — `Task details` (the ⋯ spec body; 2026-10-12) and `Note download`
 (the ⬇ .txt export; 2026-10-12) — persisted in the
 `dayapp-*-enabled` keys (default on; 2026-10-04, two layers after Faraz's correction:
@@ -1114,11 +1118,13 @@ entry here (`Goals`, `Notes`, `Tasks` + the per-section toggles — each appears
 while its feature is ON in Settings, so the "Show" state is reachable and a disabled
 feature has nothing to toggle), plus the per-feature options, under the same gate:
 `Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
-dimmed, ↺/× actions), the per-tier `Priority 1/2/3 Tasks` toggles, the notes' own
+dimmed, ↺/× actions — each gated on its own hide feature, so a switched-off axis's
+entry disappears), the per-tier `Priority 1/2/3 Tasks` toggles, the notes' own
 `Priority 1/2/3 Notes` toggles (independent of the task tiers, like Hidden Notes ≠
 Hidden Tasks), and `Agent Tasks` (hides the 🤖-marked rows — the "what's actually mine"
 focus view). All persist in localStorage (display preferences, like zoom). The header ◐
-button toggles both hidden surfaces at once. There is no hidden-only mode and no separate
+button mounts while either hide axis exists and toggles exactly the enabled surfaces
+(both when both are on, the one otherwise). There is no hidden-only mode and no separate
 archive screen — inline-or-excluded is the whole visibility story.
 
 **Demo mode (⌘P):** `Enter/Exit Demo Mode` swaps the whole database to the disposable
