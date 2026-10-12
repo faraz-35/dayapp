@@ -754,7 +754,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
 | `AnalyticsView.tsx` | the analytics page: range/day-pick state, dashboard + time fetch, stats/heatmap/splits/day-card render | derivation (all in `dashboard.rs`), item state |
-| `SettingsView.tsx` | the settings page: full-width group cards in the analytics card language (2026-10-12, the settings-look v2 mockup) — switches, segmented controls, theme ladder cards (the only bordered cards inside a group), borderless view rows with Active/Enter, the builder's live `shows …` summary; five cards since 2026-10-13 — Tasks / Notes / Goals surface cards (existence master first, sub-features beneath), Appearance (header buttons, fills, screensaver, themes), Views; dependency-dimmed rows (every sub-row needs its card's master, daily pause needs Daily, the Appearance header rows need their features — the Hidden button needs any archive axis, the screensaver needs Quotes; Journal/Quotes never dim — they outlive Notes) | the toggle/view state (App's — the palette reads it too) |
+| `SettingsView.tsx` | the settings page: full-width group cards in the analytics card language (2026-10-12, the settings-look v2 mockup) — switches, segmented controls, theme ladder cards (the only bordered cards inside a group), borderless view rows with Active/Enter, the builder's live `shows …` summary; six cards since 2026-10-13 — Tasks / Notes / Goals surface cards (existence master first, sub-features beneath; the screensaver rides Notes), Header, Appearance (fills, themes), Views; dependency-dimmed rows (every sub-row needs its card's master, daily pause needs Daily, the Header rows need their features — the Hidden button needs any archive axis, the screensaver needs Quotes; Journal/Quotes never dim — they outlive Notes) | the toggle/view state (App's — the palette reads it too) |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---
@@ -1108,15 +1108,16 @@ that re-initializes every settings-backed hook). App-level by position — outsi
 databases, so demo-mode swaps never touch it. First launch after the migration seeded
 the store from localStorage once and removed the old keys.
 
-**Settings (⌘P → Settings):** five cards (2026-10-13 — the four-card Features area
+**Settings (⌘P → Settings):** six cards (2026-10-13 — the four-card Features area
 collapsed into three surface cards, each led by its EXISTENCE master with the
 sub-features beneath; a sub-row dims while its master is off). **Tasks** — the master
 (capture + all three sections) over `Today`/`Daily`/`Backlog`, `Timer`, `Reminders`,
 `Task projects`, `Task hide`, `Pause daily tasks`, `Task details`, `Task priorities`,
 `Agent delegation`. **Notes** — the master over `Note projects`, `Note priorities`,
-`Note hide`, `Note download`, plus `Journal` and `Quotes`: the ##j/##q capture rides
+`Note hide`, `Note download`, plus `Journal` and `Quotes` (the ##j/##q capture rides
 the notes bar, but their pages capture on their own, so those two rows never dim —
-they outlive Notes being off. **Goals** — the master over `Goal projects` and
+they outlive Notes being off) and the **quote screensaver's** idle wait (the Quotes
+feature's knob, dimming with it). **Goals** — the master over `Goal projects` and
 `Goal pause`. The projects axes came from one shared `Projects` switch (the old
 `dayapp-projects-enabled` key seeded all three once and left the store; off, a
 surface never parses, labels, or filters its `#tag`); the archive completed its
@@ -1127,12 +1128,13 @@ stay in the db; Analytics, the CLI, and the phone mirror read them regardless.
 Persisted in the
 `dayapp-*-enabled` keys (default on; 2026-10-04, two layers after Faraz's correction:
 Settings is high-level configuration, ⌘P is the working door). **Appearance** is one
-look card (2026-10-13 — it absorbed the old Interface and Header cards): the resting fill behind
+look card — the resting fill behind
 notes and task rows — each surface picks Card (the `--bg-soft` fill; notes' default) or
 Bare (the row language: nothing at rest, hover/focus tint instead; tasks' default).
 Notes' Bare hover tint keys off the JS-tracked `.hovered` class, never `:hover` (the
 textareas resize under a stationary pointer); tasks keep `:hover`. Persisted
-`dayapp-notes-card` / `dayapp-tasks-card` (2026-10-05). The header buttons —
+`dayapp-notes-card` / `dayapp-tasks-card` (2026-10-05). **Header** is its own card —
+which icon buttons mount top-right:
 `Hidden entries` (◐), `Analytics`, `Settings` (the gear),
 `Theme cycle` on by default, `Journal` and `Quotes` off by default (the written-entry
 pages are opt-in chrome) (`dayapp-header-buttons`) — off hides only the

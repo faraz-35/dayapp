@@ -1,15 +1,17 @@
 // SettingsView — the settings page (⌘P → Settings). One console column over
-// flat hairline cards (2026-10-12, the settings-look v2 mockup; five cards
+// flat hairline cards (2026-10-12, the settings-look v2 mockup; six cards
 // since 2026-10-13): Tasks / Notes / Goals surface cards, each led by its
-// existence master with the sub-features beneath; Appearance (header buttons,
-// fills, screensaver, themes as ladder cards); Views as cards with an
-// Active/Enter state and the builder with a live "shows …" summary.
+// existence master with the sub-features beneath (the Notes card also carries
+// the quote screensaver's idle wait — the Quotes feature's knob); Header
+// (which icon buttons mount); Appearance (the two fills, themes as ladder
+// cards); Views as cards with an Active/Enter state and the builder with a
+// live "shows …" summary.
 //
 // Rows are dependency-aware: a feature that's off sends its dependents inert
 // with a hint saying why — every sub-row needs its card's master (daily pause
-// the tighter Daily), the Appearance header rows need their features (the
-// Hidden button needs any archive axis), the screensaver needs Quotes. The
-// same gates App applies when rendering, now visible at the control itself.
+// the tighter Daily), the Header rows need their features (the Hidden button
+// needs any archive axis), the screensaver needs Quotes. The same gates App
+// applies when rendering, now visible at the control itself.
 // Journal/Quotes never dim — they ride the Notes card but outlive it.
 //
 // Mouse-first like Analytics: no focus-grammar wiring (free-mode j/k
@@ -436,15 +438,34 @@ export default function SettingsView({
                   />
                 );
               })}
+              {/* The screensaver is the Quotes feature's knob, so it rides the
+                  Notes card right under the Quotes row — inert while Quotes is
+                  off, like every sub-row under its master. */}
+              {g.id === "notes" && (
+                <InfoRow
+                  label="Quote screensaver"
+                  hint={`${screensaverMins} min idle before a quote appears`}
+                  needs={!features.quotes}
+                  needsLabel="Quotes"
+                >
+                  <Seg
+                    value={String(screensaverMins)}
+                    options={[1, 2, 5, 10].map((m) => ({ v: String(m), label: `${m}m` }))}
+                    onPick={(v) => { trace("ui.screensaver", { mins: Number(v) }); onSetScreensaverMins(Number(v)); }}
+                  />
+                </InfoRow>
+              )}
             </div>
           </Group>
         );
       })}
 
-      {/* ---- Appearance: one look card — the header's buttons, the resting
-              fills, the idle moment, then themes as ladder cards (the eleven
-              shades in editor order, so a theme reads at a glance). ---- */}
-      <Group title="Appearance">
+      {/* ---- Header: which icon buttons mount top-right. Off hides only the
+              button; the view stays in ⌘P (the two-layers rule). ---- */}
+      <Group
+        title="Header"
+        count={`${HEADER_BUTTONS.filter((b) => headerBtns[b.key]).length} of ${HEADER_BUTTONS.length} shown`}
+      >
         <div className="set-rows">
           {HEADER_BUTTONS.map(({ key, label, hint, need }) => (
             <ToggleRow
@@ -460,6 +481,14 @@ export default function SettingsView({
               }}
             />
           ))}
+        </div>
+      </Group>
+
+      {/* ---- Appearance: one look card — the resting fills, then themes as
+              ladder cards (the eleven shades in editor order, so a theme
+              reads at a glance). ---- */}
+      <Group title="Appearance">
+        <div className="set-rows">
           <InfoRow label="Notes background" hint="the fill behind each note">
             <span className={`set-swatch${notesCard ? " filled" : " empty"}`} />
             <Seg
@@ -474,18 +503,6 @@ export default function SettingsView({
               value={tasksCard ? "card" : "bare"}
               options={[{ v: "card", label: "Card" }, { v: "bare", label: "Bare" }]}
               onPick={(v) => { trace("ui.card", { surface: "tasks", to: v === "card" }); onSetCard("tasks", v === "card"); }}
-            />
-          </InfoRow>
-          <InfoRow
-            label="Quote screensaver"
-            hint={`${screensaverMins} min idle before a quote appears`}
-            needs={!features.quotes}
-            needsLabel="Quotes"
-          >
-            <Seg
-              value={String(screensaverMins)}
-              options={[1, 2, 5, 10].map((m) => ({ v: String(m), label: `${m}m` }))}
-              onPick={(v) => { trace("ui.screensaver", { mins: Number(v) }); onSetScreensaverMins(Number(v)); }}
             />
           </InfoRow>
         </div>
