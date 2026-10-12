@@ -327,23 +327,24 @@ function DayAppBody() {
   const [tasksCard, setTasksCard] = useState(
     () => sget("dayapp-tasks-card", "0") === "1",
   );
-  // Which header icon buttons show (Settings → Header). All default on —
-  // today's header. Off hides only the button; the view stays in ⌘P. The
-  // update icon and the timer chip aren't choices — they mount on their own
-  // conditions.
+  // Which header icon buttons show (Settings → Header). Journal and Quotes
+  // default off — the written-entry pages are opt-in chrome; the working
+  // header is Hidden/Analytics/Settings/Theme. Off hides only the button; the
+  // view stays in ⌘P. The update icon and the timer chip aren't choices —
+  // they mount on their own conditions.
   const [headerBtns, setHeaderBtns] = useState<Record<HeaderBtn, boolean>>(() => {
     try {
       const raw = JSON.parse(sget("dayapp-header-buttons", "{}"));
       return {
         hidden: raw.hidden !== false,
         analytics: raw.analytics !== false,
-        journal: raw.journal !== false,
-        quotes: raw.quotes !== false,
+        journal: raw.journal === true,
+        quotes: raw.quotes === true,
         settings: raw.settings !== false,
         theme: raw.theme !== false,
       };
     } catch {
-      return { hidden: true, analytics: true, journal: true, quotes: true, settings: true, theme: true };
+      return { hidden: true, analytics: true, journal: false, quotes: false, settings: true, theme: true };
     }
   });
   // Journal/Quotes existence (Settings → Features): the written-entry pages,

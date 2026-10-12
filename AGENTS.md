@@ -1094,8 +1094,9 @@ Bare (the row language: nothing at rest, hover/focus tint instead; tasks' defaul
 Notes' Bare hover tint keys off the JS-tracked `.hovered` class, never `:hover` (the
 textareas resize under a stationary pointer); tasks keep `:hover`. Persisted
 `dayapp-notes-card` / `dayapp-tasks-card` (2026-10-05). **Header:** which icon
-buttons mount top-right — `Hidden entries` (◐), `Analytics`, `Journal`, `Quotes`,
-`Settings` (the gear), all on by default (`dayapp-header-buttons`). Off hides only the
+buttons mount top-right — `Hidden entries` (◐), `Analytics`, `Settings` (the gear),
+`Theme cycle` on by default, `Journal` and `Quotes` off by default (the written-entry
+pages are opt-in chrome) (`dayapp-header-buttons`). Off hides only the
 button; the view
 stays in ⌘P (the two-layers rule). The update icon and timer chip aren't choices —
 they mount on their own conditions. **Views:** custom lenses
