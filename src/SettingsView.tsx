@@ -1,15 +1,16 @@
 // SettingsView — the settings page (⌘P → Settings). One console column over
-// flat hairline groups (2026-10-12, the settings-look v2 mockup): real
-// switches and segmented controls instead of ON/OFF text, themes as ladder
-// cards (the eleven shades in editor order), views as cards with an
-// Active/Enter state, and the view builder with a live "shows …" summary.
+// flat hairline cards (2026-10-12, the settings-look v2 mockup; five cards
+// since 2026-10-13): Tasks / Notes / Goals surface cards, each led by its
+// existence master with the sub-features beneath; Appearance (header buttons,
+// fills, screensaver, themes as ladder cards); Views as cards with an
+// Active/Enter state and the builder with a live "shows …" summary.
 //
 // Rows are dependency-aware: a feature that's off sends its dependents inert
-// with a hint saying why — the section toggles and Agent delegation need
-// Tasks, daily pause needs Daily, the Goal actions need Goals, the Header's
-// Hidden button needs any archive axis, Journal/Quotes need their features,
-// the screensaver needs Quotes. The same gates App applies when rendering,
-// now visible at the control itself.
+// with a hint saying why — every sub-row needs its card's master (daily pause
+// the tighter Daily), the Appearance header rows need their features (the
+// Hidden button needs any archive axis), the screensaver needs Quotes. The
+// same gates App applies when rendering, now visible at the control itself.
+// Journal/Quotes never dim — they ride the Notes card but outlive it.
 //
 // Mouse-first like Analytics: no focus-grammar wiring (free-mode j/k
 // scrolling works globally, Esc closes the page).
@@ -121,49 +122,61 @@ export const viewSummary = (v: CustomView, projects: Project[]): string => {
   return parts.join(" · ");
 };
 
-// The Features area is four cards: the surfaces (what exists at all), then
-// the actions that belong to one surface — tasks, notes, goals.
+// The feature area is three surface cards, each led by its existence master
+// with the sub-features beneath — a sub-row dims while its master is off.
+// Journal/Quotes ride the Notes card (the ##j/##q capture bus) but never dim:
+// their pages capture on their own, so they outlive Notes being off.
 const FEATURE_GROUPS = [
-  { id: "features", title: "Features" },
-  { id: "taskActions", title: "Task actions" },
-  { id: "noteActions", title: "Note actions" },
-  { id: "goalActions", title: "Goal actions" },
+  { id: "tasks", title: "Tasks" },
+  { id: "notes", title: "Notes" },
+  { id: "goals", title: "Goals" },
 ] as const;
 
 const FEATURES: { key: FeatureKey; label: string; hint: string; group: (typeof FEATURE_GROUPS)[number]["id"] }[] = [
-  { key: "tasks", label: "Tasks", hint: "capture + all three sections", group: "features" },
-  { key: "today", label: "Today", hint: "section", group: "features" },
-  { key: "daily", label: "Daily", hint: "section", group: "features" },
-  { key: "backlog", label: "Backlog", hint: "section", group: "features" },
-  { key: "notes", label: "Notes", hint: "the notepad surface", group: "features" },
-  { key: "goals", label: "Goals", hint: "the identity layer", group: "features" },
-  { key: "journal", label: "Journal", hint: "##j entries + the page", group: "features" },
-  { key: "quotes", label: "Quotes", hint: "##q entries, the page + the idle moment", group: "features" },
-  { key: "timer", label: "Timer", hint: "per-task time tracking (▶ / ⏱)", group: "taskActions" },
-  { key: "reminders", label: "Reminders", hint: "the ◷ date that pulls a row to Today", group: "taskActions" },
-  { key: "taskProjects", label: "Task projects", hint: "the #tag axis + the row's label", group: "taskActions" },
-  { key: "taskHide", label: "Task hide", hint: "soft-archive Today + Backlog rows (◐)", group: "taskActions" },
-  { key: "dailyPause", label: "Pause daily tasks", hint: "the ◐ pause on Daily habits — auto-resumes at its date", group: "taskActions" },
-  { key: "taskDetails", label: "Task details", hint: "the ⋯ spec body under a task", group: "taskActions" },
-  { key: "taskPriorities", label: "Task priorities", hint: "the !1–!3 tiers + signal bars", group: "taskActions" },
-  { key: "agent", label: "Agent delegation", hint: "the @ axis — 🤖 badge + the agent queue", group: "taskActions" },
-  { key: "noteProjects", label: "Note projects", hint: "the #tag footer token + the collapsed label", group: "noteActions" },
-  { key: "notePriorities", label: "Note priorities", hint: "the !N footer tiers on notes", group: "noteActions" },
-  { key: "noteHide", label: "Note hide", hint: "soft-archive notes (◐)", group: "noteActions" },
-  { key: "noteDownload", label: "Note download", hint: "the ⬇ .txt export on notes", group: "noteActions" },
-  { key: "goalProjects", label: "Goal projects", hint: "the #tag link on a goal", group: "goalActions" },
-  { key: "goalPause", label: "Goal pause", hint: "set a goal down — the ◐ with an expiry, resumed by ↺", group: "goalActions" },
+  { key: "tasks", label: "Tasks", hint: "the whole surface — capture + all three sections", group: "tasks" },
+  { key: "today", label: "Today", hint: "section", group: "tasks" },
+  { key: "daily", label: "Daily", hint: "section", group: "tasks" },
+  { key: "backlog", label: "Backlog", hint: "section", group: "tasks" },
+  { key: "timer", label: "Timer", hint: "per-task time tracking (▶ / ⏱)", group: "tasks" },
+  { key: "reminders", label: "Reminders", hint: "the ◷ date that pulls a row to Today", group: "tasks" },
+  { key: "taskProjects", label: "Task projects", hint: "the #tag axis + the row's label", group: "tasks" },
+  { key: "taskHide", label: "Task hide", hint: "soft-archive Today + Backlog rows (◐)", group: "tasks" },
+  { key: "dailyPause", label: "Pause daily tasks", hint: "the ◐ pause on Daily habits — auto-resumes at its date", group: "tasks" },
+  { key: "taskDetails", label: "Task details", hint: "the ⋯ spec body under a task", group: "tasks" },
+  { key: "taskPriorities", label: "Task priorities", hint: "the !1–!3 tiers + signal bars", group: "tasks" },
+  { key: "agent", label: "Agent delegation", hint: "the @ axis — 🤖 badge + the agent queue", group: "tasks" },
+  { key: "notes", label: "Notes", hint: "the notepad surface", group: "notes" },
+  { key: "noteProjects", label: "Note projects", hint: "the #tag footer token + the collapsed label", group: "notes" },
+  { key: "notePriorities", label: "Note priorities", hint: "the !N footer tiers on notes", group: "notes" },
+  { key: "noteHide", label: "Note hide", hint: "soft-archive notes (◐)", group: "notes" },
+  { key: "noteDownload", label: "Note download", hint: "the ⬇ .txt export on notes", group: "notes" },
+  { key: "journal", label: "Journal", hint: "##j entries + the page — survives Notes off", group: "notes" },
+  { key: "quotes", label: "Quotes", hint: "##q entries, the page + the idle moment — survives Notes off", group: "notes" },
+  { key: "goals", label: "Goals", hint: "the identity layer", group: "goals" },
+  { key: "goalProjects", label: "Goal projects", hint: "the #tag link on a goal", group: "goals" },
+  { key: "goalPause", label: "Goal pause", hint: "set a goal down — the ◐ with an expiry, resumed by ↺", group: "goals" },
 ];
 
-// Rows whose switch is pointless while another feature is off — the row goes
-// inert and its hint says why. (The Header group's gates ride each entry's
-// `need`; the screensaver's is hard-coded in its row.)
+// Rows whose switch is pointless while their card's master (or a tighter
+// gate) is off — the row goes inert and its hint says why. (The Appearance
+// header rows ride each entry's `need`; the screensaver's is hard-coded in
+// its row.)
 const GATED_BY: Partial<Record<FeatureKey, FeatureKey>> = {
   today: "tasks",
   daily: "tasks",
   backlog: "tasks",
   agent: "tasks",
+  timer: "tasks",
+  reminders: "tasks",
+  taskProjects: "tasks",
+  taskHide: "tasks",
+  taskDetails: "tasks",
+  taskPriorities: "tasks",
   dailyPause: "daily",
+  noteProjects: "notes",
+  notePriorities: "notes",
+  noteHide: "notes",
+  noteDownload: "notes",
   goalProjects: "goals",
   goalPause: "goals",
 };
@@ -194,7 +207,7 @@ function ToggleRow({
       <span className="set-row-text">
         <span className="set-name">{label}</span>
         <span className="set-hint">
-          {needs ? `needs ${needsLabel} — off in Features` : hint}
+          {needs ? `needs ${needsLabel} — off above` : hint}
         </span>
       </span>
       <span className={`set-sw${on ? " on" : ""}`} />
@@ -216,7 +229,7 @@ function InfoRow({ label, hint, needs, needsLabel, children }: {
       <span className="set-row-text">
         <span className="set-name">{label}</span>
         <span className="set-hint">
-          {needs ? `needs ${needsLabel} — off in Features` : hint}
+          {needs ? `needs ${needsLabel} — off above` : hint}
         </span>
       </span>
       {children}
@@ -428,12 +441,10 @@ export default function SettingsView({
         );
       })}
 
-      {/* ---- Header: which icon buttons mount top-right. Off hides only the
-              button; the view stays in ⌘P (the two-layers rule). ---- */}
-      <Group
-        title="Header"
-        count={`${HEADER_BUTTONS.filter((b) => headerBtns[b.key]).length} of ${HEADER_BUTTONS.length} shown`}
-      >
+      {/* ---- Appearance: one look card — the header's buttons, the resting
+              fills, the idle moment, then themes as ladder cards (the eleven
+              shades in editor order, so a theme reads at a glance). ---- */}
+      <Group title="Appearance">
         <div className="set-rows">
           {HEADER_BUTTONS.map(({ key, label, hint, need }) => (
             <ToggleRow
@@ -449,14 +460,6 @@ export default function SettingsView({
               }}
             />
           ))}
-        </div>
-      </Group>
-
-      {/* ---- Appearance: one look card — the resting fills, the idle
-              moment, then themes as ladder cards (the eleven shades in
-              editor order, so a theme reads at a glance). ---- */}
-      <Group title="Appearance">
-        <div className="set-rows">
           <InfoRow label="Notes background" hint="the fill behind each note">
             <span className={`set-swatch${notesCard ? " filled" : " empty"}`} />
             <Seg
