@@ -22,18 +22,18 @@ import { IconPencil, IconX } from "./components/icons";
 
 export type FeatureKey =
   | "tasks" | "today" | "daily" | "backlog" | "notes" | "goals" | "journal" | "quotes"
-  | "projects" | "taskPriorities" | "notePriorities" | "agent" | "timer" | "reminders"
-  | "taskHide" | "noteHide"
+  | "taskProjects" | "noteProjects" | "goalProjects"
+  | "taskPriorities" | "notePriorities" | "agent" | "timer" | "reminders"
+  | "taskHide" | "dailyPause" | "noteHide" | "goalPause"
   | "taskDetails" | "noteDownload";
 
 // The header's icon buttons — each an On/Off choice in the Header group.
 export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes" | "settings" | "theme";
 
 // `need` lists the features the button reads — the row goes inert only when
-// ALL of them are off (the ◐ button works while any hide axis exists; goal
-// pause rides the Goals feature itself).
+// ALL of them are off (the ◐ button works while any archive axis exists).
 const HEADER_BUTTONS: { key: HeaderBtn; label: string; hint: string; need?: FeatureKey[] }[] = [
-  { key: "hidden", label: "Hidden entries", hint: "the ◐ archive peek", need: ["taskHide", "noteHide", "goals"] },
+  { key: "hidden", label: "Hidden entries", hint: "the ◐ archive peek", need: ["taskHide", "dailyPause", "noteHide", "goalPause"] },
   { key: "analytics", label: "Analytics", hint: "the chart icon" },
   { key: "journal", label: "Journal", hint: "the prose icon", need: ["journal"] },
   { key: "quotes", label: "Quotes", hint: "the quote icon", need: ["quotes"] },
@@ -121,12 +121,13 @@ export const viewSummary = (v: CustomView, projects: Project[]): string => {
   return parts.join(" · ");
 };
 
-// The Features area is three cards: the surfaces (what exists at all), then
-// the actions that belong to one surface — tasks, then notes.
+// The Features area is four cards: the surfaces (what exists at all), then
+// the actions that belong to one surface — tasks, notes, goals.
 const FEATURE_GROUPS = [
   { id: "features", title: "Features" },
   { id: "taskActions", title: "Task actions" },
   { id: "noteActions", title: "Note actions" },
+  { id: "goalActions", title: "Goal actions" },
 ] as const;
 
 const FEATURES: { key: FeatureKey; label: string; hint: string; group: (typeof FEATURE_GROUPS)[number]["id"] }[] = [
@@ -138,16 +139,20 @@ const FEATURES: { key: FeatureKey; label: string; hint: string; group: (typeof F
   { key: "goals", label: "Goals", hint: "the identity layer", group: "features" },
   { key: "journal", label: "Journal", hint: "##j entries + the page", group: "features" },
   { key: "quotes", label: "Quotes", hint: "##q entries, the page + the idle moment", group: "features" },
-  { key: "projects", label: "Projects", hint: "the #tag axis for tasks, notes, goals", group: "features" },
   { key: "agent", label: "Agent delegation", hint: "the @ axis — 🤖 badge + the agent queue", group: "features" },
   { key: "timer", label: "Timer", hint: "per-task time tracking (▶ / ⏱)", group: "taskActions" },
   { key: "reminders", label: "Reminders", hint: "the ◷ date that pulls a row to Today", group: "taskActions" },
-  { key: "taskHide", label: "Hide", hint: "soft-archive tasks (◐)", group: "taskActions" },
+  { key: "taskProjects", label: "Task projects", hint: "the #tag axis + the row's label", group: "taskActions" },
+  { key: "taskHide", label: "Task hide", hint: "soft-archive Today + Backlog rows (◐)", group: "taskActions" },
+  { key: "dailyPause", label: "Pause daily tasks", hint: "the ◐ pause on Daily habits — auto-resumes at its date", group: "taskActions" },
   { key: "taskDetails", label: "Task details", hint: "the ⋯ spec body under a task", group: "taskActions" },
   { key: "taskPriorities", label: "Task priorities", hint: "the !1–!3 tiers + signal bars", group: "taskActions" },
+  { key: "noteProjects", label: "Note projects", hint: "the #tag footer token + the collapsed label", group: "noteActions" },
   { key: "notePriorities", label: "Note priorities", hint: "the !N footer tiers on notes", group: "noteActions" },
   { key: "noteHide", label: "Note hide", hint: "soft-archive notes (◐)", group: "noteActions" },
   { key: "noteDownload", label: "Note download", hint: "the ⬇ .txt export on notes", group: "noteActions" },
+  { key: "goalProjects", label: "Goal projects", hint: "the #tag link on a goal", group: "goalActions" },
+  { key: "goalPause", label: "Goal pause", hint: "set a goal down — the ◐ with an expiry, resumed by ↺", group: "goalActions" },
 ];
 
 // Rows whose switch is pointless while another feature is off — the row goes
@@ -157,6 +162,9 @@ const GATED_BY: Partial<Record<FeatureKey, FeatureKey>> = {
   today: "tasks",
   daily: "tasks",
   backlog: "tasks",
+  dailyPause: "daily",
+  goalProjects: "goals",
+  goalPause: "goals",
 };
 
 // ---- Row primitives --------------------------------------------------------
@@ -671,7 +679,7 @@ export default function SettingsView({
                 onPick={(v) => setAgent(v as CustomView["agent"])}
               />
             </div>
-            {features.projects && (
+            {(features.taskProjects || features.noteProjects) && (
               <div className="settings-field">
                 <span className="settings-field-label">Projects</span>
                 <button

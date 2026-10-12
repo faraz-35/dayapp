@@ -6,19 +6,25 @@
 import { createContext, useContext } from "react";
 
 export interface Features {
-  /** The organising axes. */
-  projects: boolean;
+  /** The organising axes — projects are per surface, like the archive below:
+   *  a switched-off surface's axis never parses, labels, or filters. */
+  taskProjects: boolean;
+  noteProjects: boolean;
+  goalProjects: boolean;
   taskPriorities: boolean;
   notePriorities: boolean;
   agent: boolean;
   /** The measurement/action features. */
   timer: boolean;
   reminders: boolean;
-  /** Soft-archive (◐) is per surface: tasks and notes hide independently —
-   *  either off leaves the other's buttons, reveal toggles, and header ◐
-   *  fully working. */
+  /** Soft-archive (◐) is per surface: tasks, notes, and each of their halves
+   *  hide independently — either off leaves the other's buttons, reveal
+   *  toggles, and header ◐ fully working. Daily habits pause rather than
+   *  hide (same ◐ column, its own switch and reveal). */
   taskHide: boolean;
+  dailyPause: boolean;
   noteHide: boolean;
+  goalPause: boolean;
   /** Task details (the ⋯ spec body) and the notes' ⬇ .txt export — content
    *  features Faraz can switch off like any other existence toggle. */
   taskDetails: boolean;
@@ -36,8 +42,10 @@ export interface Features {
 }
 
 export const FeaturesContext = createContext<Features>({
-  projects: true, taskPriorities: true, notePriorities: true, agent: true,
-  timer: true, reminders: true, taskHide: true, noteHide: true,
+  taskProjects: true, noteProjects: true, goalProjects: true,
+  taskPriorities: true, notePriorities: true, agent: true,
+  timer: true, reminders: true,
+  taskHide: true, dailyPause: true, noteHide: true, goalPause: true,
   taskDetails: true, noteDownload: true,
   tasks: true, today: true, daily: true, backlog: true,
   notes: true, goals: true, journal: true, quotes: true,

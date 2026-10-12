@@ -104,10 +104,20 @@ meta    key, value           — currently holds last_sweep_date
   as `paused`/`unpaused` actions (2026-09-14, Faraz's call): the flag is the display
   mechanism, the log is its dated record, and the daily-miss replay folds them to know
   which days a habit was paused. Daily rows say "Pause" (the word for a recurring
-  habit); every other surface keeps "Hide" — one mechanism, two names.
+  habit); every other surface keeps "Hide" — one mechanism, two names. The
+  switches split per half (2026-10-13): **Task hide** governs Today/Backlog rows,
+  **Pause daily tasks** governs Daily rows, and each half carries its own ⌘P
+  reveal — **Hidden Tasks** (Today + Backlog) and **Paused Daily Tasks** (Daily) —
+  so a paused habit and an archived row open through separate doors. A
+  switched-off half's ◐ button and reveal entry disappear; the fetch includes
+  hidden rows only while either half's (switch ∧ reveal) stands, and the display
+  pipeline re-filters per row's section, so an off half's rows can never render
+  with nothing able to unhide them (the da05edf rule, per half).
 - `project_id` — optional assignment to a `projects` row (housekeeping; **not** logged). Shown
   as a color-coded label on the far right of each item row (deterministic hue per project id).
-  Deleting a project nulls the FK (items kept).
+  Deleting a project nulls the FK (items kept). The axis is per surface (2026-10-13):
+  `Task projects` off leaves the label unparsed and unrendered here while Notes/Goals
+  keep theirs.
 - `priority` ∈ `1..3` | NULL — urgency tier, set via a `!1`/`!2`/`!3` token in the capture or
   edit text (`parseItemTags` in `lib.ts` strips it; composable with `#tag` in either order;
   last token wins; no token on edit leaves the value alone; `!0` clears). Housekeeping —
@@ -304,11 +314,13 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
   `HideMenu`, verb Pause) sits on active goal rows only — an achieved row has
   nothing to pause — and paused rows render ↺/× only with the ◐ expiry chip.
   `list_goals` takes the `HiddenFilter`; ⌘P → **Show/Hide Paused Goals**
-  reveals them inline dimmed in their horizon groups. Pause rides the Goals
-  feature itself — no separate Settings switch (unlike task/note hide).
-  Digit slots: ✓1 · #2 · ◐3 · ×4 (compacting when projects are off;
-  paused rows: ↺1 · ×2). `--goals` excludes paused rows; `--hidden` adds
-  them, marked ⏸.
+  reveals them inline dimmed in their horizon groups. Pause carries its own
+  switch since 2026-10-13 — **Settings → Goal actions → Goal pause** (the card
+  also holds Goal projects; the row dims while the Goals feature is off) — so
+  off removes the ◐ button, the reveal entry, and the paused render together.
+  Digit slots assign in render order with no holes (✓1 · #2 · ◐3 · ×4;
+  compacting per switched-off axis; paused rows: ↺1 · ×2). `--goals` excludes
+  paused rows; `--hidden` adds them, marked ⏸.
 - `project_id` — optional link to a `projects` row (housekeeping, **not**
   logged; deleting a project nulls it, same as items).
 - The section renders at the very top of the main page, above Notes — the
@@ -742,7 +754,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
 | `AnalyticsView.tsx` | the analytics page: range/day-pick state, dashboard + time fetch, stats/heatmap/splits/day-card render | derivation (all in `dashboard.rs`), item state |
-| `SettingsView.tsx` | the settings page: full-width group cards in the analytics card language (2026-10-12, the settings-look v2 mockup) — switches, segmented controls, theme ladder cards (the only bordered cards inside a group), borderless view rows with Active/Enter, the builder's live `shows …` summary; the Features area splits into Features / Task actions / Note actions cards; dependency-dimmed rows (sections need Tasks, the Header's Hidden button needs either hide axis, Journal/Quotes need their features, screensaver needs Quotes) | the toggle/view state (App's — the palette reads it too) |
+| `SettingsView.tsx` | the settings page: full-width group cards in the analytics card language (2026-10-12, the settings-look v2 mockup) — switches, segmented controls, theme ladder cards (the only bordered cards inside a group), borderless view rows with Active/Enter, the builder's live `shows …` summary; the Features area splits into Features / Task actions / Note actions / Goal actions cards; dependency-dimmed rows (sections need Tasks, daily pause needs Daily, the goal actions need Goals, the Header's Hidden button needs any archive axis, Journal/Quotes need their features, screensaver needs Quotes) | the toggle/view state (App's — the palette reads it too) |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---
@@ -1066,9 +1078,9 @@ its digit share the one real onClick handler).
 | `b11`–`49` | focus a Backlog row — tier digit first (4 = unprioritized), then row |
 | `n11`–`49` | focus a note — tier digit first (4 = unmarked), then row within the tier's visible group (the `b11`–`49` scheme over the notes' tier groups; flat `n1`–`9` retired) |
 | `g1`–`9` | focus a goal (DOM order = visual order) |
-| `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide · ⋯ details · × delete — on the focused row (hidden rows: `4` = ↺, `6` = ×) |
+| `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide (Pause on Daily — its own switch) · ⋯ details · × delete — on the focused row (hidden rows: `4` = ↺, `6` = ×) |
 | `1`–`4` (note) | ⌃/⌄ expand · ⬇ download .txt · ◐ hide · × delete — ⬇ and × need content (hidden notes: `3` = ↺, `4` = ×) |
-| `1`–`4` (goal) | ✓ achieve · # project · ◐ pause · × delete — paused rows: `1` = ↺ resume, `2` = × (digits compact when projects are off) |
+| `1`–`4` (goal) | ✓ achieve · # project · ◐ pause · × delete — paused rows: `1` = ↺ resume, `2` = × (digits compact per switched-off axis — projects off, or Goal pause off in Settings → Goal actions) |
 | `↑`/`↓` + `Enter` (popover open) | move the highlight · pick — # project routes typing to its create field; the date input stays native (Tab reaches it) |
 | `j` / `↓` | select next — the walk spans the page's rows in visual order (notes first, then tasks); clamped at the ends; never drops focus |
 | `k` / `↑` | select previous — same walk, clamped at the first note |
@@ -1099,15 +1111,20 @@ the store from localStorage once and removed the old keys.
 **Settings (⌘P → Settings):** the settings page owns what exists at all and the custom
 views. **Features** are EXISTENCE switches — `Tasks` (the whole tasks area in one
 toggle: the capture input plus all three sections — the section toggles refine inside
-it), `Today`/`Daily`/`Backlog` sections, `Notes`, `Goals`, the axes
-(`Projects`, `Task priorities`, `Note priorities`, `Agent delegation`), the actions
-(`Timer`, `Reminders`, `Task details`, `Task priorities`, `Hide` — 2026-10-12 split
-per surface: `Note hide` rides the Note actions card, and either off leaves the
-other's buttons, reveal toggles, and the header ◐ fully working; the old shared
-`dayapp-hide-enabled` key seeded both new keys once, then left the store), the entry
-pages (`Journal`, `Quotes`), and the two
-content features — `Task details` (the ⋯ spec body; 2026-10-12) and `Note download`
-(the ⬇ .txt export; 2026-10-12) — persisted in the
+it), `Today`/`Daily`/`Backlog` sections, `Notes`, `Goals`, the axes —
+`Task projects` / `Note projects` / `Goal projects` (2026-10-13: one shared
+`Projects` switch split per surface, the old `dayapp-projects-enabled` key seeding
+all three once and leaving the store; off, that surface never parses, labels, or
+filters its `#tag`) plus `Task priorities`, `Note priorities`, `Agent delegation` —
+the actions (`Timer`, `Reminders`, `Task hide`, `Pause daily tasks`, `Task details`,
+`Task priorities` on the Task actions card; `Note projects`, `Note priorities`,
+`Note hide`, `Note download` on the Note actions card; `Goal projects`, `Goal pause`
+on the Goal actions card — 2026-10-13: the archive completed its per-surface split,
+Daily habits pausing under their own switch, and the entry pages (`Journal`,
+`Quotes`)). Either off leaves the
+other axes' buttons, reveal toggles, and the header ◐ fully working — and the two
+content features (`Task details`, the ⋯ spec body; `Note download`, the ⬇ .txt
+export; 2026-10-12) — persisted in the
 `dayapp-*-enabled` keys (default on; 2026-10-04, two layers after Faraz's correction:
 Settings is high-level configuration, ⌘P is the working door). A disabled surface
 renders nothing, isn't searchable or keyboard-navigable, and its whole ⌘P option family
@@ -1137,17 +1154,19 @@ Show Default View exits the active view.
 entry here (`Goals`, `Notes`, `Tasks` + the per-section toggles — each appears only
 while its feature is ON in Settings, so the "Show" state is reachable and a disabled
 feature has nothing to toggle), plus the per-feature options, under the same gate:
-`Hidden Tasks` and `Hidden Notes` (both render hidden entries inline where they live,
-dimmed, ↺/× actions — each gated on its own hide feature, so a switched-off axis's
-entry disappears), `Paused Goals` (the same inline reveal over the goals' pause axis —
-gated on the Goals feature, which pause rides), the per-tier `Priority 1/2/3 Tasks`
+`Hidden Tasks` (Today + Backlog), `Paused Daily Tasks` (2026-10-13 — the Daily
+section's own reveal; a paused habit and an archived row open through separate
+doors), and `Hidden Notes` (all render hidden entries inline where they live,
+dimmed, ↺/× actions — each gated on its own archive feature, so a switched-off
+axis's entry disappears), `Paused Goals` (the same inline reveal over the goals'
+pause axis — gated on Goals ∧ Goal pause), the per-tier `Priority 1/2/3 Tasks`
 toggles, the notes' own
 `Priority 1/2/3 Notes` toggles (independent of the task tiers, like Hidden Notes ≠
 Hidden Tasks), and `Agent Tasks` (hides the 🤖-marked rows — the "what's actually mine"
 focus view). All persist in localStorage (display preferences, like zoom). The header ◐
-button mounts while any hide axis exists (tasks, notes, or goals — the third rides the
-Goals feature) and toggles exactly the enabled surfaces; its Settings row dims only
-when all three are off. There is no hidden-only mode and no separate
+button mounts while any archive axis exists (task hide, daily pause, note hide, goal
+pause) and toggles exactly the enabled surfaces; its Settings row dims only when all
+four are off. There is no hidden-only mode and no separate
 archive screen — inline-or-excluded is the whole visibility story.
 
 **Demo mode (⌘P):** `Enter/Exit Demo Mode` swaps the whole database to the disposable

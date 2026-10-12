@@ -67,9 +67,12 @@ export default function ItemRow({
   const doneToday =
     item.section === "daily" && item.lastCompletedDate === todayStr();
   const done = item.status === "done" || doneToday;
-  const project = features.projects
+  const project = features.taskProjects
     ? projects.find((p) => p.id === item.projectId) ?? null
     : null;
+  // The archive half that owns this row: Daily habits pause (their own
+  // switch), Today/Backlog rows hide. One ◐ column, two verbs, two switches.
+  const canArchive = item.section === "daily" ? features.dailyPause : features.taskHide;
 
   // Backlog rows carry no bars — the section's tier dividers label the groups
   // there — so priority feeds the row's metadata only outside the Backlog.
@@ -95,9 +98,9 @@ export default function ItemRow({
       // Slot 1 is the row's first verb: ▶/⏸ when timing exists (↑ on the
       // Backlog — movement, not timing, so it survives the timer switch).
       if (item.section === "backlog" || features.timer) slots.timer = next();
-      if (features.projects) slots.project = next();
+      if (features.taskProjects) slots.project = next();
       if (features.reminders) slots.remind = next();
-      if (features.taskHide) slots.hide = next();
+      if (canArchive) slots.hide = next();
       if (features.taskDetails) slots.details = next();
       slots.delete = next();
     }
@@ -153,7 +156,7 @@ export default function ItemRow({
           initial={item.text}
           onCommit={onCommitEdit}
           kinds={[
-            ...(features.projects ? (["project"] as const) : []),
+            ...(features.taskProjects ? (["project"] as const) : []),
             ...(features.taskPriorities ? (["priority"] as const) : []),
             ...(features.agent ? (["agent"] as const) : []),
           ]}
@@ -270,7 +273,7 @@ export default function ItemRow({
             </>
           ) : (
             <>
-              {features.projects && (
+              {features.taskProjects && (
                 <ProjectMenu
                   kb={slots.project}
                   projects={projects}
@@ -282,7 +285,7 @@ export default function ItemRow({
               {features.reminders && (
                 <ReminderMenu kb={slots.remind} remindAt={item.remindAt} onSet={onSetReminder} />
               )}
-              {features.taskHide && (
+              {canArchive && (
                 <HideMenu kb={slots.hide} onHide={onHide} verb={item.section === "daily" ? "Pause" : "Hide"} />
               )}
               {features.taskDetails && (

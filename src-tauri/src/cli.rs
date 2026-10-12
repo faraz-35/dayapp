@@ -174,7 +174,14 @@ fn section_enabled(name: &str) -> anyhow::Result<bool> {
 }
 
 fn projects_enabled() -> anyhow::Result<bool> {
-    Ok(store()?.get("dayapp-projects-enabled").map(String::as_str) != Some("0"))
+    // Per surface since 2026-10-13: the axis exists for the CLI while any
+    // surface still carries it (the picker lists projects used by tasks,
+    // notes, and goals alike).
+    let s = store()?;
+    let on = |k: &str| s.get(k).map(String::as_str) != Some("0");
+    Ok(on("dayapp-task-projects-enabled")
+        || on("dayapp-note-projects-enabled")
+        || on("dayapp-goal-projects-enabled"))
 }
 
 fn store_set(key: &str, value: &str) -> anyhow::Result<()> {
@@ -981,11 +988,17 @@ fn notes(db: &Db, rest: &[String]) -> anyhow::Result<()> {
     let filter = if hidden { HiddenFilter::Include } else { HiddenFilter::Exclude };
     let all = db.list_notes(filter)?;
     let projects = project_names(db)?;
+    // The token line mirrors what the GUI shows: with the surface's axis off
+    // (Settings → Note actions), the #name never renders.
+    let note_proj_on =
+        store().ok().and_then(|m| m.get("dayapp-note-projects-enabled").cloned()) != Some("0".into());
     let meta_line = |n: &crate::notes::Note| {
         let mut parts: Vec<String> = Vec::new();
         if let Some(p) = n.priority { parts.push(format!("!{p}")); }
-        if let Some(name) = n.project_id.as_ref().and_then(|pid| projects.get(pid)) {
-            parts.push(format!("#{name}"));
+        if note_proj_on {
+            if let Some(name) = n.project_id.as_ref().and_then(|pid| projects.get(pid)) {
+                parts.push(format!("#{name}"));
+            }
         }
         parts.join(" ")
     };
@@ -1180,7 +1193,7 @@ fn row_meta(item: &Item, projects: &std::collections::HashMap<String, String>) -
         (
             flag("dayapp-task-priorities-enabled"),
             flag("dayapp-agent-enabled"),
-            flag("dayapp-projects-enabled"),
+            flag("dayapp-task-projects-enabled"),
         )
     });
     row_meta_in(item, projects, *prio_on, *agent_on, *proj_on)

@@ -79,7 +79,7 @@ export default function Goals({
     const raw = draft.trim();
     setDraft("");
     if (!raw) return;
-    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects, { projects: features.projects });
+    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects, { projects: features.goalProjects });
     if (!text) return;
     trace("capture.goal", { horizon: horizon ?? "short", text: clip(text) });
     try {
@@ -98,7 +98,7 @@ export default function Goals({
 
   const handleCommitEdit = async (goal: Goal, raw: string) => {
     setEditingId(null);
-    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects, { projects: features.projects });
+    const { text, horizon, projectId, createProjectName } = parseGoalText(raw, projects, { projects: features.goalProjects });
     if (!text) return;
     try {
       const assignId = projectId ?? (createProjectName ? (await onCreateProject(createProjectName)).id : null);
@@ -178,12 +178,22 @@ export default function Goals({
   const renderRow = (goal: Goal) => {
     const achieved = goal.status === "achieved";
     const paused = goal.hidden;
-    const project = projects.find((p) => p.id === goal.projectId) ?? null;
+    const project = features.goalProjects
+      ? projects.find((p) => p.id === goal.projectId) ?? null
+      : null;
     const editing = editingId === goal.id;
-    // Digit slots, left to right: ✓ always 1; then # (when projects exist),
-    // ◐ pause (active rows only), × last. Paused rows render only ↺ + ×.
-    const pauseKb = features.projects ? "3" : "2";
-    const deleteKb = features.projects ? "4" : "3";
+    // Digit slots, assigned in render order like the task rows — leftmost is
+    // 1, a switched-off axis compacts the numbering (no holes; the achieved
+    // row's × takes the slot the pause button would have held). Paused rows
+    // render only ↺ + ×.
+    const slots: Record<string, string> = {};
+    {
+      let n = 0;
+      const next = () => String(++n);
+      if (features.goalProjects) slots.project = next();
+      if (!achieved && features.goalPause) slots.pause = next();
+      slots.delete = next();
+    }
     return (
       <div
         key={goal.id}
@@ -218,7 +228,7 @@ export default function Goals({
         )}
 
         {editing ? (
-          <EditInput initial={goal.text} onCommit={(text) => handleCommitEdit(goal, text)} kinds={features.projects ? ["project"] : []} />
+          <EditInput initial={goal.text} onCommit={(text) => handleCommitEdit(goal, text)} kinds={features.goalProjects ? ["project"] : []} />
         ) : (
           <span className="item-text">{goal.text}</span>
         )}
@@ -273,27 +283,28 @@ export default function Goals({
               </>
             ) : (
               <>
-                {features.projects && (
+                {features.goalProjects && (
                   <ProjectMenu
-                    kb="2"
+                    kb={slots.project}
                     projects={projects}
                     projectId={goal.projectId}
                     onAssign={(projectId) => handleSetProject(goal, projectId)}
                     onCreateProject={onCreateProject}
                   />
                 )}
-                {/* Pause rides the Goals feature (no separate switch) — an
-                    achieved row has nothing to pause, so it keeps just ✓/#/×. */}
-                {!achieved && (
+                {/* Its own Settings switch (Settings → Goal actions) — an
+                    achieved row has nothing to pause, so it keeps just
+                    ✓/#/×. */}
+                {!achieved && features.goalPause && (
                   <HideMenu
-                    kb={pauseKb}
+                    kb={slots.pause}
                     onHide={(duration) => handlePause(goal, duration)}
                     verb="Pause"
                   />
                 )}
                 <button
                   className="item-action danger"
-                  data-kb={deleteKb}
+                  data-kb={slots.delete}
                   onClick={(e) => { e.stopPropagation(); handleDelete(goal); }}
                   title="Delete goal"
                   aria-label="Delete goal"
@@ -325,7 +336,7 @@ export default function Goals({
           sigil token, and stays plain. */}
       <div className="capture">
         <TokenField
-          kinds={features.projects ? ["project"] : []}
+          kinds={features.goalProjects ? ["project"] : []}
           value={draft}
           onChange={setDraft}
           onKeyDown={(e) => {

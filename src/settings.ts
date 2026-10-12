@@ -34,21 +34,31 @@ export async function initSettings(): Promise<boolean> {
 // got their own existence toggle. The old key seeds both new ones once, then
 // leaves the file: a stale key in the store would read as a live switch to
 // `--settings` and the CLI.
+// 2026-10-13: the same split for Projects — one switch seeds the three
+// per-surface keys (tasks / notes / goals), then leaves.
 function migrate() {
-  const old = "dayapp-hide-enabled";
-  if (!(old in cache)) return;
-  if (!("dayapp-task-hide-enabled" in cache)) cache["dayapp-task-hide-enabled"] = cache[old];
-  if (!("dayapp-note-hide-enabled" in cache)) cache["dayapp-note-hide-enabled"] = cache[old];
-  delete cache[old];
-  invoke("settings_set", {
-    entries: {
-      "dayapp-task-hide-enabled": cache["dayapp-task-hide-enabled"],
-      "dayapp-note-hide-enabled": cache["dayapp-note-hide-enabled"],
-    },
-  }).catch((e) => console.error("[dayapp] hide-key split write failed", e));
-  invoke("settings_remove", { keys: [old] }).catch((e) =>
-    console.error("[dayapp] hide-key removal failed", e),
-  );
+  const splits: [string, string[]][] = [
+    ["dayapp-hide-enabled", ["dayapp-task-hide-enabled", "dayapp-note-hide-enabled"]],
+    [
+      "dayapp-projects-enabled",
+      [
+        "dayapp-task-projects-enabled",
+        "dayapp-note-projects-enabled",
+        "dayapp-goal-projects-enabled",
+      ],
+    ],
+  ];
+  for (const [old, keys] of splits) {
+    if (!(old in cache)) continue;
+    for (const k of keys) if (!(k in cache)) cache[k] = cache[old];
+    delete cache[old];
+    invoke("settings_set", {
+      entries: Object.fromEntries(keys.map((k) => [k, cache[k]])),
+    }).catch((e) => console.error("[dayapp] key split write failed", e));
+    invoke("settings_remove", { keys: [old] }).catch((e) =>
+      console.error("[dayapp] old-key removal failed", e),
+    );
+  }
 }
 
 /** Synchronous read — valid only after initSettings (App gates on it). */

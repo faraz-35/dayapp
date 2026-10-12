@@ -358,10 +358,17 @@ function DayAppBody() {
   const [quotesEnabled, setQuotesEnabled] = useState(
     () => sget("dayapp-quotes-enabled", "1") !== "0",
   );
-  // The #tag axis: off, projects never parse, resolve, label, or filter —
-  // `#abc` in any capture stays literal prose. Existing links stay in the db.
-  const [projectsEnabled, setProjectsEnabled] = useState(
-    () => sget("dayapp-projects-enabled", "1") !== "0",
+  // The #tag axis is per surface (2026-10-13, like the archive below): off,
+  // that surface's projects never parse, resolve, label, or filter — `#abc`
+  // in its capture stays literal prose. Existing links stay in the db.
+  const [taskProjectsEnabled, setTaskProjectsEnabled] = useState(
+    () => sget("dayapp-task-projects-enabled", "1") !== "0",
+  );
+  const [noteProjectsEnabled, setNoteProjectsEnabled] = useState(
+    () => sget("dayapp-note-projects-enabled", "1") !== "0",
+  );
+  const [goalProjectsEnabled, setGoalProjectsEnabled] = useState(
+    () => sget("dayapp-goal-projects-enabled", "1") !== "0",
   );
   // Six more existence switches (same contract: off = the axis/feature
   // disappears everywhere, data never moves).
@@ -380,14 +387,21 @@ function DayAppBody() {
   const [remindersEnabled, setRemindersEnabled] = useState(
     () => sget("dayapp-reminders-enabled", "1") !== "0",
   );
-  // Soft-archive is per surface: tasks and notes hide independently, so
-  // either switch off leaves the other's buttons, reveal toggles, and the
-  // header ◐ fully working.
+  // Soft-archive is per surface — and per half of the task surface (2026-10-13):
+  // Today/Backlog rows hide, Daily habits pause (the same ◐ column, worded per
+  // row), notes hide, goals pause. Each switch off leaves the others' buttons,
+  // reveal toggles, and the header ◐ fully working.
   const [taskHideEnabled, setTaskHideEnabled] = useState(
     () => sget("dayapp-task-hide-enabled", "1") !== "0",
   );
+  const [dailyPauseEnabled, setDailyPauseEnabled] = useState(
+    () => sget("dayapp-daily-pause-enabled", "1") !== "0",
+  );
   const [noteHideEnabled, setNoteHideEnabled] = useState(
     () => sget("dayapp-note-hide-enabled", "1") !== "0",
+  );
+  const [goalPauseEnabled, setGoalPauseEnabled] = useState(
+    () => sget("dayapp-goal-pause-enabled", "1") !== "0",
   );
   const [taskDetailsEnabled, setTaskDetailsEnabled] = useState(
     () => sget("dayapp-task-details-enabled", "1") !== "0",
@@ -416,13 +430,18 @@ function DayAppBody() {
   const [showHiddenItems, setShowHiddenItems] = useState(
     () => sget("dayapp-hidden-items", "0") === "1",
   );
+  // ⌘P "Show/Hide Paused Daily Tasks" — the Daily section's own reveal, split
+  // from Hidden Tasks (2026-10-13): a paused habit and an archived row are
+  // different kinds of set-down, with separate doors.
+  const [showPausedDaily, setShowPausedDaily] = useState(
+    () => sget("dayapp-hidden-daily", "0") === "1",
+  );
   const [showHiddenNotes, setShowHiddenNotes] = useState(
     () => sget("dayapp-hidden-notes", "0") === "1",
   );
   // ⌘P "Show/Hide Paused Goals" — the goals' own reveal over the pause axis
   // (the same soft-archive as tasks/notes, worded "pause" on this surface).
-  // Persisted like the other two; there's no separate feature switch — goal
-  // pause rides the Goals feature itself.
+  // Persisted like the others.
   const [showHiddenGoals, setShowHiddenGoals] = useState(
     () => sget("dayapp-hidden-goals", "0") === "1",
   );
@@ -609,10 +628,14 @@ function DayAppBody() {
   // ---- Load -------------------------------------------------------------
 
   const refresh = useCallback(async () => {
-    // The reveal only reaches the db while the hide feature exists for that
-    // surface — feature off, archived rows stay excluded (nothing can unhide
-    // them, so nothing may show them).
-    const hidden = taskHideEnabled && showHiddenItems ? "include" : "exclude";
+    // The reveal only reaches the db while the archive feature exists for
+    // that half — feature off, archived rows stay excluded (nothing can
+    // unhide them, so nothing may show them). One flag covers both task
+    // halves; displayItems re-filters per row's section.
+    const hidden =
+      (taskHideEnabled && showHiddenItems) || (dailyPauseEnabled && showPausedDaily)
+        ? "include"
+        : "exclude";
     const [today, daily, backlog, projs] = await Promise.all([
       // Completed Today rows stay in the list — crossed out, like a done
       // daily — until the day-boundary sweep retires them, so only Today
@@ -624,7 +647,7 @@ function DayAppBody() {
     ]);
     setItems({ today, daily, backlog });
     setProjects(projs);
-  }, [showHiddenItems, taskHideEnabled]);
+  }, [showHiddenItems, showPausedDaily, taskHideEnabled, dailyPauseEnabled]);
 
   useEffect(() => {
     refresh().catch((e) => log.error("initial load failed", e));
@@ -747,6 +770,7 @@ function DayAppBody() {
     sset("dayapp-sec-daily", sectionsVisible.daily ? "1" : "0");
     sset("dayapp-sec-backlog", sectionsVisible.backlog ? "1" : "0");
     sset("dayapp-hidden-items", showHiddenItems ? "1" : "0");
+    sset("dayapp-hidden-daily", showPausedDaily ? "1" : "0");
     sset("dayapp-hidden-notes", showHiddenNotes ? "1" : "0");
     sset("dayapp-hidden-goals", showHiddenGoals ? "1" : "0");
     sset("dayapp-hidden-priorities", JSON.stringify(hiddenPriorities));
@@ -764,14 +788,18 @@ function DayAppBody() {
     sset("dayapp-header-buttons", JSON.stringify(headerBtns));
     sset("dayapp-journal-enabled", journalEnabled ? "1" : "0");
     sset("dayapp-quotes-enabled", quotesEnabled ? "1" : "0");
-    sset("dayapp-projects-enabled", projectsEnabled ? "1" : "0");
+    sset("dayapp-task-projects-enabled", taskProjectsEnabled ? "1" : "0");
+    sset("dayapp-note-projects-enabled", noteProjectsEnabled ? "1" : "0");
+    sset("dayapp-goal-projects-enabled", goalProjectsEnabled ? "1" : "0");
     sset("dayapp-task-priorities-enabled", taskPrioritiesEnabled ? "1" : "0");
     sset("dayapp-note-priorities-enabled", notePrioritiesEnabled ? "1" : "0");
     sset("dayapp-agent-enabled", agentEnabled ? "1" : "0");
     sset("dayapp-timer-enabled", timerEnabled ? "1" : "0");
     sset("dayapp-reminders-enabled", remindersEnabled ? "1" : "0");
     sset("dayapp-task-hide-enabled", taskHideEnabled ? "1" : "0");
+    sset("dayapp-daily-pause-enabled", dailyPauseEnabled ? "1" : "0");
     sset("dayapp-note-hide-enabled", noteHideEnabled ? "1" : "0");
+    sset("dayapp-goal-pause-enabled", goalPauseEnabled ? "1" : "0");
     sset("dayapp-task-details-enabled", taskDetailsEnabled ? "1" : "0");
     sset("dayapp-note-download-enabled", noteDownloadEnabled ? "1" : "0");
     sset("dayapp-views", JSON.stringify(views));
@@ -779,8 +807,9 @@ function DayAppBody() {
     // Retired keys: the single-tier "only" filter era, and the rotating
     // quote line the modal replaced — one-time cleanups. (The quote
     // screensaver's key stays lookup-only since its palette toggle retired:
-    // it's read at mount, never rewritten.)
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, noteHideEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
+    // it's read at mount, never rewritten.) The shared projects/hide keys
+    // leave via settings.ts's migrate().
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, journalEnabled, quotesEnabled, taskProjectsEnabled, noteProjectsEnabled, goalProjectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -901,22 +930,34 @@ function DayAppBody() {
   // The effective project scope, as a set of ids: a view overrides the
   // session filter with its (possibly multiple) selection; null = all. A
   // view's EMPTY selection is all projects too (the form's default) — an
-  // empty array passed through would match no row at all.
-  const effProjectFilter: string[] | null = projectsEnabled
-    ? activeView
-      ? (activeView.projectIds.length > 0 ? activeView.projectIds : null)
-      : projectFilter
-        ? [projectFilter]
-        : null
-    : null;
+  // empty array passed through would match no row at all. Per surface: a
+  // switched-off axis doesn't filter its surface (2026-10-13).
+  const projectScope: string[] | null = activeView
+    ? (activeView.projectIds.length > 0 ? activeView.projectIds : null)
+    : projectFilter
+      ? [projectFilter]
+      : null;
+  const effTaskProjectFilter = taskProjectsEnabled ? projectScope : null;
+  const effNoteProjectFilter = noteProjectsEnabled ? projectScope : null;
+  // A fetched hidden row renders only while its own half's reveal is on —
+  // the fetch flag covers both task halves, so the other half's rows would
+  // otherwise leak into the reveal (the per-row gate mirrors the fetch gate).
+  const hiddenAllowed = (i: Item) =>
+    i.section === "daily"
+      ? dailyPauseEnabled && showPausedDaily
+      : taskHideEnabled && showHiddenItems;
+  const strayHidden = (["today", "daily", "backlog"] as const).some((s) =>
+    items[s].some((i) => i.hidden && !hiddenAllowed(i)),
+  );
   const displayItems = useMemo<Record<Section, Item[]>>(() => {
     if (
-      effHiddenPriorities.length === 0 && effProjectFilter === null &&
-      agentTasksVisible && effAgentFilter === null
+      effHiddenPriorities.length === 0 && effTaskProjectFilter === null &&
+      agentTasksVisible && effAgentFilter === null && !strayHidden
     ) return items;
     const matches = (i: Item) =>
+      (!i.hidden || hiddenAllowed(i)) &&
       (i.priority === null || !effHiddenPriorities.includes(i.priority)) &&
-      (effProjectFilter === null || (i.projectId !== null && effProjectFilter.includes(i.projectId))) &&
+      (effTaskProjectFilter === null || (i.projectId !== null && effTaskProjectFilter.includes(i.projectId))) &&
       (agentTasksVisible || !i.assignedToAgent) &&
       (effAgentFilter === null || (effAgentFilter === "agent") === i.assignedToAgent);
     const flat = (list: Item[]) => [...list].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -927,7 +968,7 @@ function DayAppBody() {
       // priority-sorted list with no tier signal would look arbitrary.
       backlog: taskPrioritiesEnabled ? items.backlog.filter(matches) : flat(items.backlog.filter(matches)),
     };
-  }, [items, effHiddenPriorities, effProjectFilter, agentTasksVisible, effAgentFilter, taskPrioritiesEnabled]);
+  }, [items, effHiddenPriorities, effTaskProjectFilter, agentTasksVisible, effAgentFilter, taskPrioritiesEnabled, strayHidden]);
 
   // displayItems narrowed to the visible sections — a toggled-off section's
   // rows aren't rendered, searchable, keyboard-navigable, or totaled (they
@@ -1133,8 +1174,16 @@ function DayAppBody() {
     ...(tasksEnabled && taskHideEnabled ? [{
       id: "toggle-hidden-items",
       label: showHiddenItems ? "Hide Hidden Tasks" : "Show Hidden Tasks",
-      hint: "inline, dimmed",
+      hint: "today + backlog, inline dimmed",
       run: () => { setView("list"); setShowHiddenItems((v) => !v); },
+    }] : []),
+    // The Daily section's own reveal — a paused habit is a different kind of
+    // set-down than an archived row, with its own switch and door.
+    ...(tasksEnabled && sectionsEnabled.daily && dailyPauseEnabled ? [{
+      id: "toggle-paused-daily",
+      label: showPausedDaily ? "Hide Paused Daily Tasks" : "Show Paused Daily Tasks",
+      hint: "inline, dimmed",
+      run: () => { setView("list"); setShowPausedDaily((v) => !v); },
     }] : []),
     ...(notesEnabled && noteHideEnabled ? [{
       id: "toggle-hidden-notes",
@@ -1142,10 +1191,7 @@ function DayAppBody() {
       hint: "inline, dimmed",
       run: () => { setView("list"); setShowHiddenNotes((v) => !v); },
     }] : []),
-    // Goal pause rides the Goals feature (no separate switch — the pause
-    // button is always there while goals exist), so this entry gates on that
-    // feature alone.
-    ...(goalsEnabled ? [{
+    ...(goalsEnabled && goalPauseEnabled ? [{
       id: "toggle-hidden-goals",
       label: showHiddenGoals ? "Hide Paused Goals" : "Show Paused Goals",
       hint: "inline, dimmed",
@@ -1346,7 +1392,7 @@ function DayAppBody() {
           },
         ]
       : []),
-  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects, themeId, customThemes, taskHideEnabled, noteHideEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled]);
+  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects, themeId, customThemes, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1413,7 +1459,7 @@ function DayAppBody() {
   // create field — just triggered by typing the tag at the end of the text.
   // Returns the new project id, or null when there's nothing to create.
   const materializeTagProject = async (name?: string): Promise<string | null> => {
-    if (!name || !projectsEnabled) return null;
+    if (!name || !taskProjectsEnabled) return null;
     return (await handleCreateProject(name)).id;
   };
 
@@ -1455,7 +1501,7 @@ function DayAppBody() {
     // go INTO the create call: the `created` action snapshots the row's axes
     // at birth, so they must be on it before the log fires. Only `@` stays a
     // post-create set (actions carry no agent snapshot).
-    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects, { projects: projectsEnabled, priorities: taskPrioritiesEnabled, agent: agentEnabled });
+    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects, { projects: taskProjectsEnabled, priorities: taskPrioritiesEnabled, agent: agentEnabled });
     const assignId = projectId ?? (await materializeTagProject(createProjectName));
     // !0 ("clear") is a no-op at capture — a fresh item has no priority yet.
     // Same for @0: fresh rows start unassigned.
@@ -1554,7 +1600,7 @@ function DayAppBody() {
   };
 
   const handleCommitEdit = async (id: string, raw: string) => {
-    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects, { projects: projectsEnabled, priorities: taskPrioritiesEnabled, agent: agentEnabled });
+    const { text, projectId, createProjectName, priority, agent } = parseItemTags(raw, projects, { projects: taskProjectsEnabled, priorities: taskPrioritiesEnabled, agent: agentEnabled });
     setEditingId(null);
     if (!text) return;
     // Apply the stripped text, and — only if a token resolved or created a
@@ -1788,12 +1834,18 @@ function DayAppBody() {
       setQuotesEnabled((v) => !v);
       setQuoteOpen(false);
       if (quotesEnabled && view === "quotes") setView("list");
-    } else if (key === "projects") {
-      // Off also clears the session filter — a narrowed list to a ghost axis
-      // would strand the user (the same rule the project delete follows).
-      setProjectsEnabled((v) => !v);
-      setProjectFilter(null);
-    } else if (key === "taskPriorities") setTaskPrioritiesEnabled((v) => !v);
+    } else if (key === "taskProjects") {
+      // Off also clears the session filter once no projects axis is left —
+      // a narrowed list to a ghost axis would strand the user (the same rule
+      // the project delete follows). The pre-toggle value tells which way
+      // this flip goes.
+      setTaskProjectsEnabled((v) => !v);
+      if (taskProjectsEnabled && !noteProjectsEnabled) setProjectFilter(null);
+    } else if (key === "noteProjects") {
+      setNoteProjectsEnabled((v) => !v);
+      if (noteProjectsEnabled && !taskProjectsEnabled) setProjectFilter(null);
+    } else if (key === "goalProjects") setGoalProjectsEnabled((v) => !v);
+    else if (key === "taskPriorities") setTaskPrioritiesEnabled((v) => !v);
     else if (key === "notePriorities") setNotePrioritiesEnabled((v) => !v);
     else if (key === "agent") setAgentEnabled((v) => !v);
     else if (key === "timer") {
@@ -1810,9 +1862,15 @@ function DayAppBody() {
     else if (key === "taskHide") {
       setTaskHideEnabled((v) => !v);
       setShowHiddenItems(false);
+    } else if (key === "dailyPause") {
+      setDailyPauseEnabled((v) => !v);
+      setShowPausedDaily(false);
     } else if (key === "noteHide") {
       setNoteHideEnabled((v) => !v);
       setShowHiddenNotes(false);
+    } else if (key === "goalPause") {
+      setGoalPauseEnabled((v) => !v);
+      setShowHiddenGoals(false);
     } else if (key === "taskDetails") {
       // Details off while a body is open: close it — the feature can't leave
       // an invisible surface editing.
@@ -1822,7 +1880,7 @@ function DayAppBody() {
       });
     } else if (key === "noteDownload") setNoteDownloadEnabled((v) => !v);
     else setGoalsEnabled((v) => !v);
-  }, [journalEnabled, quotesEnabled, view, detailsOpenId]);
+  }, [journalEnabled, quotesEnabled, view, detailsOpenId, taskProjectsEnabled, noteProjectsEnabled]);
   const setCardStyle = useCallback((surface: "notes" | "tasks", card: boolean) => {
     if (surface === "notes") setNotesCard(card);
     else setTasksCard(card);
@@ -2204,14 +2262,18 @@ function DayAppBody() {
   // ---- Render ----------------------------------------------------------
 
   const features: Features = {
-    projects: projectsEnabled,
+    taskProjects: taskProjectsEnabled,
+    noteProjects: noteProjectsEnabled,
+    goalProjects: goalProjectsEnabled,
     taskPriorities: taskPrioritiesEnabled,
     notePriorities: notePrioritiesEnabled,
     agent: agentEnabled,
     timer: timerEnabled,
     reminders: remindersEnabled,
     taskHide: taskHideEnabled,
+    dailyPause: dailyPauseEnabled,
     noteHide: noteHideEnabled,
+    goalPause: goalPauseEnabled,
     taskDetails: taskDetailsEnabled,
     noteDownload: noteDownloadEnabled,
     tasks: tasksEnabled && tasksVisible,
@@ -2224,12 +2286,15 @@ function DayAppBody() {
     quotes: quotesEnabled,
   };
 
-  // The header ◐'s state, over only the hide axes that exist: goals' pause
-  // rides the Goals feature, tasks/notes have their own switches.
+  // The header ◐'s state, over only the archive axes that exist — each has
+  // its own Settings switch now (goals' pause rides Goals too, via its own
+  // Goal pause row).
+  const goalArchive = goalsEnabled && goalPauseEnabled;
   const hiddenShown =
     (taskHideEnabled && showHiddenItems) ||
+    (dailyPauseEnabled && showPausedDaily) ||
     (noteHideEnabled && showHiddenNotes) ||
-    (goalsEnabled && showHiddenGoals);
+    (goalArchive && showHiddenGoals);
 
   return (
     <FeaturesContext.Provider value={features}>
@@ -2276,19 +2341,21 @@ function DayAppBody() {
               ><IconX /></button>
             </div>
           )}
-          {/* ◐ toggles the hidden surfaces that exist (tasks/notes hide have
-              their Settings switches; goals' pause rides the Goals feature —
-              a switched-off axis never flips): all enabled surfaces together.
-              Settings → Header picks whether the button mounts at all. */}
-          {headerBtns.hidden && (taskHideEnabled || noteHideEnabled || goalsEnabled) && (
+          {/* ◐ toggles the hidden surfaces that exist (each archive axis has
+              its Settings switch — a switched-off axis never flips): all
+              enabled surfaces together. Settings → Header picks whether the
+              button mounts at all. */}
+          {headerBtns.hidden &&
+            (taskHideEnabled || dailyPauseEnabled || noteHideEnabled || goalArchive) && (
             <button
               className={`icon-btn ${hiddenShown ? "active" : ""}`}
               onClick={() => {
                 const next = !hiddenShown;
                 trace("toggle.hidden", { show: next });
                 if (taskHideEnabled) setShowHiddenItems(next);
+                if (dailyPauseEnabled) setShowPausedDaily(next);
                 if (noteHideEnabled) setShowHiddenNotes(next);
-                if (goalsEnabled) setShowHiddenGoals(next);
+                if (goalArchive) setShowHiddenGoals(next);
               }}
               title={hiddenShown ? "Hide hidden entries" : "Show hidden entries inline"}
               aria-label="Toggle hidden entries"
@@ -2418,7 +2485,7 @@ function DayAppBody() {
                 lens is stricter than the default working view, and exiting
                 restores whatever the toggle was. */}
             {goalsEnabled && goalsVisible && (!activeView || activeView.goals) && (
-              <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} reloadEpoch={dataEpoch} hiddenFilter={showHiddenGoals ? "include" : "exclude"} />
+              <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} reloadEpoch={dataEpoch} hiddenFilter={goalPauseEnabled && showHiddenGoals ? "include" : "exclude"} />
             )}
             {/* Notes — the lowest-friction capture surface, right under the
                 goals. Lives above the DnD area so typing/pasting isn't a drag
@@ -2436,17 +2503,17 @@ function DayAppBody() {
                 focusedId={focusNoteId}
                 reloadEpoch={dataEpoch}
                 projects={projects}
-                projectFilter={effProjectFilter}
+                projectFilter={effNoteProjectFilter}
                 hiddenPriorities={effHiddenNotePriorities}
                 onCreateProject={handleCreateProject}
                 onEntryRouted={handleEntryRouted}
               />
             )}
-            {(effHiddenPriorities.length > 0 || effProjectFilter !== null || effAgentFilter !== null) && tasksEnabled && tasksVisible && allVisible.length === 0 && (
+            {(effHiddenPriorities.length > 0 || effTaskProjectFilter !== null || effAgentFilter !== null) && tasksEnabled && tasksVisible && allVisible.length === 0 && (
               <div className="empty">
-                {effProjectFilter
-                  ? `No tasks in ${effProjectFilter.length === 1
-                      ? projects.find((p) => p.id === effProjectFilter[0])?.name ?? "the selected project"
+                {effTaskProjectFilter
+                  ? `No tasks in ${effTaskProjectFilter.length === 1
+                      ? projects.find((p) => p.id === effTaskProjectFilter[0])?.name ?? "the selected project"
                       : "the selected projects"}.`
                   : effAgentFilter === "agent"
                     ? "No agent tasks."
@@ -2513,14 +2580,18 @@ function DayAppBody() {
               goals: goalsEnabled,
               journal: journalEnabled,
               quotes: quotesEnabled,
-              projects: projectsEnabled,
+              taskProjects: taskProjectsEnabled,
+              noteProjects: noteProjectsEnabled,
+              goalProjects: goalProjectsEnabled,
               taskPriorities: taskPrioritiesEnabled,
               notePriorities: notePrioritiesEnabled,
               agent: agentEnabled,
               timer: timerEnabled,
               reminders: remindersEnabled,
               taskHide: taskHideEnabled,
+              dailyPause: dailyPauseEnabled,
               noteHide: noteHideEnabled,
+              goalPause: goalPauseEnabled,
               taskDetails: taskDetailsEnabled,
               noteDownload: noteDownloadEnabled,
             }}
@@ -2560,7 +2631,7 @@ function DayAppBody() {
       <SearchMenu
         open={searchOpen}
         hits={searchHits}
-        projects={projectsEnabled ? projects : []}
+        projects={taskProjectsEnabled || noteProjectsEnabled ? projects : []}
         activeProjectId={projectFilter}
         activeAgentFilter={agentFilter}
         onClose={() => setSearchOpen(false)}

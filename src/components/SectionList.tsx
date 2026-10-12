@@ -176,7 +176,7 @@ export default function SectionList({
             ...(routes.today ? (["section-today"] as const) : []),
             ...(routes.daily ? (["section-daily"] as const) : []),
             ...(routes.backlog ? (["section-backlog"] as const) : []),
-            ...(features.projects ? (["project"] as const) : []),
+            ...(features.taskProjects ? (["project"] as const) : []),
             ...(features.taskPriorities ? (["priority"] as const) : []),
             ...(features.agent ? (["agent"] as const) : []),
           ]}

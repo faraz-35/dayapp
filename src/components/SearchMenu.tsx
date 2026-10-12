@@ -94,7 +94,10 @@ export default function SearchMenu({
   // The axis pickers are existence-gated (Settings → Features): with an axis
   // off, its sigil is just text.
   const features = useFeatures();
-  const projectMode = features.projects && query.trimStart().startsWith("#");
+  // Projects span two surfaces (tasks + notes) — the picker exists while
+  // either axis is on.
+  const projAxis = features.taskProjects || features.noteProjects;
+  const projectMode = projAxis && query.trimStart().startsWith("#");
   const agentMode = features.agent && !projectMode && query.trimStart().startsWith("@");
 
   // Filter hits by the query (case-insensitive substring on the item text).
@@ -244,9 +247,9 @@ export default function SearchMenu({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKey}
-          placeholder={features.projects && features.agent
+          placeholder={projAxis && features.agent
               ? "Search items… (# project filter, @ agent/my)"
-              : features.projects
+              : projAxis
                 ? "Search items… (# project filter)"
                 : features.agent
                   ? "Search items… (@ agent/my)"

@@ -790,7 +790,7 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
           )}
         </span>
         <span className="anf">
-          {features.projects && (
+          {features.taskProjects && (
             <span className="anf-wrap">
               <button
                 className={`pill anf-dd${selProjects.size ? " active" : ""}`}
@@ -982,7 +982,7 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
                   already answers it, and a card scoped to the selection would
                   just restate the filter (100% X) while disagreeing with the
                   Done stat. */}
-              {features.projects && !filter.projects && dash.projects.length > 0 && (
+              {features.taskProjects && !filter.projects && dash.projects.length > 0 && (
                 <section className="an-card an-projects">
                   <div className="an-card-title">Projects</div>
                   <div className="an-proj-body">

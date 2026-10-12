@@ -33,31 +33,36 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
 
   if (!open) return null;
 
-  const p = features.projects;
+  const p = features.taskProjects;
   const tp = features.taskPriorities;
+  const gp = features.goalProjects;
   const np = features.notePriorities;
+  const projAxis = features.taskProjects || features.noteProjects;
   const ag = features.agent;
   const tm = features.timer;
   const rm = features.reminders;
   const th = features.taskHide;
+  const dp = features.dailyPause;
   const nh = features.noteHide;
 
   // The task-row digit range: however many buttons render, left to right.
+  // Daily rows carry the pause button where Today/Backlog carry hide — one
+  // archive slot either way, so the range is the same.
   const taskDigits = 1
     + (tm ? 1 : 0)
     + (p ? 1 : 0)
     + (rm ? 1 : 0)
-    + (th ? 1 : 0)
+    + (th || dp ? 1 : 0)
     + 1 /* details */
     + 1; /* delete */
   // The note card's slots: collapse, then download / hide per feature, delete.
   const noteDigits = 1 + (features.noteDownload ? 1 : 0) + (nh ? 1 : 0) + 1;
-  const goalDigits = 2 + (p ? 1 : 0) + 1; /* pause — rides Goals, no switch */
+  const goalDigits = 1 + (gp ? 1 : 0) + (features.goalPause ? 1 : 0) + 1;
   const taskVerbList = [
     ...(tm ? ["▶ timer (Backlog: ↑ send to Today)"] : []),
     ...(p ? ["# project"] : []),
     ...(rm ? ["◷ remind"] : []),
-    ...(th ? ["◐ hide"] : []),
+    ...(th || dp ? ["◐ hide (pause on Daily)"] : []),
     "⋯ details",
     "× delete",
   ].join(" · ");
@@ -67,7 +72,12 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
     ...(nh ? ["◐ hide"] : []),
     "× delete",
   ].join(" · ");
-  const goalVerbList = ["✓ achieve", ...(p ? ["# project"] : []), "◐ pause", "× delete"].join(" · ");
+  const goalVerbList = [
+    "✓ achieve",
+    ...(gp ? ["# project"] : []),
+    ...(features.goalPause ? ["◐ pause"] : []),
+    "× delete",
+  ].join(" · ");
   const popoverList = [
     ...(p ? ["# project"] : []),
     ...(rm ? ["◷ remind"] : []),
@@ -99,7 +109,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
         <Row keys={[`1–${taskDigits}`]}>task: {taskVerbList}</Row>
         <Row keys={[`1–${noteDigits}`]}>note: {noteVerbList}</Row>
         {features.goals && <Row keys={[`1–${goalDigits}`]}>goal: {goalVerbList}</Row>}
-        {(p || rm || th) && (
+        {(p || rm || th || dp) && (
           <Row keys={["↑", "↓", "Enter"]}>inside an open popover ({popoverList}): move · pick — a pick clears focus, Esc returns to the row{p ? " · typing in # creates" : ""}</Row>
         )}
         <Row keys={["e"]}>edit it</Row>
@@ -111,7 +121,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
 
         <div className="help-section">Everywhere</div>
         <Row keys={["⌘P", "⌘F"]}>
-          command palette · search{p || ag ? ` (${[...(p ? ["# project filter"] : []), ...(ag ? ["@ agent/my"] : [])].join(", ")})` : ""}
+          command palette · search{projAxis || ag ? ` (${[...(projAxis ? ["# project filter"] : []), ...(ag ? ["@ agent/my"] : [])].join(", ")})` : ""}
           {features.notes ? " — ⌘F while editing a note: find in that note" : ""}
         </Row>
         <Row keys={["⌘+", "⌘-", "⌘0"]}>zoom in / out / reset</Row>
