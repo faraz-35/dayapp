@@ -77,7 +77,7 @@ pub fn run(args: Vec<String>) -> i32 {
         "--analytics" => analytics(&db, &rest),
         "--notes" => notes(&db, &rest),
         "--projects" => projects(&db),
-        "--goals" => goals(&db),
+        "--goals" => goals(&db, &rest),
         "--backup" => backup_cmd(&db),
         "--deploy" => sync::deploy(&db, true).map(|o| println!("{}", o.describe())),
         "--sync-pull-peek" => peek(&db),
@@ -114,7 +114,7 @@ usage: dayapp [--demo] <command> [args]
                                  (today | week | month | all | YYYY-MM-DD)
   --notes [query] [--hidden]     notes, optionally filtered by body substring
   --projects                     projects as #tags
-  --goals                        goals grouped by horizon
+  --goals [--hidden]             goals grouped by horizon (--hidden adds ⏸ paused)
   --backup                       snapshot the db into backups/ (prints the path)
   --add \"text\" [--to section]   create (today|daily|backlog; default backlog)
   --complete <query>             complete (stops its timer first)
@@ -615,10 +615,13 @@ fn backup_cmd(db: &Db) -> anyhow::Result<()> {
 }
 
 /// Print goals grouped by horizon, the way the GUI shows them (timeless →
-/// long → short, achieved last). Read-only — this is the agent-context view of
-/// the identity layer.
-fn goals(db: &Db) -> anyhow::Result<()> {
-    let all = db.list_goals()?;
+/// long → short, achieved last). `--hidden` adds ⏸ paused rows — the ⌘P
+/// reveal (paused rows are excluded by default, like hidden tasks in
+/// --list). Read-only — this is the agent-context view of the identity layer.
+fn goals(db: &Db, rest: &[String]) -> anyhow::Result<()> {
+    let (_, hidden) = split_query_flag(rest)?;
+    let filter = if hidden { HiddenFilter::Include } else { HiddenFilter::Exclude };
+    let all = db.list_goals(filter)?;
     if all.is_empty() {
         println!("no goals");
         return Ok(());
@@ -633,7 +636,11 @@ fn goals(db: &Db) -> anyhow::Result<()> {
         if group.is_empty() { continue; }
         println!("{horizon}:");
         for g in group {
-            println!("  {}", g.text);
+            if g.hidden {
+                println!("  ⏸ {}", g.text);
+            } else {
+                println!("  {}", g.text);
+            }
         }
     }
     let done: Vec<&Goal> = all.iter().filter(|g| g.status == "achieved").collect();

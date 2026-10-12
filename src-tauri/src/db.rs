@@ -135,7 +135,8 @@ impl Db {
         if purged > 0 { log::info!("sweep: {purged} completed today item(s) cleared"); }
         let ih = self.unhide_expired_items()?;
         let nh = self.unhide_expired_notes()?;
-        if ih + nh > 0 { log::info!("unhide sweep: {ih} item(s), {nh} note(s) restored"); }
+        let gh = self.unhide_expired_goals()?;
+        if ih + nh + gh > 0 { log::info!("unhide sweep: {ih} item(s), {nh} note(s), {gh} goal(s) restored"); }
         let rp = self.promote_due_reminders()?;
         if rp > 0 { log::info!("reminders: {rp} backlog item(s) promoted to today"); }
         Ok(())
@@ -218,6 +219,8 @@ impl Db {
         ensure_column(conn, "notes", "hidden_until", "TEXT")?;
         ensure_column(conn, "notes", "priority", "INTEGER")?;
         ensure_column(conn, "notes", "project_id", "TEXT")?;
+        ensure_column(conn, "goals", "hidden", "INTEGER NOT NULL DEFAULT 0")?;
+        ensure_column(conn, "goals", "hidden_until", "TEXT")?;
         // The dashboard's snapshot axes (see schema.sql). When the columns
         // land on an existing db, backfill once from then-current state — the
         // best guess available for history written before snapshots existed
@@ -815,9 +818,10 @@ impl Db {
             params![today])?;
 
         // While we're already on the day boundary, clear any expired hides
-        // (hidden_until <= today) for both items and notes — time-limited hides
-        // auto-restore here, no separate job. Each item restore logs `unpaused`
-        // (the pause window's close); notes have no journal and stay unlogged.
+        // (hidden_until <= today) for items, notes, and goals — time-limited
+        // hides auto-restore here, no separate job. Each item/goal restore
+        // logs `unpaused` (the pause window's close); notes have no journal
+        // and stay unlogged.
         {
             let expiring: Vec<(String, String, String)> = {
                 let mut stmt = tx.prepare(
@@ -840,6 +844,25 @@ impl Db {
             "UPDATE notes SET hidden = 0, hidden_until = NULL, updated_at = ?1
              WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?2",
             params![now, today])?;
+        {
+            let expiring: Vec<(String, String, String)> = {
+                let mut stmt = tx.prepare(
+                    "SELECT id, text, horizon FROM goals
+                     WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?1")?;
+                let rows = stmt.query_map(params![today], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+                })?;
+                rows.filter_map(|r| r.ok()).collect()
+            };
+            for (id, text, horizon) in &expiring {
+                tx.execute(
+                    "UPDATE goals SET hidden = 0, hidden_until = NULL, updated_at = ?1 WHERE id = ?2",
+                    params![now, id],
+                )?;
+                crate::goals::log_goal_action(&tx, id, text, "unpaused",
+                                              Some(horizon), Some(horizon), None, None, &now)?;
+            }
+        }
 
         tx.commit()?;
         if purged > 0 {

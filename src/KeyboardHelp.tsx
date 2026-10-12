@@ -52,7 +52,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
     + 1; /* delete */
   // The note card's slots: collapse, then download / hide per feature, delete.
   const noteDigits = 1 + (features.noteDownload ? 1 : 0) + (nh ? 1 : 0) + 1;
-  const goalDigits = 2 + (p ? 1 : 0);
+  const goalDigits = 2 + (p ? 1 : 0) + 1; /* pause — rides Goals, no switch */
   const taskVerbList = [
     ...(tm ? ["▶ timer (Backlog: ↑ send to Today)"] : []),
     ...(p ? ["# project"] : []),
@@ -67,7 +67,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
     ...(nh ? ["◐ hide"] : []),
     "× delete",
   ].join(" · ");
-  const goalVerbList = ["✓ achieve", ...(p ? ["# project"] : []), "× delete"].join(" · ");
+  const goalVerbList = ["✓ achieve", ...(p ? ["# project"] : []), "◐ pause", "× delete"].join(" · ");
   const popoverList = [
     ...(p ? ["# project"] : []),
     ...(rm ? ["◷ remind"] : []),

@@ -412,8 +412,8 @@ async fn set_item_details(
 // the project link is housekeeping (unlogged).
 
 #[tauri::command]
-async fn list_goals(db: State<'_, DbState>) -> Result<Vec<Goal>, String> {
-    with_db(db, move |db| db.list_goals()).await
+async fn list_goals(db: State<'_, DbState>, hidden: HiddenFilter) -> Result<Vec<Goal>, String> {
+    with_db(db, move |db| db.list_goals(hidden)).await
 }
 
 #[tauri::command]
@@ -453,6 +453,20 @@ async fn unachieve_goal(db: State<'_, DbState>, id: String) -> Result<(), String
 #[tauri::command]
 async fn delete_goal(db: State<'_, DbState>, id: String) -> Result<(), String> {
     with_db(db, move |db| db.delete_goal(&id)).await
+}
+
+// Pause (hide) for goals — the same soft-archive the items carry, worded
+// "pause" on this surface. Logged: the flag is the display, the
+// paused/unpaused actions are the dated record.
+
+#[tauri::command]
+async fn hide_goal(db: State<'_, DbState>, id: String, duration: String) -> Result<(), String> {
+    with_db(db, move |db| db.pause_goal(&id, &duration)).await
+}
+
+#[tauri::command]
+async fn unhide_goal(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    with_db(db, move |db| db.resume_goal(&id)).await
 }
 
 // ---- Timer commands -----------------------------------------------------
@@ -1082,7 +1096,7 @@ pub fn run() {
             list_projects, create_project, rename_project, delete_project, set_item_project,
             set_reminder, set_item_priority, set_item_agent, set_item_details,
             list_goals, create_goal, edit_goal, set_goal_project,
-            achieve_goal, unachieve_goal, delete_goal,
+            achieve_goal, unachieve_goal, delete_goal, hide_goal, unhide_goal,
             start_timer, stop_timer, discard_timer, get_active_timer,
             settings_get, settings_set, settings_remove,
             time_totals, today_totals, session_time_by_day,

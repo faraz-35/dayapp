@@ -11,7 +11,7 @@
 // and (for the journal) `actions`; deleting a project nulls goals.project_id —
 // see projects.rs.
 
-use crate::db::{now_iso, Db};
+use crate::db::{hidden_until_for, now_iso, today_iso, HiddenFilter, Db};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +32,8 @@ pub struct Goal {
     pub created_at: String,
     pub updated_at: String,
     pub achieved_at: Option<String>,
+    pub hidden: bool,
+    pub hidden_until: Option<String>,
 }
 
 fn goal_from_row(r: &rusqlite::Row) -> rusqlite::Result<Goal> {
@@ -45,6 +47,8 @@ fn goal_from_row(r: &rusqlite::Row) -> rusqlite::Result<Goal> {
         created_at: r.get(6)?,
         updated_at: r.get(7)?,
         achieved_at: r.get(8)?,
+        hidden: r.get::<_, i64>(9)? != 0,
+        hidden_until: r.get(10)?,
     })
 }
 
@@ -52,9 +56,10 @@ fn goal_from_row(r: &rusqlite::Row) -> rusqlite::Result<Goal> {
 /// text is snapshotted at write time, the horizon rides the section columns,
 /// and active/achieved rides the status columns. The project NAME is
 /// snapshotted too (goals carry no priority) — the subquery reads the live
-/// row, so delete_goal logs before its DELETE.
+/// row, so delete_goal logs before its DELETE. `pub` because the day-boundary
+/// sweep in db.rs resumes expired pauses and logs their close through this.
 #[allow(clippy::too_many_arguments)]
-fn log_goal_action(
+pub fn log_goal_action(
     tx: &rusqlite::Transaction,
     goal_id: &str, goal_text: &str, action: &str,
     from_horizon: Option<&str>, to_horizon: Option<&str>,
@@ -74,13 +79,18 @@ impl Db {
 
     /// All goals in manual order. Grouping by horizon (and moving achieved to
     /// the end) is a display concern — the frontend groups, and the CLI sorts
-    /// with `HORIZONS`.
-    pub fn list_goals(&self) -> anyhow::Result<Vec<Goal>> {
+    /// with `HORIZONS`. `hidden` picks the visibility mode: Exclude (default)
+    /// keeps paused rows out, Include is the ⌘P reveal (they render inline,
+    /// dimmed, in their horizon group — the hidden-task render).
+    pub fn list_goals(&self, hidden: HiddenFilter) -> anyhow::Result<Vec<Goal>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, text, horizon, status, project_id, sort_order, created_at, updated_at, achieved_at
-             FROM goals ORDER BY sort_order, created_at",
-        )?;
+        let mut sql = String::from(
+            "SELECT id, text, horizon, status, project_id, sort_order, created_at, updated_at, achieved_at, hidden, hidden_until
+             FROM goals WHERE 1=1",
+        );
+        sql.push_str(hidden.clause());
+        sql.push_str(" ORDER BY sort_order, created_at");
+        let mut stmt = conn.prepare(&sql)?;
         let rows = stmt.query_map([], goal_from_row)?;
         let mut out = Vec::new();
         for r in rows { out.push(r?); }
@@ -117,6 +127,7 @@ impl Db {
             id, text: text.to_string(), horizon: horizon.to_string(), status: "active".into(),
             project_id: project_id.map(str::to_string), sort_order,
             created_at: now.clone(), updated_at: now, achieved_at: None,
+            hidden: false, hidden_until: None,
         })
     }
 
@@ -220,6 +231,78 @@ impl Db {
         tx.execute("DELETE FROM goals WHERE id = ?1", params![id])?;
         Ok(tx.commit()?)
     }
+
+    // ---- Pause (hide) -----------------------------------------------------
+    //
+    // Soft-archive, the same mechanism items and notes carry: the row stays
+    // in `goals` so it can be resumed, but `list_goals`' default filter
+    // excludes it. `hidden_until` is NULL for "forever", else an ISO date at
+    // which `unhide_expired_goals` (the day-boundary sweep) resumes it. The
+    // flag is the display mechanism; `paused`/`unpaused` actions are its
+    // dated record — goal rows log under the same verbs items use, so the
+    // CHECK constraint and the journal's renderer are untouched.
+
+    /// Pause a goal. `duration` is one of: forever | day | week | month.
+    pub fn pause_goal(&self, id: &str, duration: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = now_iso();
+        let hidden_until = hidden_until_for(duration);
+        let tx = conn.unchecked_transaction()?;
+        let (text, horizon): (String, String) = tx.query_row(
+            "SELECT text, horizon FROM goals WHERE id = ?1", params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)))?;
+        tx.execute(
+            "UPDATE goals SET hidden = 1, hidden_until = ?1, updated_at = ?2 WHERE id = ?3",
+            params![hidden_until, now, id],
+        )?;
+        log_goal_action(&tx, id, &text, "paused", Some(&horizon), Some(&horizon), None, None, &now)?;
+        Ok(tx.commit()?)
+    }
+
+    /// Resume a paused goal — clears both the flag and the expiry.
+    pub fn resume_goal(&self, id: &str) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = now_iso();
+        let tx = conn.unchecked_transaction()?;
+        let (text, horizon): (String, String) = tx.query_row(
+            "SELECT text, horizon FROM goals WHERE id = ?1", params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)))?;
+        tx.execute(
+            "UPDATE goals SET hidden = 0, hidden_until = NULL, updated_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        log_goal_action(&tx, id, &text, "unpaused", Some(&horizon), Some(&horizon), None, None, &now)?;
+        Ok(tx.commit()?)
+    }
+
+    /// Clear the paused flag on any goal whose time-limited pause has
+    /// expired. Called by the launch sweep, so pauses auto-resume at the day
+    /// boundary without a cron job. Each resume logs `unpaused` — the pause
+    /// window's close. Idempotent. Returns the number of goals resumed.
+    pub fn unhide_expired_goals(&self) -> anyhow::Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let now = now_iso();
+        let today = today_iso();
+        let tx = conn.unchecked_transaction()?;
+        let expiring: Vec<(String, String, String)> = {
+            let mut stmt = tx.prepare(
+                "SELECT id, text, horizon FROM goals
+                 WHERE hidden = 1 AND hidden_until IS NOT NULL AND hidden_until <= ?1")?;
+            let rows = stmt.query_map(params![today], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+            })?;
+            rows.filter_map(|r| r.ok()).collect()
+        };
+        for (id, text, horizon) in &expiring {
+            tx.execute(
+                "UPDATE goals SET hidden = 0, hidden_until = NULL, updated_at = ?1 WHERE id = ?2",
+                params![now, id],
+            )?;
+            log_goal_action(&tx, id, text, "unpaused", Some(horizon), Some(horizon), None, None, &now)?;
+        }
+        tx.commit()?;
+        Ok(expiring.len())
+    }
 }
 
 #[cfg(test)]
@@ -241,7 +324,7 @@ mod tests {
         db.unachieve_goal(&g.id).unwrap();
         db.edit_goal(&g.id, "get a great job", Some("long")).unwrap();
         db.delete_goal(&g.id).unwrap();
-        assert!(db.list_goals().unwrap().is_empty());
+        assert!(db.list_goals(HiddenFilter::Exclude).unwrap().is_empty());
 
         let log = db.list_actions(None, None, None).unwrap();
         let verbs: Vec<&str> = log.iter().map(|a| a.action.as_str()).collect();
@@ -270,6 +353,30 @@ mod tests {
         let log = db.list_actions(None, None, None).unwrap();
         assert_eq!(log.len(), 1);
         assert_eq!(log[0].action, "goal_created");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Pause/resume rides the shared paused/unpaused verbs (goal_id on the
+    /// log rows), and the default list excludes paused rows while the reveal
+    /// keeps them in place.
+    #[test]
+    fn goal_pause_roundtrip() {
+        let dir = tmp_dir();
+        let db = Db::open(&dir.join("t.db")).unwrap();
+        let g = db.create_goal("learn rust", "short", None).unwrap();
+        db.pause_goal(&g.id, "forever").unwrap();
+        assert!(db.list_goals(HiddenFilter::Exclude).unwrap().is_empty());
+        let shown = db.list_goals(HiddenFilter::Include).unwrap();
+        assert_eq!(shown.len(), 1);
+        assert!(shown[0].hidden);
+        assert!(shown[0].hidden_until.is_none());
+        db.resume_goal(&g.id).unwrap();
+        assert_eq!(db.list_goals(HiddenFilter::Exclude).unwrap().len(), 1);
+        // The log carries the goal-subject pause window under the shared verbs.
+        let log = db.list_actions(None, None, None).unwrap();
+        let verbs: Vec<&str> = log.iter().map(|a| a.action.as_str()).collect();
+        assert_eq!(verbs, ["unpaused", "paused", "goal_created"]);
+        assert!(log.iter().all(|a| a.goal_id.as_deref() == Some(g.id.as_str())));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

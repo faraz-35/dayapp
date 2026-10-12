@@ -30,9 +30,10 @@ export type FeatureKey =
 export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes" | "settings" | "theme";
 
 // `need` lists the features the button reads — the row goes inert only when
-// ALL of them are off (the ◐ button works while either hide axis exists).
+// ALL of them are off (the ◐ button works while any hide axis exists; goal
+// pause rides the Goals feature itself).
 const HEADER_BUTTONS: { key: HeaderBtn; label: string; hint: string; need?: FeatureKey[] }[] = [
-  { key: "hidden", label: "Hidden entries", hint: "the ◐ archive peek", need: ["taskHide", "noteHide"] },
+  { key: "hidden", label: "Hidden entries", hint: "the ◐ archive peek", need: ["taskHide", "noteHide", "goals"] },
   { key: "analytics", label: "Analytics", hint: "the chart icon" },
   { key: "journal", label: "Journal", hint: "the prose icon", need: ["journal"] },
   { key: "quotes", label: "Quotes", hint: "the quote icon", need: ["quotes"] },

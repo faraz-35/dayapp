@@ -419,6 +419,13 @@ function DayAppBody() {
   const [showHiddenNotes, setShowHiddenNotes] = useState(
     () => sget("dayapp-hidden-notes", "0") === "1",
   );
+  // ⌘P "Show/Hide Paused Goals" — the goals' own reveal over the pause axis
+  // (the same soft-archive as tasks/notes, worded "pause" on this surface).
+  // Persisted like the other two; there's no separate feature switch — goal
+  // pause rides the Goals feature itself.
+  const [showHiddenGoals, setShowHiddenGoals] = useState(
+    () => sget("dayapp-hidden-goals", "0") === "1",
+  );
   // ⌘P "Show/Hide Priority N" — three independent per-tier toggles; a tier in
   // this list is hidden from the main list. Unmarked rows are never touched,
   // and toggling one tier leaves the others alone.
@@ -741,6 +748,7 @@ function DayAppBody() {
     sset("dayapp-sec-backlog", sectionsVisible.backlog ? "1" : "0");
     sset("dayapp-hidden-items", showHiddenItems ? "1" : "0");
     sset("dayapp-hidden-notes", showHiddenNotes ? "1" : "0");
+    sset("dayapp-hidden-goals", showHiddenGoals ? "1" : "0");
     sset("dayapp-hidden-priorities", JSON.stringify(hiddenPriorities));
     sset("dayapp-hidden-note-priorities", JSON.stringify(hiddenNotePriorities));
     sset("dayapp-agent-tasks-visible", agentTasksVisible ? "1" : "0");
@@ -772,7 +780,7 @@ function DayAppBody() {
     // quote line the modal replaced — one-time cleanups. (The quote
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.)
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, noteHideEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, journalEnabled, quotesEnabled, projectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, noteHideEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -1134,6 +1142,15 @@ function DayAppBody() {
       hint: "inline, dimmed",
       run: () => { setView("list"); setShowHiddenNotes((v) => !v); },
     }] : []),
+    // Goal pause rides the Goals feature (no separate switch — the pause
+    // button is always there while goals exist), so this entry gates on that
+    // feature alone.
+    ...(goalsEnabled ? [{
+      id: "toggle-hidden-goals",
+      label: showHiddenGoals ? "Hide Paused Goals" : "Show Paused Goals",
+      hint: "inline, dimmed",
+      run: () => { setView("list"); setShowHiddenGoals((v) => !v); },
+    }] : []),
     ...(tasksEnabled && taskPrioritiesEnabled ? ([1, 2, 3] as const).map((n) => ({
       id: `prio-${n}`,
       // Mirrors the row's signal bars: filled count = urgency (P1 = 3).
@@ -1329,7 +1346,7 @@ function DayAppBody() {
           },
         ]
       : []),
-  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects, themeId, customThemes, taskHideEnabled, noteHideEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled]);
+  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects, themeId, customThemes, taskHideEnabled, noteHideEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -2207,10 +2224,12 @@ function DayAppBody() {
     quotes: quotesEnabled,
   };
 
-  // The header ◐'s state, over only the hide axes that exist: both surfaces
-  // when both features are on, the one otherwise.
+  // The header ◐'s state, over only the hide axes that exist: goals' pause
+  // rides the Goals feature, tasks/notes have their own switches.
   const hiddenShown =
-    (taskHideEnabled && showHiddenItems) || (noteHideEnabled && showHiddenNotes);
+    (taskHideEnabled && showHiddenItems) ||
+    (noteHideEnabled && showHiddenNotes) ||
+    (goalsEnabled && showHiddenGoals);
 
   return (
     <FeaturesContext.Provider value={features}>
@@ -2257,11 +2276,11 @@ function DayAppBody() {
               ><IconX /></button>
             </div>
           )}
-          {/* ◐ toggles the hidden surfaces that exist (Settings → Features
-              owns hide per surface — a switched-off axis never flips): both
-              when both are on, the one otherwise. Settings → Header picks
-              whether the button mounts at all. */}
-          {headerBtns.hidden && (taskHideEnabled || noteHideEnabled) && (
+          {/* ◐ toggles the hidden surfaces that exist (tasks/notes hide have
+              their Settings switches; goals' pause rides the Goals feature —
+              a switched-off axis never flips): all enabled surfaces together.
+              Settings → Header picks whether the button mounts at all. */}
+          {headerBtns.hidden && (taskHideEnabled || noteHideEnabled || goalsEnabled) && (
             <button
               className={`icon-btn ${hiddenShown ? "active" : ""}`}
               onClick={() => {
@@ -2269,6 +2288,7 @@ function DayAppBody() {
                 trace("toggle.hidden", { show: next });
                 if (taskHideEnabled) setShowHiddenItems(next);
                 if (noteHideEnabled) setShowHiddenNotes(next);
+                if (goalsEnabled) setShowHiddenGoals(next);
               }}
               title={hiddenShown ? "Hide hidden entries" : "Show hidden entries inline"}
               aria-label="Toggle hidden entries"
@@ -2398,7 +2418,7 @@ function DayAppBody() {
                 lens is stricter than the default working view, and exiting
                 restores whatever the toggle was. */}
             {goalsEnabled && goalsVisible && (!activeView || activeView.goals) && (
-              <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} reloadEpoch={dataEpoch} />
+              <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} reloadEpoch={dataEpoch} hiddenFilter={showHiddenGoals ? "include" : "exclude"} />
             )}
             {/* Notes — the lowest-friction capture surface, right under the
                 goals. Lives above the DnD area so typing/pasting isn't a drag

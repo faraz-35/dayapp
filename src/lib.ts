@@ -161,10 +161,13 @@ export interface Goal {
   createdAt: string;
   updatedAt: string;
   achievedAt: string | null;
+  // Soft-archive ("pause" on this surface) — same mechanism as items/notes.
+  hidden: boolean;
+  hiddenUntil: string | null;
 }
 
 export const goalsApi = {
-  list: () => invoke<Goal[]>("list_goals"),
+  list: (hidden: HiddenFilter = "exclude") => invoke<Goal[]>("list_goals", { hidden }),
   create: (text: string, horizon: GoalHorizon, projectId: string | null) =>
     invoke<Goal>("create_goal", { text, horizon, projectId }),
   edit: (id: string, text: string, horizon: GoalHorizon | null) =>
@@ -174,6 +177,9 @@ export const goalsApi = {
   achieve: (id: string) => invoke<void>("achieve_goal", { id }),
   unachieve: (id: string) => invoke<void>("unachieve_goal", { id }),
   delete: (id: string) => invoke<void>("delete_goal", { id }),
+  pause: (id: string, duration: HideDuration) =>
+    invoke<void>("hide_goal", { id, duration }),
+  resume: (id: string) => invoke<void>("unhide_goal", { id }),
 };
 
 /** The goals capture/edit parser: a leading horizon word (short / long /

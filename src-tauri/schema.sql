@@ -169,7 +169,15 @@ CREATE TABLE IF NOT EXISTS goals (
     sort_order  INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
-    achieved_at TEXT                                        -- NULL unless status='achieved'
+    achieved_at TEXT,                                       -- NULL unless status='achieved'
+    -- Soft-archive ("pause" on this surface), the same mechanism items and
+    -- notes carry: hidden=1 keeps the row but list_goals' default filter
+    -- excludes it. hidden_until is NULL when paused forever, else an ISO
+    -- YYYY-MM-DD at which the day-boundary sweep resumes the goal. The flag
+    -- is the display mechanism; the `paused`/`unpaused` actions are its
+    -- dated record (goal rows log under the same verbs as items).
+    hidden      INTEGER NOT NULL DEFAULT 0,
+    hidden_until TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_goals_order ON goals(sort_order, created_at);
