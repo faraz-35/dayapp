@@ -141,17 +141,3 @@ export function IconSun() {
     </svg>
   );
 }
-
-// The custom-theme mark: a swatch card with three color dots — "a theme",
-// not dark or light in particular. The header pairs it with the position
-// subscript (.theme-idx).
-export function IconThemes() {
-  return (
-    <svg {...base}>
-      <rect x="2.4" y="3.4" width="11.2" height="9.2" rx="2" />
-      <circle cx="5.3" cy="8" r="1" fill="currentColor" stroke="none" />
-      <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
-      <circle cx="10.7" cy="8" r="1" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}

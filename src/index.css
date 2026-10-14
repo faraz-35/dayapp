@@ -131,8 +131,8 @@ button {
 }
 .icon-btn:hover { background: var(--bg-hover); color: var(--text); }
 .icon-btn.active { color: var(--accent); }
-/* The theme cycle's subscript: the position in the ladder, tucked into the
-   button's corner off the droplet's shoulder. */
+/* The theme cycle's subscript: the theme's slot within its mode's ladder,
+   tucked into the button's corner. */
 .theme-cycle { position: relative; }
 .theme-cycle svg { margin-top: -3px; }
 .theme-idx {

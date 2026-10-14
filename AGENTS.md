@@ -849,9 +849,11 @@ keyboard-first.** Every choice below is intentional.
    layer (scrims, shadows, the accent's alpha triplet, `color-scheme`) is
    computed from the eleven shades, never stored. The header's theme button
    (2026-10-12) cycles the whole ladder — Dark → Light → each custom theme in
-   store order, wrapping — and each kind wears its own mark: dark the moon,
-   light the sun, a custom theme the swatch card with a tiny subscript (its
-   position in the ladder); Settings → Appearance stays the direct door.
+   store order, wrapping — and the glyph is the active theme's computed mode
+   (2026-10-15): the background's luminance picks night (moon) or day (sun),
+   subscripted by the theme's slot within its mode's ladder — shown only
+   while that mode holds more than one theme; Settings → Appearance stays
+   the direct door.
 7. **Identity first, then capture.** Goals — the identity layer — at the very top of
    the content; Notes, the lowest-friction capture surface, right below.
    There is always a ready textarea. (The quote moment is a summoned modal, not
@@ -1049,7 +1051,11 @@ every view, Analytics included, where nothing is ever focused). While a row or
 note is focused, `j`/`k` walk the page's rows — notes first (visual order),
 then tasks, crossing the two surfaces freely — and clamp at the ends; they
 never drop focus;
-Esc or a new address is the only way out. The focused thing **shows its hover
+Esc, an outside click, or a new address is the only way out (an outside press
+that lands on another row instead lands that row's focus; with a popover open
+the press belongs to the menu's own walk-back — it closes onto the
+still-focused row, and the next outside press clears). The focused thing
+**shows its hover
 buttons** (focus mirrors hover exactly: same tint, same revealed actions, same
 metadata fades), so the digits' targets are visible on screen. An open popover
 borrows the keyboard from the grammar entirely (`usePopoverKeys`): focus moves

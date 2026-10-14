@@ -26,8 +26,8 @@ import MobileSyncSettings from "./MobileSyncSettings";
 import KeyboardHelp from "./KeyboardHelp";
 import NamePrompt from "./NamePrompt";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, POPOVER_PICK_EVENT, popoverOpen, scrollIntoViewEl } from "./focusNav";
-import { BUILT_IN_THEMES, applyTheme, resolveTheme, type Theme } from "./themes";
-import { IconMoon, IconSun, IconThemes, IconX } from "./components/icons";
+import { BUILT_IN_THEMES, applyTheme, resolveTheme, themeIsLight, themeModeSlot, type Theme } from "./themes";
+import { IconMoon, IconSun, IconX } from "./components/icons";
 import { MIGRATED_KEYS, externallyChanged, initSettings, sget, sset, ssetMany } from "./settings";
 import { FeaturesContext, type Features } from "./features";
 
@@ -1898,6 +1898,12 @@ function DayAppBody() {
     trace("theme.cycle", { from: themeId, to: next.id });
     setThemeId(next.id);
   }, [themeId, customThemes]);
+  // The cycle's glyph: night skins wear the moon, day skins the sun (the mode
+  // read off the background, the scrims' divide), subscripted by the theme's
+  // slot within its mode's ladder — shown only while that mode holds more
+  // than one theme.
+  const activeTheme = resolveTheme(themeId, customThemes);
+  const themeSlot = themeModeSlot(activeTheme, [...BUILT_IN_THEMES, ...customThemes]);
   // Themes (Settings → Appearance). Activating stores the id (the apply
   // effect skins the app); deleting the active theme falls back to Dark.
   const activateTheme = useCallback((id: string) => {
@@ -1978,6 +1984,32 @@ function DayAppBody() {
     document.addEventListener(POPOVER_PICK_EVENT, onPopoverPick);
     return () => document.removeEventListener(POPOVER_PICK_EVENT, onPopoverPick);
   }, [clearFocus]);
+
+  // Outside-click is the mouse's walk from focused to nothing: a press that
+  // lands outside every focusable surface (any row, note, or goal) clears
+  // grammar focus — clicking another row instead lands its own focus. The
+  // focused row's open details body counts as inside (digit 5 opens it; the
+  // row keeps focus while it writes). While a popover is open the press
+  // belongs to the menu's own walk-back — it closes onto the still-focused
+  // row — so this stands down for that press.
+  useEffect(() => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (selectedId === null && focusNoteId === null && focusGoalId === null) return;
+      if (popoverOpen()) return;
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (t.closest("[data-item-id], [data-note-id], [data-goal-id]")) return;
+      if (selectedId !== null) {
+        const row = document.querySelector(`[data-item-id="${selectedId}"]`);
+        const body = row?.nextElementSibling;
+        if (body?.classList.contains("item-details") && body.contains(t)) return;
+      }
+      trace("focus.clear", { via: "outside-click" });
+      clearFocus();
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [selectedId, focusNoteId, focusGoalId, clearFocus]);
 
   const focusItem = useCallback((id: string) => {
     setSelectedId(id);
@@ -2416,28 +2448,25 @@ function DayAppBody() {
               {view === "quotes" ? <CloseIcon /> : <QuotesIcon />}
             </button>
           )}
-          {/* The Settings door (the gear) — same per-button toggle as the
-              other view doors: active reads the close X and returns. */}
-          {/* The theme cycle — one click to the next theme in the ladder. Each
-              kind wears its own mark: dark the moon, light the sun, a custom
-              theme the swatch card with its position subscript. */}
+          {/* The theme cycle — one click to the next theme in the ladder. The
+              glyph is the active theme's mode: night the moon, day the sun,
+              subscripted by the slot within the mode while the mode has more
+              than one theme. */}
           {headerBtns.theme && (
           <button
             className="icon-btn theme-cycle"
             onClick={cycleTheme}
-            title={`Theme: ${resolveTheme(themeId, customThemes).name}`}
+            title={`Theme: ${activeTheme.name}`}
             aria-label="Cycle theme"
           >
-            {themeId === "dark" ? <IconMoon /> : themeId === "light" ? <IconSun /> : (
-              <>
-                <IconThemes />
-                <span className="theme-idx" aria-hidden="true">{
-                  Math.max(0, [...BUILT_IN_THEMES, ...customThemes].findIndex((t) => t.id === themeId)) + 1
-                }</span>
-              </>
+            {themeIsLight(activeTheme) ? <IconSun /> : <IconMoon />}
+            {themeSlot.count > 1 && (
+              <span className="theme-idx" aria-hidden="true">{themeSlot.index}</span>
             )}
           </button>
           )}
+          {/* The Settings door (the gear) — same per-button toggle as the
+              other view doors: active reads the close X and returns. */}
           {headerBtns.settings && (
             <button
               className={`icon-btn ${view === "settings" ? "active" : ""}`}

@@ -99,10 +99,11 @@ export function resolveTheme(id: string, custom: Theme[]): Theme {
 
 export const BUILT_IN_THEMES: Theme[] = [DARK, LIGHT];
 
-// ---- Application ----------------------------------------------------------
+// ---- Mode ------------------------------------------------------------------
 
-// Relative luminance (WCAG). Only used as a light/dark read — the scrims and
-// shadows just need to know which side of the divide they're on.
+// Relative luminance (WCAG). Only used as a light/dark read — the scrims,
+// shadows, and the header's sun/moon glyph just need to know which side of
+// the divide they're on.
 function luminance(hex: string): number {
   const m = hex.replace("#", "");
   const full = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
@@ -111,6 +112,28 @@ function luminance(hex: string): number {
   );
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
+
+// A theme's mode, read off its background — day skins wear the sun, night
+// skins the moon. The same divide the scrims ride below.
+export function themeIsLight(theme: Theme): boolean {
+  return luminance(theme.colors.bg) > 0.5;
+}
+
+// The theme's 1-based slot within its mode's own ladder (night themes
+// together, day themes together, store order) and that mode's headcount —
+// the header subscript shows only while the count is above one.
+export function themeModeSlot(
+  theme: Theme,
+  all: Theme[],
+): { index: number; count: number } {
+  const same = all.filter((t) => themeIsLight(t) === themeIsLight(theme));
+  return {
+    index: same.findIndex((t) => t.id === theme.id) + 1,
+    count: same.length,
+  };
+}
+
+// ---- Application ----------------------------------------------------------
 
 function accentRgb(hex: string): string {
   const m = hex.replace("#", "");
@@ -137,7 +160,7 @@ export function applyTheme(theme: Theme): void {
   root.setProperty("--danger", c.danger);
   // Derived: light themes dim with lighter, softer darks (a 0.65 black scrim
   // over white reads as a void, not a pause).
-  const light = luminance(c.bg) > 0.5;
+  const light = themeIsLight(theme);
   root.setProperty("--scrim", light ? "rgba(20, 20, 26, 0.22)" : "rgba(0, 0, 0, 0.4)");
   root.setProperty("--scrim-strong", light ? "rgba(20, 20, 26, 0.38)" : "rgba(0, 0, 0, 0.65)");
   root.setProperty("--track", light ? "rgba(0, 0, 0, 0.06)" : "rgba(255, 255, 255, 0.05)");
