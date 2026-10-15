@@ -519,6 +519,23 @@ fn settings_remove(app: AppHandle, keys: Vec<String>) -> Result<(), String> {
     settings::remove(&db_path(&app), &keys).map_err(|e| e.to_string())
 }
 
+/// The native title bar — the OS close/minimize/zoom chrome (Settings →
+/// Header's "Window title bar"). The GUI persists `dayapp-window-decorations`
+/// through its settings effect; this applies it to the live window. Launch
+/// applies the stored value in setup, before the window is shown.
+#[tauri::command]
+fn set_window_decorations(app: AppHandle, on: bool) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        let win = app.get_webview_window("main").expect("main window missing");
+        win.set_decorations(on).map_err(|e| e.to_string())?;
+        log::info!("window: title bar {}", if on { "on" } else { "off" });
+    }
+    #[cfg(not(desktop))]
+    let _ = (app, on);
+    Ok(())
+}
+
 #[tauri::command]
 async fn today_totals(
     db: State<'_, DbState>, item_ids: Vec<String>,
@@ -1051,6 +1068,28 @@ pub fn run() {
         )
         .setup(|app| {
             log::info!("DayApp starting (version {})", app.package_info().version);
+            // Window chrome (Settings → Header's "Window title bar"): the
+            // config ships the native title bar; the store key turns it off.
+            // The window is created hidden (visible: false in
+            // tauri.conf.json) and shown here, after decorations are set —
+            // neither state ever flashes at launch.
+            #[cfg(desktop)]
+            {
+                let decorations = settings::read(&db_path(app.handle()))
+                    .ok()
+                    .and_then(|m| m.get("dayapp-window-decorations").cloned())
+                    .map(|v| v != "0")
+                    .unwrap_or(true);
+                let win = app.get_webview_window("main").expect("main window missing");
+                if !decorations {
+                    if let Err(e) = win.set_decorations(false) {
+                        log::warn!("window: title bar off failed: {e}");
+                    }
+                }
+                if let Err(e) = win.show() {
+                    log::warn!("window: show failed: {e}");
+                }
+            }
             let db_path = db_path(app.handle());
             log::debug!("db path: {}", db_path.display());
             let db = Db::open(&db_path)?;
@@ -1118,6 +1157,7 @@ pub fn run() {
             achieve_goal, unachieve_goal, delete_goal, hide_goal, unhide_goal,
             start_timer, stop_timer, discard_timer, get_active_timer,
             settings_get, settings_set, settings_remove,
+            set_window_decorations,
             time_totals, today_totals, session_time_by_day,
             sync_get_config, sync_set_config, sync_deploy,
             sync_pull_captures, sync_mark_ingested, sync_status,

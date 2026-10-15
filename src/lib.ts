@@ -97,6 +97,8 @@ export const api = {
   setOwnerName: (name: string) => invoke<void>("set_owner_name", { name }),
   /** Install the `dayapp` shell command; returns the toast message. */
   cliInstall: () => invoke<string>("cli_install"),
+  /** The native title bar (desktop only). */
+  setWindowDecorations: (on: boolean) => invoke<void>("set_window_decorations", { on }),
 };
 
 export interface Project {

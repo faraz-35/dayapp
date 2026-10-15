@@ -704,7 +704,7 @@ dayapp/
 │   ├── MobileView.tsx              ← Android client: read-only list + capture bar (GitHub fetch, renders when UA is Android)
 │   ├── MobileSyncSettings.tsx      ← ⌘P sync-config modal (repo/branch/token + validate-by-deploy)
 │   ├── AnalyticsView.tsx           ← the analytics page: stats + heatmap + splits + day ledger/day cards over dashboard.rs (no raw log)
-│   ├── SettingsView.tsx            ← the settings page (⌘P → Settings): group cards — switches, segs, theme ladder cards, view cards + builder
+│   ├── SettingsView.tsx            ← the settings page (⌘P → Settings): tab bar over four panes — Features (Tasks/Notes/Goals three across), Appearance, Header, Views
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← the ONE task capture (##t/##d/##b routing) + DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + sortable items + dropzone; Backlog tier dividers)
@@ -730,7 +730,7 @@ dayapp/
     ├── schema.sql                  ← items + actions + meta + notes + projects + goals + sessions + entries
     ├── demo.sql                    ← the demo seed (relative timestamps; embedded via include_str!, never commit the .db)
     ├── Cargo.toml
-    ├── tauri.conf.json             ← window 480x720, identifier, app-only bundle target, updater pubkey/endpoints
+    ├── tauri.conf.json             ← window 480x720 (native title bar default-on, hidden until setup applies the setting), identifier, app-only bundle target, updater pubkey/endpoints
     ├── tauri.release.conf.json     ← release-only override: createUpdaterArtifacts (signed; used by scripts/release.sh)
     ├── tauri.linux.conf.json       ← CI-only override: bundle targets ["appimage"] (passed via --config in linux.yml)
     └── capabilities/default.json
@@ -754,7 +754,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
 | `AnalyticsView.tsx` | the analytics page: range/day-pick state, dashboard + time fetch, stats/heatmap/splits/day-card render | derivation (all in `dashboard.rs`), item state |
-| `SettingsView.tsx` | the settings page: full-width group cards in the analytics card language (2026-10-12, the settings-look v2 mockup) — switches, segmented controls, theme ladder cards (the only bordered cards inside a group), borderless view rows with Active/Enter, the builder's live `shows …` summary; six cards since 2026-10-13 — Tasks / Notes / Goals surface cards (existence master first, sub-features beneath; the screensaver rides Notes), Header, Appearance (fills, themes), Views; dependency-dimmed rows (every sub-row needs its card's master, daily pause needs Daily, the Header rows need their features — the Hidden button needs any archive axis, the screensaver needs Quotes; Journal/Quotes never dim — they outlive Notes) | the toggle/view state (App's — the palette reads it too) |
+| `SettingsView.tsx` | the settings page: a tab bar (the seg's language) picks one of four panes — Features / Appearance / Header / Views (2026-10-16, the settings-look tabs mockup); Features lays the Tasks / Notes / Goals cards three across (`.set-grid3`, stacked below 760px) | the toggle/view state (App's — the palette reads it too) |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---
@@ -1114,9 +1114,16 @@ that re-initializes every settings-backed hook). App-level by position — outsi
 databases, so demo-mode swaps never touch it. First launch after the migration seeded
 the store from localStorage once and removed the old keys.
 
-**Settings (⌘P → Settings):** six cards (2026-10-13 — the four-card Features area
+**Settings (⌘P → Settings):** four tabs under the header — **Features /
+Appearance / Header / Views**, one pane at a time (2026-10-16, the
+settings-look tabs mockup; the bar is sticky in the one scroll and resets to
+Features on reopen). Features lays the three surface cards **three across**
+(stack to one column below 760px; 2026-10-13 — the four-card Features area
 collapsed into three surface cards, each led by its EXISTENCE master with the
-sub-features beneath; a sub-row dims while its master is off). **Tasks** — the master
+sub-features beneath; a sub-row dims while its master is off. 2026-10-16: the
+master stopped being a full-text row — it rides the card title as its own
+switch box, the box replacing the N-of-M count, since the title already says
+the surface's name). **Tasks** — the master
 (capture + all three sections) over `Today`/`Daily`/`Backlog`, `Timer`, `Reminders`,
 `Task projects`, `Task hide`, `Pause daily tasks`, `Task details`, `Task priorities`,
 `Agent delegation`. **Notes** — the master over `Note projects`, `Note priorities`,
@@ -1146,7 +1153,12 @@ which icon buttons mount top-right:
 pages are opt-in chrome) (`dayapp-header-buttons`) — off hides only the
 button; the view
 stays in ⌘P (the two-layers rule). The update icon and timer chip aren't choices —
-they mount on their own conditions. **Views:** custom lenses
+they mount on their own conditions. The card's last row, **Window title bar**, is
+the OS's own chrome — close / minimize / zoom (`dayapp-window-decorations`,
+default on): tauri.conf.json ships the window decorated, hidden (`visible:
+false`), and setup applies the stored value before the first show, so neither
+state flashes; the GUI toggle calls `set_window_decorations` live, a CLI
+key-write lands at next launch. **Views:** custom lenses
 like Focus/Fun Mode — a named combination of priority tiers, the delegation axis
 (agent/mine/all), one project, notes + their tiers, built from pill chips on the page
 (no edit yet — delete + recreate). `Enter/Exit <name> View` rides ⌘P and the page;

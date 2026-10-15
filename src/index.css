@@ -620,6 +620,12 @@ button {
   font-weight: 500;
   letter-spacing: 0.06em;
 }
+/* A surface card's master switch rides the title line — the whole line is the
+   click target, the box is the state. Centered because the switch is taller
+   than the 11px title; hover lights the off track's border (the one tint a
+   hairline title line can carry without becoming a row). */
+.an-card-title.toggable { align-items: center; cursor: pointer; }
+.an-card-title.toggable:hover .set-sw:not(.on) { border-color: var(--text-dim); }
 
 /* The middle band: Activity · Projects · Priority. One card per slot —
    full-width row on the 480px window, three across on a wide one. */
@@ -2538,22 +2544,66 @@ button {
 
 
 /* ---- Settings view ------------------------------------------------------ */
-/* The settings page (⌘P → Settings): group cards in the analytics card
-   language, full width like every view (2026-10-12, the settings-look v2
-   mockup's main column) — real switches and segmented controls instead of
-   ON/OFF text, themes as ladder cards (the eleven shades in editor order),
-   views as cards with an Active/Enter state, and the view builder with a
-   live "shows …" summary. Rows are dependency-aware: a feature that's off
-   sends its dependents inert with a hint saying why (sections need Tasks,
-   the Header's Hidden/Journal/Quotes buttons need their features, the
-   screensaver needs Quotes). Mouse-first like Analytics; the one .scroll
-   container scrolls. */
+/* The settings page (⌘P → Settings): a tab bar under the header (Features /
+   Appearance / Header / Views — 2026-10-16, the settings-look tabs mockup)
+   picks one pane at a time; Features lays Tasks · Notes · Goals three
+   across. Cards stay in the analytics card language — real switches and
+   segmented controls instead of ON/OFF text, themes as ladder cards (the
+   eleven shades in editor order), views as cards with an Active/Enter
+   state, and the view builder with a live "shows …" summary. Rows are
+   dependency-aware: a feature that's off sends its dependents inert with a
+   hint saying why (sections need Tasks, the Header's Hidden/Journal/Quotes
+   buttons need their features, the screensaver needs Quotes). Mouse-first
+   like Analytics; the one .scroll container scrolls. */
 
 .settings {
   padding: 12px 16px 56px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* The tab bar — the seg's language full width. Sticky inside the one
+   .scroll: it pins under the header only while the active pane actually
+   scrolls, cards sliding beneath its opaque background. */
+.settings-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.settings-tabs button {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  transition: color 0.08s ease, background 0.08s ease;
+}
+.settings-tabs button + button { border-left: 1px solid var(--border); }
+.settings-tabs button:hover { color: var(--text); background: var(--bg-hover); }
+.settings-tabs button.on { color: var(--accent); background: rgba(var(--accent-rgb), 0.08); }
+
+/* The Features pane: Tasks · Notes · Goals side by side (the settings-look C
+   grid, natural card heights); one column below 760px. minmax(0, 1fr) is
+   load-bearing: plain 1fr tracks carry an auto minimum, and the rows' nowrap
+   hints then push the third card past the window edge instead of ellipsizing
+   — min-width: 0 on the cards is the same cut at the item level. */
+.set-grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.set-grid3 > .an-card { min-width: 0; }
+@media (max-width: 759.9px) {
+  .set-grid3 { grid-template-columns: 1fr; }
 }
 .set-count {
   font-weight: 500;

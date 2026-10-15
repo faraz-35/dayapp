@@ -1,11 +1,11 @@
-// SettingsView — the settings page (⌘P → Settings). One console column over
-// flat hairline cards (2026-10-12, the settings-look v2 mockup; six cards
-// since 2026-10-13): Tasks / Notes / Goals surface cards, each led by its
-// existence master with the sub-features beneath (the Notes card also carries
-// the quote screensaver's idle wait — the Quotes feature's knob); Header
-// (which icon buttons mount); Appearance (the two fills, themes as ladder
-// cards); Views as cards with an Active/Enter state and the builder with a
-// live "shows …" summary.
+// SettingsView — the settings page (⌘P → Settings). A tab bar under the
+// header picks one of four panes (2026-10-16, the settings-look tabs
+// mockup): Features — the Tasks / Notes / Goals surface cards side by side,
+// each carrying its existence master as the card title's own switch with the
+// sub-features beneath (the Notes card also carries the quote screensaver's
+// idle wait — the Quotes feature's knob); Appearance (the two fills, themes
+// as ladder cards); Header (which icon buttons mount); Views (cards with an
+// Active/Enter state and the builder with a live "shows …" summary).
 //
 // Rows are dependency-aware: a feature that's off sends its dependents inert
 // with a hint saying why — every sub-row needs its card's master (daily pause
@@ -124,15 +124,26 @@ export const viewSummary = (v: CustomView, projects: Project[]): string => {
   return parts.join(" · ");
 };
 
-// The feature area is three surface cards, each led by its existence master
-// with the sub-features beneath — a sub-row dims while its master is off.
-// Journal/Quotes ride the Notes card (the ##j/##q capture bus) but never dim:
-// their pages capture on their own, so they outlive Notes being off.
+// The feature area is three surface cards, each carrying its existence master
+// on the card title itself — the title-line switch, no separate master row;
+// a sub-row dims while its master is off. Journal/Quotes ride the Notes card
+// (the ##j/##q capture bus) but never dim: their pages capture on their own,
+// so they outlive Notes being off.
 const FEATURE_GROUPS = [
   { id: "tasks", title: "Tasks" },
   { id: "notes", title: "Notes" },
   { id: "goals", title: "Goals" },
 ] as const;
+
+// The panes, in tab order — Features holds the three surface cards, the
+// rest are single cards.
+const TABS = [
+  { id: "features", label: "Features" },
+  { id: "appearance", label: "Appearance" },
+  { id: "header", label: "Header" },
+  { id: "views", label: "Views" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
 
 const FEATURES: { key: FeatureKey; label: string; hint: string; group: (typeof FEATURE_GROUPS)[number]["id"] }[] = [
   { key: "tasks", label: "Tasks", hint: "the whole surface — capture + all three sections", group: "tasks" },
@@ -260,17 +271,28 @@ function Seg({ value, options, onPick }: {
   );
 }
 
-/** Group: a card — the analytics card language — under its uppercase title. */
-function Group({ title, count, children }: {
+/** Group: a card — the analytics card language — under its uppercase title.
+ *  A surface card passes `master`: its existence switch rides the title line
+ *  itself — the whole line is the click target, the box is the state — and
+ *  no separate master row renders beneath. */
+function Group({ title, count, master, children }: {
   title: string;
   count?: string;
+  master?: { on: boolean; hint: string; onToggle: () => void };
   children: React.ReactNode;
 }) {
   return (
     <section className="an-card">
-      <div className="an-card-title">
+      <div
+        className={`an-card-title${master ? " toggable" : ""}`}
+        role={master ? "switch" : undefined}
+        aria-checked={master?.on}
+        title={master?.hint}
+        onClick={master?.onToggle}
+      >
         {title}
         {count && <span className="set-count">{count}</span>}
+        {master && <span className={`set-sw${master.on ? " on" : ""}`} />}
       </div>
       {children}
     </section>
@@ -281,6 +303,7 @@ export default function SettingsView({
   features, onToggleFeature, projects, views, activeViewId,
   onToggleViewActive, onCreateView, onUpdateView, onDeleteView,
   notesCard, tasksCard, onSetCard, screensaverMins, onSetScreensaverMins, headerBtns, onToggleHeaderBtn,
+  windowDecorations, onToggleWindowDecorations,
   themeId, customThemes, onActivateTheme, onCreateTheme, onDeleteTheme,
 }: {
   features: Record<FeatureKey, boolean>;
@@ -299,6 +322,8 @@ export default function SettingsView({
   onSetScreensaverMins: (mins: number) => void;
   headerBtns: Record<HeaderBtn, boolean>;
   onToggleHeaderBtn: (btn: HeaderBtn) => void;
+  windowDecorations: boolean;
+  onToggleWindowDecorations: (on: boolean) => void;
   themeId: string;
   customThemes: Theme[];
   onActivateTheme: (id: string) => void;
@@ -308,6 +333,9 @@ export default function SettingsView({
   // Two independent create-forms — one state for both made "+ New Theme"
   // open the Views form too (2026-10-05). The theme form's gate is its draft
   // (null = closed), so only the Views form needs a boolean.
+  // Features on every open — the page remounts per view switch, like
+  // Analytics.
+  const [tab, setTab] = useState<Tab>("features");
   const [creatingView, setCreatingView] = useState(false);
   /** The view being edited (pencil on its card) — the form saves back into it. */
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -411,17 +439,27 @@ export default function SettingsView({
     projects,
   );
 
-  return (
-    <div className="settings">
-      {/* ---- The Features area: surfaces first, then each surface's
-              actions. The three section toggles go inert while Tasks is off. ---- */}
+  // ---- The panes, in tab order ----------------------------------------------
+
+  // Features: the three surface cards side by side (the grid stacks below
+  // 760px). The three section toggles go inert while Tasks is off.
+  const featuresPane = (
+    <div className="set-grid3">
       {FEATURE_GROUPS.map((g) => {
-        const rows = FEATURES.filter((f) => f.group === g.id);
+        // The master (key === group id) rides the title line; the rows beneath
+        // are the sub-features only. The master stays in FEATURES as the
+        // label+hint vocabulary the gating hints quote.
+        const rows = FEATURES.filter((f) => f.group === g.id && f.key !== g.id);
+        const master = FEATURES.find((f) => f.key === g.id)!;
         return (
           <Group
             key={g.id}
             title={g.title}
-            count={`${rows.filter((f) => features[f.key]).length} of ${rows.length} on`}
+            master={{
+              on: features[g.id],
+              hint: master.hint,
+              onToggle: () => toggle(g.id),
+            }}
           >
             <div className="set-rows">
               {rows.map(({ key, label, hint }) => {
@@ -459,301 +497,339 @@ export default function SettingsView({
           </Group>
         );
       })}
+    </div>
+  );
 
-      {/* ---- Header: which icon buttons mount top-right. Off hides only the
-              button; the view stays in ⌘P (the two-layers rule). ---- */}
-      <Group
-        title="Header"
-        count={`${HEADER_BUTTONS.filter((b) => headerBtns[b.key]).length} of ${HEADER_BUTTONS.length} shown`}
-      >
-        <div className="set-rows">
-          {HEADER_BUTTONS.map(({ key, label, hint, need }) => (
-            <ToggleRow
-              key={key}
-              label={label}
-              hint={hint}
-              on={headerBtns[key]}
-              needs={need && need.every((k) => !features[k]) ? true : undefined}
-              needsLabel={need ? need.map((k) => FEATURES.find((f) => f.key === k)?.label).join(" or ") : undefined}
-              onToggle={() => {
-                trace("toggle.header", { btn: key, to: !headerBtns[key] });
-                onToggleHeaderBtn(key);
-              }}
-            />
-          ))}
-        </div>
-      </Group>
-
-      {/* ---- Appearance: one look card — the resting fills, then themes as
-              ladder cards (the eleven shades in editor order, so a theme
-              reads at a glance). ---- */}
-      <Group title="Appearance">
-        <div className="set-rows">
-          <InfoRow label="Notes background" hint="the fill behind each note">
-            <span className={`set-swatch${notesCard ? " filled" : " empty"}`} />
-            <Seg
-              value={notesCard ? "card" : "bare"}
-              options={[{ v: "card", label: "Card" }, { v: "bare", label: "Bare" }]}
-              onPick={(v) => { trace("ui.card", { surface: "notes", to: v === "card" }); onSetCard("notes", v === "card"); }}
-            />
-          </InfoRow>
-          <InfoRow label="Tasks background" hint="the fill behind each row">
-            <span className={`set-swatch${tasksCard ? " filled" : " empty"}`} />
-            <Seg
-              value={tasksCard ? "card" : "bare"}
-              options={[{ v: "card", label: "Card" }, { v: "bare", label: "Bare" }]}
-              onPick={(v) => { trace("ui.card", { surface: "tasks", to: v === "card" }); onSetCard("tasks", v === "card"); }}
-            />
-          </InfoRow>
-        </div>
-        <div className="set-theme-grid">
-          {[...BUILT_IN_THEMES, ...customThemes].map((t) => {
-            const active = themeId === t.id;
-            const builtIn = BUILT_IN_THEMES.some((b) => b.id === t.id);
-            return (
-              <div
-                key={t.id}
-                role="button"
-                className={`set-theme-card${active ? " on" : ""}`}
-                onClick={() => { trace("theme.activate", { id: t.id }); onActivateTheme(t.id); }}
-              >
-                <span className="set-strip">
-                  {COLOR_FIELDS.map(({ key }) => (
-                    <i key={key} style={{ background: t.colors[key] }} />
-                  ))}
-                </span>
-                <span className="set-theme-foot">
-                  <span className="set-theme-name">{t.name}</span>
-                  {active && <span className="set-state on">Active</span>}
-                  {!builtIn && (
-                    <button
-                      className="set-x"
-                      title="Delete theme"
-                      aria-label={`Delete ${t.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        trace("theme.delete", { id: t.id });
-                        onDeleteTheme(t.id);
-                      }}
-                    ><IconX /></button>
-                  )}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        {!draft && (
-          <button
-            className="set-new"
-            title="Eleven shades, previewed live"
-            onClick={() => {
-              const base = [...BUILT_IN_THEMES, ...customThemes].find((t) => t.id === themeId);
-              setDraft({ name: "", colors: { ...(base ?? BUILT_IN_THEMES[0]).colors } });
+  // Header: which icon buttons mount top-right. Off hides only the button;
+  // the view stays in ⌘P (the two-layers rule). The last row is the window's
+  // own native bar — the OS close/minimize/zoom chrome, independent of the
+  // in-app buttons.
+  const headerPane = (
+    <Group
+      title="Header"
+      count={`${HEADER_BUTTONS.filter((b) => headerBtns[b.key]).length} of ${HEADER_BUTTONS.length} shown`}
+    >
+      <div className="set-rows">
+        {HEADER_BUTTONS.map(({ key, label, hint, need }) => (
+          <ToggleRow
+            key={key}
+            label={label}
+            hint={hint}
+            on={headerBtns[key]}
+            needs={need && need.every((k) => !features[k]) ? true : undefined}
+            needsLabel={need ? need.map((k) => FEATURES.find((f) => f.key === k)?.label).join(" or ") : undefined}
+            onToggle={() => {
+              trace("toggle.header", { btn: key, to: !headerBtns[key] });
+              onToggleHeaderBtn(key);
             }}
-          >
-            <b>+</b> New theme
-          </button>
-        )}
-        {draft && (
-          <div className="settings-form">
-            <input
-              className="settings-name-input"
-              placeholder="Theme name"
-              value={draft.name}
-              autoFocus
-              spellCheck={false}
-              onChange={(e) => {
-                if (!draft) return;
-                setDraft({ ...draft, name: e.target.value });
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { e.preventDefault(); createThemeNow(); }
-                else if (e.key === "Escape") { e.preventDefault(); cancelTheme(); }
-              }}
-            />
-            <div className="settings-colors">
-              {COLOR_FIELDS.map(({ key, label }) => (
-                <label className="settings-color" key={key}>
-                  <span>{label}</span>
-                  <input
-                    type="color"
-                    value={draft.colors[key]}
-                    onChange={(e) => {
-                      if (!draft) return;
-                      const colors = { ...draft.colors, [key]: e.target.value };
-                      setDraft({ ...draft, colors });
-                      // Live preview: the draft skins the app as you tweak;
-                      // Cancel re-applies the active theme.
-                      applyTheme({ id: "draft", name: draft.name || "Draft", colors });
-                    }}
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="settings-form-actions">
-              <button className="pill" onClick={cancelTheme}>Cancel</button>
-              <button className="settings-save" disabled={!draft.name.trim()} onClick={createThemeNow}>Create Theme</button>
-            </div>
-          </div>
-        )}
-      </Group>
+          />
+        ))}
+        <ToggleRow
+          label="Window title bar"
+          hint="the native bar — close, minimize, zoom"
+          on={windowDecorations}
+          onToggle={() => {
+            trace("toggle.windowDecorations", { to: !windowDecorations });
+            onToggleWindowDecorations(!windowDecorations);
+          }}
+        />
+      </div>
+    </Group>
+  );
 
-      {/* ---- Views: named lenses over the display axes. The builder's
-              summary line describes the lens as you click it. ---- */}
-      <Group title="Views">
-        <div className="set-views">
-          {views.map((v) => {
-            const active = activeViewId === v.id;
-            return (
-              <div
-                key={v.id}
-                role="button"
-                className={`set-view-card${active ? " on" : ""}`}
-                onClick={() => {
-                  trace("views.activate", { name: clip(v.name), to: !active });
-                  onToggleViewActive(v.id);
-                }}
-              >
-                <span className="set-view-text">
-                  <span className="set-view-name">{v.name}</span>
-                  <span className="set-view-sum">{viewSummary(v, projects)}</span>
-                </span>
-                <span className={`set-state${active ? " on" : ""}`}>{active ? "Active" : "Enter"}</span>
-                <span className="set-view-act">
-                  <button
-                    className="set-edit"
-                    title="Edit view"
-                    aria-label={`Edit ${v.name}`}
-                    onClick={(e) => { e.stopPropagation(); edit(v.id); }}
-                  ><IconPencil /></button>
+  // Appearance: one look card — the resting fills, then themes as ladder
+  // cards (the eleven shades in editor order, so a theme reads at a glance).
+  const appearancePane = (
+    <Group title="Appearance">
+      <div className="set-rows">
+        <InfoRow label="Notes background" hint="the fill behind each note">
+          <span className={`set-swatch${notesCard ? " filled" : " empty"}`} />
+          <Seg
+            value={notesCard ? "card" : "bare"}
+            options={[{ v: "card", label: "Card" }, { v: "bare", label: "Bare" }]}
+            onPick={(v) => { trace("ui.card", { surface: "notes", to: v === "card" }); onSetCard("notes", v === "card"); }}
+          />
+        </InfoRow>
+        <InfoRow label="Tasks background" hint="the fill behind each row">
+          <span className={`set-swatch${tasksCard ? " filled" : " empty"}`} />
+          <Seg
+            value={tasksCard ? "card" : "bare"}
+            options={[{ v: "card", label: "Card" }, { v: "bare", label: "Bare" }]}
+            onPick={(v) => { trace("ui.card", { surface: "tasks", to: v === "card" }); onSetCard("tasks", v === "card"); }}
+          />
+        </InfoRow>
+      </div>
+      <div className="set-theme-grid">
+        {[...BUILT_IN_THEMES, ...customThemes].map((t) => {
+          const active = themeId === t.id;
+          const builtIn = BUILT_IN_THEMES.some((b) => b.id === t.id);
+          return (
+            <div
+              key={t.id}
+              role="button"
+              className={`set-theme-card${active ? " on" : ""}`}
+              onClick={() => { trace("theme.activate", { id: t.id }); onActivateTheme(t.id); }}
+            >
+              <span className="set-strip">
+                {COLOR_FIELDS.map(({ key }) => (
+                  <i key={key} style={{ background: t.colors[key] }} />
+                ))}
+              </span>
+              <span className="set-theme-foot">
+                <span className="set-theme-name">{t.name}</span>
+                {active && <span className="set-state on">Active</span>}
+                {!builtIn && (
                   <button
                     className="set-x"
-                    title="Delete view"
-                    aria-label={`Delete ${v.name}`}
+                    title="Delete theme"
+                    aria-label={`Delete ${t.name}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      trace("views.delete", { name: clip(v.name) });
-                      onDeleteView(v.id);
+                      trace("theme.delete", { id: t.id });
+                      onDeleteTheme(t.id);
                     }}
                   ><IconX /></button>
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        {!creatingView && (
-          <button
-            className="set-new"
-            title="Combine priorities, agent, project, notes"
-            onClick={() => setCreatingView(true)}
-          >
-            <b>+</b> New view
-          </button>
-        )}
-        {creatingView && (
-          <div className="settings-form">
-            <input
-              className="settings-name-input"
-              placeholder="View name"
-              value={name}
-              autoFocus
-              spellCheck={false}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { e.preventDefault(); save(); }
-                else if (e.key === "Escape") { e.preventDefault(); setCreatingView(false); resetDraft(); }
-              }}
-            />
-            <div className="set-form-summary">{draftSummary || "everything"}</div>
-            {features.taskPriorities && (
-              <div className="settings-field">
-                <span className="settings-field-label">Priorities</span>
-                {ALL_TIERS.map((n) => (
-                  <button
-                    key={n}
-                    className={`set-chip${priorities.includes(n) ? " on" : ""}`}
-                    onClick={() => toggleTier(n, priorities, setPriorities)}
-                  >P{n}</button>
-                ))}
-              </div>
-            )}
-            <div className="settings-field">
-              <span className="settings-field-label">Sections</span>
-              {([["today", "Today"], ["daily", "Daily"], ["backlog", "Backlog"]] as const).map(
-                ([sec, label]) => (
-                  <button
-                    key={sec}
-                    className={`set-chip${sections[sec] ? " on" : ""}`}
-                    onClick={() => setSections((sc) => ({ ...sc, [sec]: !sc[sec] }))}
-                  >{label}</button>
-                ),
-              )}
+                )}
+              </span>
             </div>
+          );
+        })}
+      </div>
+      {!draft && (
+        <button
+          className="set-new"
+          title="Eleven shades, previewed live"
+          onClick={() => {
+            const base = [...BUILT_IN_THEMES, ...customThemes].find((t) => t.id === themeId);
+            setDraft({ name: "", colors: { ...(base ?? BUILT_IN_THEMES[0]).colors } });
+          }}
+        >
+          <b>+</b> New theme
+        </button>
+      )}
+      {draft && (
+        <div className="settings-form">
+          <input
+            className="settings-name-input"
+            placeholder="Theme name"
+            value={draft.name}
+            autoFocus
+            spellCheck={false}
+            onChange={(e) => {
+              if (!draft) return;
+              setDraft({ ...draft, name: e.target.value });
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); createThemeNow(); }
+              else if (e.key === "Escape") { e.preventDefault(); cancelTheme(); }
+            }}
+          />
+          <div className="settings-colors">
+            {COLOR_FIELDS.map(({ key, label }) => (
+              <label className="settings-color" key={key}>
+                <span>{label}</span>
+                <input
+                  type="color"
+                  value={draft.colors[key]}
+                  onChange={(e) => {
+                    if (!draft) return;
+                    const colors = { ...draft.colors, [key]: e.target.value };
+                    setDraft({ ...draft, colors });
+                    // Live preview: the draft skins the app as you tweak;
+                    // Cancel re-applies the active theme.
+                    applyTheme({ id: "draft", name: draft.name || "Draft", colors });
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+          <div className="settings-form-actions">
+            <button className="pill" onClick={cancelTheme}>Cancel</button>
+            <button className="settings-save" disabled={!draft.name.trim()} onClick={createThemeNow}>Create Theme</button>
+          </div>
+        </div>
+      )}
+    </Group>
+  );
+
+  // Views: named lenses over the display axes. The builder's summary line
+  // describes the lens as you click it.
+  const viewsPane = (
+    <Group title="Views">
+      <div className="set-views">
+        {views.map((v) => {
+          const active = activeViewId === v.id;
+          return (
+            <div
+              key={v.id}
+              role="button"
+              className={`set-view-card${active ? " on" : ""}`}
+              onClick={() => {
+                trace("views.activate", { name: clip(v.name), to: !active });
+                onToggleViewActive(v.id);
+              }}
+            >
+              <span className="set-view-text">
+                <span className="set-view-name">{v.name}</span>
+                <span className="set-view-sum">{viewSummary(v, projects)}</span>
+              </span>
+              <span className={`set-state${active ? " on" : ""}`}>{active ? "Active" : "Enter"}</span>
+              <span className="set-view-act">
+                <button
+                  className="set-edit"
+                  title="Edit view"
+                  aria-label={`Edit ${v.name}`}
+                  onClick={(e) => { e.stopPropagation(); edit(v.id); }}
+                ><IconPencil /></button>
+                <button
+                  className="set-x"
+                  title="Delete view"
+                  aria-label={`Delete ${v.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    trace("views.delete", { name: clip(v.name) });
+                    onDeleteView(v.id);
+                  }}
+                ><IconX /></button>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {!creatingView && (
+        <button
+          className="set-new"
+          title="Combine priorities, agent, project, notes"
+          onClick={() => setCreatingView(true)}
+        >
+          <b>+</b> New view
+        </button>
+      )}
+      {creatingView && (
+        <div className="settings-form">
+          <input
+            className="settings-name-input"
+            placeholder="View name"
+            value={name}
+            autoFocus
+            spellCheck={false}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); save(); }
+              else if (e.key === "Escape") { e.preventDefault(); setCreatingView(false); resetDraft(); }
+            }}
+          />
+          <div className="set-form-summary">{draftSummary || "everything"}</div>
+          {features.taskPriorities && (
             <div className="settings-field">
-              <span className="settings-field-label">Tasks from</span>
+              <span className="settings-field-label">Priorities</span>
+              {ALL_TIERS.map((n) => (
+                <button
+                  key={n}
+                  className={`set-chip${priorities.includes(n) ? " on" : ""}`}
+                  onClick={() => toggleTier(n, priorities, setPriorities)}
+                >P{n}</button>
+              ))}
+            </div>
+          )}
+          <div className="settings-field">
+            <span className="settings-field-label">Sections</span>
+            {([["today", "Today"], ["daily", "Daily"], ["backlog", "Backlog"]] as const).map(
+              ([sec, label]) => (
+                <button
+                  key={sec}
+                  className={`set-chip${sections[sec] ? " on" : ""}`}
+                  onClick={() => setSections((sc) => ({ ...sc, [sec]: !sc[sec] }))}
+                >{label}</button>
+              ),
+            )}
+          </div>
+          <div className="settings-field">
+            <span className="settings-field-label">Tasks from</span>
+            <Seg
+              value={agent}
+              options={[{ v: "all", label: "All" }, { v: "agent", label: "Agent" }, { v: "mine", label: "Mine" }]}
+              onPick={(v) => setAgent(v as CustomView["agent"])}
+            />
+          </div>
+          {(features.taskProjects || features.noteProjects) && (
+            <div className="settings-field">
+              <span className="settings-field-label">Projects</span>
+              <button
+                className={`set-chip${projectIds.length === 0 ? " on" : ""}`}
+                onClick={() => setProjectIds([])}
+              >Any</button>
+              {projects.map((p) => (
+                <button
+                  key={p.id}
+                  className={`set-chip${projectIds.includes(p.id) ? " on" : ""}`}
+                  onClick={() => setProjectIds((ids) =>
+                    ids.includes(p.id) ? ids.filter((x) => x !== p.id) : [...ids, p.id],
+                  )}
+                >{p.name}</button>
+              ))}
+            </div>
+          )}
+          {features.notes && (
+            <div className="settings-field">
+              <span className="settings-field-label">Notes</span>
               <Seg
-                value={agent}
-                options={[{ v: "all", label: "All" }, { v: "agent", label: "Agent" }, { v: "mine", label: "Mine" }]}
-                onPick={(v) => setAgent(v as CustomView["agent"])}
+                value={notes ? "show" : "hide"}
+                options={[{ v: "show", label: "Show" }, { v: "hide", label: "Hide" }]}
+                onPick={(v) => setNotes(v === "show")}
               />
             </div>
-            {(features.taskProjects || features.noteProjects) && (
-              <div className="settings-field">
-                <span className="settings-field-label">Projects</span>
-                <button
-                  className={`set-chip${projectIds.length === 0 ? " on" : ""}`}
-                  onClick={() => setProjectIds([])}
-                >Any</button>
-                {projects.map((p) => (
-                  <button
-                    key={p.id}
-                    className={`set-chip${projectIds.includes(p.id) ? " on" : ""}`}
-                    onClick={() => setProjectIds((ids) =>
-                      ids.includes(p.id) ? ids.filter((x) => x !== p.id) : [...ids, p.id],
-                    )}
-                  >{p.name}</button>
-                ))}
-              </div>
-            )}
-            {features.notes && (
-              <div className="settings-field">
-                <span className="settings-field-label">Notes</span>
-                <Seg
-                  value={notes ? "show" : "hide"}
-                  options={[{ v: "show", label: "Show" }, { v: "hide", label: "Hide" }]}
-                  onPick={(v) => setNotes(v === "show")}
-                />
-              </div>
-            )}
-            {features.goals && (
-              <div className="settings-field">
-                <span className="settings-field-label">Goals</span>
-                <Seg
-                  value={goals ? "show" : "hide"}
-                  options={[{ v: "show", label: "Show" }, { v: "hide", label: "Hide" }]}
-                  onPick={(v) => setGoals(v === "show")}
-                />
-              </div>
-            )}
-            {features.notes && features.notePriorities && (
-              <div className="settings-field">
-                <span className="settings-field-label">Note tiers</span>
-                {ALL_TIERS.map((n) => (
-                  <button
-                    key={n}
-                    className={`set-chip${notePriorities.includes(n) ? " on" : ""}`}
-                    onClick={() => toggleTier(n, notePriorities, setNotePriorities)}
-                  >P{n}</button>
-                ))}
-              </div>
-            )}
-            <div className="settings-form-actions">
-              <button className="pill" onClick={() => { setCreatingView(false); resetDraft(); }}>Cancel</button>
-              <button className="settings-save" disabled={!name.trim()} onClick={save}>{editingId ? "Save Changes" : "Create View"}</button>
+          )}
+          {features.goals && (
+            <div className="settings-field">
+              <span className="settings-field-label">Goals</span>
+              <Seg
+                value={goals ? "show" : "hide"}
+                options={[{ v: "show", label: "Show" }, { v: "hide", label: "Hide" }]}
+                onPick={(v) => setGoals(v === "show")}
+              />
             </div>
+          )}
+          {features.notes && features.notePriorities && (
+            <div className="settings-field">
+              <span className="settings-field-label">Note tiers</span>
+              {ALL_TIERS.map((n) => (
+                <button
+                  key={n}
+                  className={`set-chip${notePriorities.includes(n) ? " on" : ""}`}
+                  onClick={() => toggleTier(n, notePriorities, setNotePriorities)}
+                >P{n}</button>
+              ))}
+            </div>
+          )}
+          <div className="settings-form-actions">
+            <button className="pill" onClick={() => { setCreatingView(false); resetDraft(); }}>Cancel</button>
+            <button className="settings-save" disabled={!name.trim()} onClick={save}>{editingId ? "Save Changes" : "Create View"}</button>
           </div>
-        )}
-      </Group>
+        </div>
+      )}
+    </Group>
+  );
+
+  return (
+    <div className="settings">
+      {/* One pane at a time; the bar is sticky in the one .scroll, so it pins
+          under the header only while a pane actually scrolls. */}
+      <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            className={tab === t.id ? "on" : ""}
+            onClick={() => { trace("ui.settingsTab", { tab: t.id }); setTab(t.id); }}
+          >{t.label}</button>
+        ))}
+      </div>
+      {tab === "features" && featuresPane}
+      {tab === "appearance" && appearancePane}
+      {tab === "header" && headerPane}
+      {tab === "views" && viewsPane}
     </div>
   );
 }

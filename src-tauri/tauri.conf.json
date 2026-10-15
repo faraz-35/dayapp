@@ -18,7 +18,9 @@
         "minWidth": 360,
         "minHeight": 480,
         "resizable": true,
-        "decorations": false,
+        "visible": false,
+        "decorations": true,
+        "hiddenTitle": true,
         "transparent": false,
         "shadow": false,
         "backgroundColor": "#0e0f11"

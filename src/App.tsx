@@ -354,6 +354,13 @@ function DayAppBody() {
       return { hidden: true, analytics: true, journal: false, quotes: false, settings: true, theme: true };
     }
   });
+  // The native window title bar (Settings → Header's "Window title bar"):
+  // the OS chrome — close / minimize / zoom. Default on. The Rust setup
+  // applies the stored value before the window ever shows; the toggle
+  // applies it live through set_window_decorations.
+  const [windowDecorations, setWindowDecorations] = useState(
+    () => sget("dayapp-window-decorations", "1") !== "0",
+  );
   // Journal/Quotes existence (Settings → Features): the written-entry pages,
   // their header doors and ⌘P entries, the ##j/##q capture routes (nj/nq
   // included), and — for quotes — the idle screensaver moment. Off = the whole
@@ -793,6 +800,7 @@ function DayAppBody() {
     sset("dayapp-tasks-card", tasksCard ? "1" : "0");
     sset("dayapp-screensaver-mins", String(screensaverMins));
     sset("dayapp-header-buttons", JSON.stringify(headerBtns));
+    sset("dayapp-window-decorations", windowDecorations ? "1" : "0");
     sset("dayapp-journal-enabled", journalEnabled ? "1" : "0");
     sset("dayapp-quotes-enabled", quotesEnabled ? "1" : "0");
     sset("dayapp-task-projects-enabled", taskProjectsEnabled ? "1" : "0");
@@ -816,7 +824,7 @@ function DayAppBody() {
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.) The shared projects/hide keys
     // leave via settings.ts's migrate().
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, journalEnabled, quotesEnabled, taskProjectsEnabled, noteProjectsEnabled, goalProjectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, windowDecorations, journalEnabled, quotesEnabled, taskProjectsEnabled, noteProjectsEnabled, goalProjectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -1899,6 +1907,12 @@ function DayAppBody() {
   const toggleHeaderBtn = useCallback((btn: HeaderBtn) => {
     setHeaderBtns((b) => ({ ...b, [btn]: !b[btn] }));
   }, []);
+  // Persist + apply to the live window in one step — the store write lands
+  // through the settings effect, the call reskins the frame immediately.
+  const toggleWindowDecorations = useCallback((on: boolean) => {
+    setWindowDecorations(on);
+    api.setWindowDecorations(on).catch((e) => log.warn("window decorations failed", e));
+  }, []);
   // The header theme button walks the whole ladder — Dark → Light → each
   // custom theme in store order, wrapping. The Settings page stays the direct
   // door (activate/delete/create); the button is the one-click cycle.
@@ -2644,6 +2658,8 @@ function DayAppBody() {
             onSetScreensaverMins={setScreensaverMins}
             headerBtns={headerBtns}
             onToggleHeaderBtn={toggleHeaderBtn}
+            windowDecorations={windowDecorations}
+            onToggleWindowDecorations={toggleWindowDecorations}
             themeId={themeId}
             customThemes={customThemes}
             onActivateTheme={activateTheme}
