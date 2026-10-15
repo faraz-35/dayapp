@@ -215,6 +215,10 @@ export type UpdateStatus = {
 // the capture inbox (see MobileView.tsx and AGENTS.md "Mobile sync").
 const IS_MOBILE = /android/i.test(navigator.userAgent);
 
+// Windows builds (WebView2): the shell-CLI wrapper is Unix-shaped, so the
+// palette entry doesn't exist there — the backend command refuses as backup.
+const IS_WINDOWS = navigator.userAgent.includes("Windows");
+
 export default function App() {
   if (IS_MOBILE) return <MobileView />;
   return <DayApp />;
@@ -1336,16 +1340,20 @@ function DayAppBody() {
     ]),
     // The `dayapp` shell command. Machine-level, not db-level — works (and
     // stays listed) in demo mode; idempotent, re-running repairs a stale
-    // wrapper after an app move.
-    {
-      id: "cli-enable",
-      label: "CLI: Enable",
-      hint: "`dayapp` command in your terminal",
-      run: () =>
-        api.cliInstall()
-          .then((msg) => { log.info("cli: enabled"); showToast(msg); })
-          .catch((e) => { log.error("cli: enable failed", e); showToast(`CLI enable failed: ${e}`); }),
-    },
+    // wrapper after an app move. Unix-shaped, so Windows doesn't list it.
+    ...(IS_WINDOWS
+      ? []
+      : [
+          {
+            id: "cli-enable",
+            label: "CLI: Enable",
+            hint: "`dayapp` command in your terminal",
+            run: () =>
+              api.cliInstall()
+                .then((msg) => { log.info("cli: enabled"); showToast(msg); })
+                .catch((e) => { log.error("cli: enable failed", e); showToast(`CLI enable failed: ${e}`); }),
+          },
+        ]),
     { id: "view-analytics", label: "View Analytics", run: () => setView("analytics") },
     // The entry pages are existence-gated (Settings → Features): off, the
     // pages, doors, and routes all go — nothing left to open.

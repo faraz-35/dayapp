@@ -19,10 +19,12 @@
 #   3. build      — signed updater bundle + latest.json, then verified:
 #                   manifest version == release version, manifest signature ==
 #                   the .sig file, filenames line up
-#   4. publish    — commit v<next>, tag, push
+#   4. publish    — commit v<next>, tag, push (the push starts the windows.yml
+#                   CI build of the NSIS installer)
 #   5. release    — gh release with .app.tar.gz + .sig + latest.json
 #                   (this is the moment the in-app update channel goes live);
-#                   notes auto-generated from the commits since the last tag
+#                   notes auto-generated from the commits since the last tag;
+#                   then waits for the Windows installer CI attaches to the tag
 #   6. install    — the live curl one-liner must serve exactly this release's
 #                   bytes. The site is versionless by design (install.sh
 #                   downloads releases/latest/...), so a release never edits
@@ -76,7 +78,8 @@ SHIPPED=0
 if [ "$TAG_ON_HEAD" = 1 ] \
    && gh release view "v$CUR" --repo faraz-35/dayapp > /dev/null 2>&1 \
    && [ "$(curl -fsL "https://github.com/faraz-35/dayapp/releases/latest/download/latest.json" 2>/dev/null \
-        | python3 -c "import json, sys; print(json.load(sys.stdin).get('version', ''))" 2>/dev/null || true)" = "$CUR" ]; then
+        | python3 -c "import json, sys; print(json.load(sys.stdin).get('version', ''))" 2>/dev/null || true)" = "$CUR" ] \
+   && gh release view "v$CUR" --repo faraz-35/dayapp --json assets -q '.assets[].name' 2>/dev/null | grep -q -- '-setup\.exe$'; then
   SHIPPED=1
 fi
 if [ "$TAG_ON_HEAD" = 1 ] && [ "$SHIPPED" = 0 ]; then
@@ -234,7 +237,7 @@ fi
 
 if [ "$DRY_RUN" = 1 ]; then
   say "DRY RUN — everything above is real; a full run would now publish:"
-  say "  commit v$NEXT + tag $TAG, gh release v$NEXT (3 assets)"
+  say "  commit v$NEXT + tag $TAG, gh release v$NEXT (macOS assets + the Windows installer its tag build attaches)"
   say "  notes: $(head -1 "$NOTESFILE")"
   say "  install path: the live curl one-liner must serve $TAG's bytes"
   say "DRY RUN complete — artifacts left in $BUNDLE for inspection"
@@ -280,6 +283,28 @@ done
 [ "$CHANNEL_OK" = 1 ] || die "the update channel doesn't serve $NEXT — check the release assets"
 say "update channel serves $NEXT"
 
+# ---- 5b. windows installer (CI-built, attached to the tag) ------------------
+
+# The tag push started the windows.yml build; the release ships everywhere
+# only once its installer is attached. A failure here means CI failed — rerun
+# that workflow and re-run this script: every finished stage above skips
+# itself, so the resume just waits here and verifies.
+say "windows build"
+if gh release view "$TAG" --repo faraz-35/dayapp --json assets -q '.assets[].name' \
+   | grep -q -- '-setup\.exe$'; then
+  say "windows installer already attached"
+else
+  say "waiting for the windows.yml CI run (cold ≈ 20–30 min; polls every 30s)"
+  WIN_OK=0
+  for _ in $(seq 1 60); do
+    if gh release view "$TAG" --repo faraz-35/dayapp --json assets -q '.assets[].name' \
+       | grep -q -- '-setup\.exe$'; then WIN_OK=1; break; fi
+    sleep 30
+  done
+  [ "$WIN_OK" = 1 ] || die "windows installer never landed on $TAG — check/rerun the Windows workflow (gh run list --workflow windows.yml), then re-run this script to finish the release"
+  say "windows installer attached"
+fi
+
 # ---- 6. install path --------------------------------------------------------
 
 # The site's install story is one versionless curl one-liner: install.sh
@@ -308,6 +333,7 @@ NOTES_COUNT="$(grep -c '^- ' "$NOTESFILE" 2>/dev/null || echo 0)"
 say "shipped $TAG:"
 say "  release  https://github.com/faraz-35/dayapp/releases/tag/$TAG"
 say "  channel  https://github.com/faraz-35/dayapp/releases/latest/download/latest.json (verified: serves $NEXT)"
+say "  windows  DayApp_*-setup.exe on the release (verified)"
 say "  install  $SITE_URL/install.sh (verified: serves $TAG's bytes)"
 if [ -n "${NOTES:-}" ]; then
   say "  notes    custom ($NOTES)"

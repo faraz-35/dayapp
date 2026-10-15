@@ -613,7 +613,16 @@ async fn reveal_backups(db: State<'_, DbState>) -> Result<(), String> {
 // Idempotent by content — re-running repairs a stale wrapper after an app
 // move. Only the user's keystroke does this: an app that edits dotfiles
 // unprompted is malware-shaped, so it's a door, not a launch side effect.
+// Unix-shaped (shell wrapper + rc file); Windows hides the palette entry and
+// the command refuses — the binary itself still runs with --flags there.
 
+#[cfg(windows)]
+#[tauri::command]
+async fn cli_install() -> Result<String, String> {
+    Err("CLI enable is macOS/Linux only — run the binary's .exe with flags directly".into())
+}
+
+#[cfg(not(windows))]
 #[tauri::command]
 async fn cli_install() -> Result<String, String> {
     use std::os::unix::fs::PermissionsExt;
@@ -729,12 +738,22 @@ async fn reset_demo_data(app: AppHandle, db: State<'_, DbState>) -> Result<(), S
 /// noise. The whole command line goes in the string (quote arguments
 /// containing spaces yourself). Users of the fallback: the macOS self-update
 /// flow, AeroSpace placement, and sync's `gh auth token` fallback — the last
-/// one is why this exists on every platform (zsh on macOS, bash elsewhere).
+/// one is why this exists on every platform (zsh on macOS, bash elsewhere,
+/// cmd /C on Windows).
 pub(crate) fn login_shell_command(line: &str) -> std::process::Command {
-    let shell = if cfg!(target_os = "macos") { "/bin/zsh" } else { "/bin/bash" };
-    let mut cmd = std::process::Command::new(shell);
-    cmd.args(["-l", "-c", line]);
-    cmd
+    #[cfg(windows)]
+    {
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/C", line]);
+        cmd
+    }
+    #[cfg(not(windows))]
+    {
+        let shell = if cfg!(target_os = "macos") { "/bin/zsh" } else { "/bin/bash" };
+        let mut cmd = std::process::Command::new(shell);
+        cmd.args(["-l", "-c", line]);
+        cmd
+    }
 }
 
 #[tauri::command]

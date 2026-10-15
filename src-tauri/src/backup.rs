@@ -62,7 +62,13 @@ pub fn capture(db: &Db) -> anyhow::Result<PathBuf> {
 pub fn reveal(real_path: &Path) -> anyhow::Result<()> {
     let dir = backups_dir(real_path);
     std::fs::create_dir_all(&dir)?;
-    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(windows) {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
     std::process::Command::new(opener).arg(&dir).spawn()?;
     log::info!("backup: revealed backups folder");
     Ok(())

@@ -1,0 +1,69 @@
+name: Windows build
+
+# Builds the Windows NSIS installer on every push to main and refreshes a
+# rolling `windows-dev` prerelease — the distribution surface for testers
+# (public repo, no login needed to download). A push of a version tag (v*)
+# attaches the installer to that version's release instead: release.sh pushes
+# the tag before it creates the release, so this job races the script — the
+# upload step waits for the release to exist, and release.sh waits for this
+# asset before it declares the release shipped.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  nsis:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build NSIS installer
+        run: |
+          npm ci
+          npm run tauri build -- --config src-tauri/tauri.windows.conf.json
+
+      - name: Refresh the rolling windows-dev prerelease
+        if: github.ref_type != 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete windows-dev --yes --cleanup-tag || true
+          gh release create windows-dev --prerelease \
+            --title "DayApp — Windows dev build" \
+            --notes "Rolling test build of \`main\`. WebView2 (the runtime) is preinstalled on Windows 10/11. Run the DayApp_*-setup.exe — it installs per-user, no admin needed." \
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+
+      - name: Attach the installer to the versioned release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          found=0
+          for _ in $(seq 1 40); do
+            if gh release view "$TAG" --repo faraz-35/dayapp > /dev/null 2>&1; then found=1; break; fi
+            sleep 15
+          done
+          [ "$found" = 1 ] || { echo "::error::release $TAG never appeared — is it published?"; exit 1; }
+          gh release upload "$TAG" src-tauri/target/release/bundle/nsis/*-setup.exe \
+            --repo faraz-35/dayapp --clobber
