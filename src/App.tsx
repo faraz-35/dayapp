@@ -158,21 +158,24 @@ function CloseIcon() {
   );
 }
 
-// The settings door's glyph: a cog — chunky teeth around a ring plus a
-// center hole (thin rays from a small core read as a sun, the reason the
-// first attempt failed). Stroke language as the rest of the set.
+// The settings door's glyph: the classic cog (Lucide's settings outline,
+// MIT), scaled into the 16-box at the family's 1.7 visual stroke — teeth on
+// the silhouette and a big center hole, so beside the sun it reads gear,
+// never twin rays (the ray-ring attempt's failure).
 function SettingsIcon() {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <circle cx="8" cy="8" r="3.4" fill="none" stroke="currentColor" strokeWidth="1.7" />
-      <circle cx="8" cy="8" r="1.1" fill="currentColor" stroke="none" />
-      <path
-        d="M8 1.4v2.2M8 12.4v2.2M1.4 8h2.2M12.4 8h2.2M3.3 3.3l1.6 1.6M11.1 11.1l1.6 1.6M12.7 3.3l-1.6 1.6M4.9 11.1l-1.6 1.6"
+      <g
+        transform="scale(0.6667)"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2.6"
+        strokeWidth="2.55"
         strokeLinecap="round"
-      />
+        strokeLinejoin="round"
+      >
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+        <circle cx="12" cy="12" r="3" />
+      </g>
     </svg>
   );
 }
