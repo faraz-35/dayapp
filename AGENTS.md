@@ -567,15 +567,30 @@ carry the build machine's path, which never exists on a user's Mac)?
 
 - The channel is the release's own `latest.json`
   (`releases/latest/download/latest.json` — no server, the sync-repo idea
-  pointed the other way). **`npm run release` (`scripts/release.sh`) exists so
-  `latest.json` can't be forgotten**: a plain `tauri build` produces NO
-  updater artifacts and needs NO signing key; artifacts only generate in the
-  release config (`tauri.release.conf.json` sets `createUpdaterArtifacts`),
-  which signs with the passwordless keypair at `~/.tauri/dayapp-updater.key`
-  (never commit it; **lose it and the channel is dead** — every installed app
-  verifies against the pubkey it shipped with, recovery is manual reinstall).
-- Bump `tauri.conf.json`'s `version` as part of the ritual — the channel's
-  comparison hangs off it. The channel activates on the
+  pointed the other way). **Releases are CI, not a local ritual** (2026-10-16,
+  `.github/workflows/release.yml` — it replaced `scripts/release.sh`): every
+  push to `main` runs the gate, which reads `tauri.conf.json`'s `version` and
+  ships only when that version has no GitHub release yet — so the whole
+  ritual is **bump the version, push**. A release run builds the signed
+  macOS updater bundle (`tauri.release.conf.json` sets
+  `createUpdaterArtifacts`; `--bundles app`), the Windows NSIS installer, and
+  publishes all of it in one `gh release` (`v<version>` tagged at the pushed
+  commit), then re-runs the script's old end gates: the manifest/signature
+  verify, the channel check (`releases/latest/download/latest.json` must
+  serve the new version), and the install-path check (the site's versionless
+  curl one-liner must serve the new release's bytes). A plain `tauri build`
+  still produces NO updater artifacts and needs NO signing key; artifacts
+  only generate in the release config. The signing key is the passwordless
+  minisign keypair, now living in the repo secret `TAURI_SIGNING_PRIVATE_KEY`
+  (recovery copy: the macOS keychain, service `dayapp-updater-key`; never
+  commit it; **lose every copy and the channel is dead** — every installed
+  app verifies against the pubkey it shipped with, recovery is manual
+  reinstall). Release notes auto-generate from the commits since the last
+  tag — the custom-prose pass of a manual release has no CI equivalent.
+- The version gate means the channel only moves when `tauri.conf.json`'s
+  `version` does — the deliberate anti-spam: a literal release per push
+  would light the in-app update icon after every commit. The channel
+  activates on the
   first release that carries `latest.json` (0.3.0's doesn't — installs of it
   simply never see an icon until the next release).
 
@@ -680,10 +695,11 @@ dayapp/
 ├── icon-source.svg                 ← icon master; regenerate others via `npx tauri icon`
 ├── .github/
 │   └── workflows/
-│       └── linux.yml               ← CI AppImage on every main push → rolling linux-dev prerelease
+│       ├── release.yml             ← CI releases: gate on tauri.conf.json's version → signed macOS bundle + latest.json + Windows installer → one v<version> release + channel/install checks
+│       ├── linux.yml               ← CI AppImage on every main push → rolling linux-dev prerelease
+│       └── windows.yml             ← CI NSIS installer on every main push → rolling windows-dev prerelease
 ├── scripts/
 │   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
-│   └── release.sh                  ← release artifacts: signed updater bundle + latest.json (npm run release)
 ├── src/
 │   ├── App.tsx                     ← shell only: state, effects, the focus grammar (key handler), header, view switching, timer chip
 │   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + goalsApi/parseGoalText + projectColor/formatReminder/formatDuration
@@ -734,7 +750,7 @@ dayapp/
     ├── demo.sql                    ← the demo seed (relative timestamps; embedded via include_str!, never commit the .db)
     ├── Cargo.toml
     ├── tauri.conf.json             ← window 480x720 (native title bar default-on, hidden until setup applies the setting), identifier, app-only bundle target, updater pubkey/endpoints
-    ├── tauri.release.conf.json     ← release-only override: createUpdaterArtifacts (signed; used by scripts/release.sh)
+    ├── tauri.release.conf.json     ← release-only override: createUpdaterArtifacts (signed; used by release.yml)
     ├── tauri.linux.conf.json       ← CI-only override: bundle targets ["appimage"] (passed via --config in linux.yml)
     └── capabilities/default.json
 ```
@@ -1635,30 +1651,27 @@ npm run update         # build + swap /Applications/DayApp.app + relaunch (CLI)
 Both call `scripts/update.sh`. See the README "Update the installed app" section for the
 mechanics (detached swap helper, LaunchServices re-registration).
 
-Publishing a release is one command, and it ships everywhere:
+Publishing a release is CI, not a local command. The whole ritual:
 
 ```bash
-npm run release patch        # or minor | major; append `dry` to build + verify without publishing
+# bump "version" in src-tauri/tauri.conf.json, commit, then:
+git push origin main
 ```
 
-Stages: guards (clean main, synced) → bump `tauri.conf.json` (the version
-source; package.json follows) → signed updater build + `latest.json` + verify
-gates (no dmg — the curl installer and the update channel both live on the
-`.app.tar.gz`) → commit + tag + push → `gh release` (`.app.tar.gz`, `.sig`,
-`latest.json`; notes auto-generated from commits since the last tag) then the
-channel gate — the updater's own endpoint (`releases/latest/download/
-latest.json`) is polled until it serves the new version → the install-path
-gate: the site's versionless curl one-liner (`getdayapp.vercel.app/install.sh`
-downloads `releases/latest/download/DayApp.app.tar.gz`) must serve exactly the
-new release's bytes, so a release never edits or deploys the site — the tap's
-cask is no longer maintained (the site dropped brew; curl is the one install
-path) → receipt. Re-running after a failure resumes the same version: a
-tagged bump commit on HEAD means finish that release, not roll the next.
-`dry` runs guards, build (version overridden inline — no repo edits), and all
-verify gates without publishing anything. The signing key is read from the macOS keychain
-(service `dayapp-updater-key`); the script imports it from
-`~/.tauri/dayapp-updater.key` on first run, after which the keychain is the
-source of truth. See "Release updates" under Architecture.
+Every main push runs `.github/workflows/release.yml`; its gate ships only
+when the pushed `version` has no GitHub release yet — an ordinary push skips
+at the gate, so the update channel only moves when the version does. A
+release run builds the signed macOS updater bundle + `latest.json` and the
+Windows NSIS installer (two parallel jobs), then publishes one `v<version>`
+release carrying all of it — notes auto-generated from the commits since the
+last tag — and re-runs the end gates: manifest/signature verify, the channel
+check (`releases/latest/download/latest.json` polled until it serves the new
+version), and the install-path check (the site's versionless curl one-liner
+must serve exactly the new release's bytes, so a release never edits or
+deploys the site — the tap's cask is no longer maintained; the site dropped
+brew; curl is the one install path). The signing key is the repo secret
+`TAURI_SIGNING_PRIVATE_KEY` (recovery copy: the macOS keychain, service
+`dayapp-updater-key`). See "Release updates" under Architecture.
 
 To regenerate icons after editing `icon-source.svg`:
 

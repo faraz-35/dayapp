@@ -113,7 +113,7 @@ The binary lives inside the app bundle. ⌘P → CLI: Enable installs the `dayap
 
 ## Update
 
-Installed from a release? A small accent icon appears at the top right of the header when a new version is out — one click downloads, verifies, and installs it. Building from source? ⌘P → Update App Locally rebuilds, swaps, and relaunches (or `npm run update`). Shipping a release: `npm run release patch` (or `minor`/`major`; append ` dry` to build and verify without publishing) publishes the GitHub release and the in-app update channel in one pass, then verifies the site's curl installer serves the new build.
+Installed from a release? A small accent icon appears at the top right of the header when a new version is out — one click downloads, verifies, and installs it. Building from source? ⌘P → Update App Locally rebuilds, swaps, and relaunches (or `npm run update`). Shipping a release: bump `version` in `src-tauri/tauri.conf.json` and push to `main` — CI builds, signs, and publishes the release (macOS updater bundle + Windows installer) and verifies the update channel and the site's curl installer serve it.
 
 ## Develop
 
