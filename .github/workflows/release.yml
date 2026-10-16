@@ -155,8 +155,9 @@ jobs:
             npm run tauri build -- --config src-tauri/tauri.release.conf.json --bundles appimage
           # The strip rewrites the AppImage after the bundler's own signing
           # pass, so the shipped signature is made over the shipped bytes.
+          # (signer sign reads the key env var as content, not a path.)
           scripts/appimage-strip.sh src-tauri/target/release/bundle/appimage/DayApp_*_amd64.AppImage
-          TAURI_SIGNING_PRIVATE_KEY="$RUNNER_TEMP/updater.key" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+          TAURI_SIGNING_PRIVATE_KEY="$(cat "$RUNNER_TEMP/updater.key")" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
             npm run tauri signer sign -- src-tauri/target/release/bundle/appimage/DayApp_*_amd64.AppImage
 
       - uses: actions/upload-artifact@v4
