@@ -58,6 +58,12 @@ jobs:
             cd "$work"
             "$img" --appimage-extract >/dev/null
             rm -f squashfs-root/usr/lib/libwayland-*.so*
+            # linuxdeploy's prebuilt launcher lands as 0770 root:root — real
+            # FUSE mounts remap uid so it never shows, but a sandbox that execs
+            # the tree as a plain user (the AppImage catalog's firejail test)
+            # hits Permission denied. Normalize before packing.
+            chmod -R a+rX squashfs-root
+            chmod a+x squashfs-root/AppRun squashfs-root/AppRun.wrapped
             curl -fsSL -o appimagetool \
               https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
             chmod +x appimagetool
