@@ -71,7 +71,7 @@ const HORIZON_GROUPS: { horizon: GoalHorizon; label: string }[] = [
 ];
 
 export default function Goals({
-  projects, onCreateProject, focusedId, reloadEpoch = 0, hiddenFilter = "exclude",
+  projects, onCreateProject, focusedId, reloadEpoch = 0, hiddenFilter = "exclude", demo = false,
 }: {
   projects: Project[];
   onCreateProject: (name: string) => Promise<Project>;
@@ -81,6 +81,9 @@ export default function Goals({
   /** The ⌘P reveal: include renders paused goals inline, dimmed (the
       hidden-task render); exclude (default) keeps them out of the list. */
   hiddenFilter?: HiddenFilter;
+  /** Demo mode: the capture teaches its grammar with rotating example lines
+      while it sits empty (TokenField's demoExamples). */
+  demo?: boolean;
 }) {
   const features = useFeatures();
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -321,7 +324,9 @@ export default function Goals({
 
       {/* Always-open capture, line-only like the section inputs — no
           placeholder, the line is the affordance. Tokens color while you
-          type (TokenField): $1/$2/$3 picks the horizon, #tag the project. */}
+          type (TokenField): $1/$2/$3 picks the horizon, #tag the project.
+          In demo mode the empty field rotates example lines teaching that
+          grammar (demoExamples). */}
       <div className="capture">
         <TokenField
           kinds={[
@@ -330,6 +335,14 @@ export default function Goals({
           ]}
           value={draft}
           onChange={setDraft}
+          demoExamples={demo ? [
+            // Gated on the feature that makes each line's tokens real.
+            ...(features.goalTimeframes ? ["Read 12 books this year $1"] : []),
+            ...(features.goalTimeframes ? ["Run a half marathon $2"] : []),
+            ...(features.goalTimeframes ? ["Stay close to the family $3"] : []),
+            ...(features.goalProjects ? ["Launch the side project #build"] : []),
+            "Ship the portfolio site this month",
+          ] : undefined}
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); submit(); }
             // Empty draft → blur: the Esc ladder's editing → nothing rung

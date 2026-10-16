@@ -35,7 +35,7 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
 ];
 
 export default function SectionList({
-  items, visible, projects, routes, selectedId, editingId, detailsOpenId, rowBg = false,
+  items, visible, projects, routes, selectedId, editingId, detailsOpenId, rowBg = false, demo = false,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
   onSetProject, onCreateProject, onSetReminder, onMoveItem, onPromote, onToggleDetails, onSetDetails,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
@@ -52,6 +52,9 @@ export default function SectionList({
   /** Which destination sections EXIST (Settings → Features, view state
    *  excluded) — the capture routes degrade to Today for absent sections. */
   routes: { today: boolean; daily: boolean; backlog: boolean };
+  /** Demo mode: the capture teaches its grammar with rotating example lines
+   *  while it sits empty (TokenField's demoExamples). */
+  demo?: boolean;
   selectedId: string | null;
   editingId: string | null;
   detailsOpenId: string | null;
@@ -86,6 +89,20 @@ export default function SectionList({
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+
+  // Demo capture hints — one example per grammar family, each gated on the
+  // feature that makes its tokens real (an off axis never teaches its token;
+  // the color wouldn't either). The route token LEADS — mid-line ##t is
+  // prose, so a trailing one would teach a line that never routes. One hint
+  // is plain: no token = Today, the default destination.
+  const taskHints = [
+    { text: "Call the bank", on: routes.today },
+    { text: "##t Reply to Alex about the invoice !1", on: routes.today && features.taskPriorities },
+    { text: "##d Water the plants", on: routes.daily },
+    { text: "##b Read that paper sometime", on: routes.backlog },
+    { text: "##b Book the dentist #health", on: routes.backlog && features.taskProjects },
+    { text: "##t Prep the demo script @", on: routes.today && features.agent },
+  ].filter((h) => h.on).map((h) => h.text);
 
   const findItem = useCallback(
     (id: string): Item | undefined =>
@@ -182,6 +199,7 @@ export default function SectionList({
           ]}
           capture="tasks"
           route
+          demoExamples={demo ? taskHints : undefined}
           value={draft}
           onChange={setDraft}
           onKeyDown={(e) => {

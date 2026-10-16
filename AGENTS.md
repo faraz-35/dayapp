@@ -403,7 +403,8 @@ seeded demo always shows a live-looking week of journal history.
 - **A brand-new install launches straight into demo mode** (`first_run_tour`
   in demo.rs, 2026-09-24): when the real db has never answered the name ask
   (`owner_name` absent) and holds no content, setup enters demo directly — the
-  first-run experience is the seeded demo, and ⌘P → **Exit Demo Mode** is the
+  first-run experience is the seeded demo, and ⌘P → **Exit Demo Mode** (or the
+  header's **Exit Demo** button) is the
   on-ramp to the clean, empty real db and its name ask. Answering the ask
   (Enter or Esc) is what ends the tour; relaunches before that re-enter it,
   and every launch afterwards opens the real db. Demo mode never persists
@@ -699,7 +700,7 @@ dayapp/
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
-│   ├── TokenField.tsx              ← capture/edit field with live token coloring + display forms (##q → quote, !N → bars; transparent text + mirror div + own caret/selection overlay; scanTokens is the one matcher)
+│   ├── TokenField.tsx              ← capture/edit field with live token coloring + display forms (##q → quote, !N → bars; transparent text + mirror div + own caret/selection overlay; scanTokens is the one matcher; demoExamples = the rotating demo hints)
 │   ├── CommandPalette.tsx          ← ⌘P modal: filter + keyboard nav
 │   ├── KeyboardHelp.tsx            ← ⌘P keyboard reference card (the focus grammar, documented)
 │   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
@@ -1159,8 +1160,11 @@ which icon buttons mount top-right:
 `Theme cycle` on by default, `Journal` and `Quotes` off by default (the written-entry
 pages are opt-in chrome) (`dayapp-header-buttons`) — off hides only the
 button; the view
-stays in ⌘P (the two-layers rule). The update icon and timer chip aren't choices —
-they mount on their own conditions. The card's last row, **Window title bar**, is
+stays in ⌘P (the two-layers rule). The update icon, the timer chip, and demo
+mode's **Exit Demo** button aren't choices —
+they mount on their own conditions (the button only while the demo db is
+active: the labeled text pill first in the header's right cluster, left of the
+icon buttons — the first-run tour's visible on-ramp beside the ⌘P entry). The card's last row, **Window title bar**, is
 the OS's own chrome — close / minimize / zoom (`dayapp-window-decorations`,
 default on): tauri.conf.json ships the window decorated, hidden (`visible:
 false`), and setup applies the stored value before the first show, so neither
@@ -1196,10 +1200,23 @@ archive screen — inline-or-excluded is the whole visibility story.
 
 **Demo mode (⌘P):** `Enter/Exit Demo Mode` swaps the whole database to the disposable
 demo twin (see "Demo mode" under Data model); while active, `Reset Demo Data` re-seeds
-it and the three Mobile entries hide (the phone belongs to the real db). The masthead
+it, the three Mobile entries hide (the phone belongs to the real db), and the header
+carries the **Exit Demo** button (above). The masthead
 reads `Live @ Demo` in every view — the one indicator, calm by design. Everything else
 (sections, grammar, DnD, analytics) runs unchanged on the demo data; that identical-
-ness is what makes it a faithful demo. The session's interactions record into the
+ness is what makes it a faithful demo. The one deliberate difference: the three
+capture inputs (tasks / notes / goals) **teach their grammar while empty** — each
+rotates an example line roughly every 6.5s, per-swap wait jittered ±0.7s so the
+swaps never land on a metronome beat (`demoExamples` on TokenField; the
+`.token-ph` layer under the mirror, its own slow ph-in fade — 0.8s, 2px rise —
+per swap). Prose
+renders in `--text-faint`, the raw sigils (`##t`, `!1`, `$2`, `@`, `#tag`) in the
+dull accent (`rgba(var(--accent-rgb), .5)`) — raw, never the display forms, since
+the hint teaches what to type. The examples split over the surface's own
+`scanTokens` kinds, so a token colors exactly when the surface would parse it, and
+each hint is gated on the feature that makes its tokens real (a switched-off axis
+never teaches its token). Real-db surfaces render nothing — the resting capture
+stays bare there. The session's interactions record into the
 **dev log** while demo runs — auto-armed, ⌘P → `Dev Log: Start/Stop Recording` to
 toggle, nothing on screen (see "The dev log" under Logging).
 
@@ -1326,7 +1343,8 @@ into Notes or edit fields isn't hijacked.
   hairline labeled with the horizon's name (the Backlog's tier-divider pattern, text
   label instead of bars; empty groups render no divider). Achieved goals collapse
   into a dim "Achieved" group at the bottom — they never delete on their own.
-- Capture is line-only like the section inputs (no placeholder); it takes a
+- Capture is line-only like the section inputs (no placeholder; demo mode's
+  rotating example hints are the one exception — see Demo mode under UI/UX); it takes a
   `$1/$2/$3` horizon token ($1 short · $2 long · $3 timeless — `better
   entrepreneur $2 #hustle`), plain text defaulting to short. Same parse on
   edit — no token leaves the tier alone.

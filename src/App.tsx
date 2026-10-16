@@ -2389,6 +2389,21 @@ function DayAppBody() {
           {demoMode ? "Live @ Demo" : view === "analytics" ? "Analytics" : view === "journal" ? "Journal" : view === "quotes" ? "Quotes" : view === "settings" ? "Settings" : `Live @ ${liveAt}`}
         </span>
         <div className="header-right">
+          {/* Demo mode's standing exit — the labeled door beside the ⌘P
+              entry, first in the cluster so it sits left of the icon
+              buttons. It IS the first-run tour's on-ramp (a brand-new
+              install launches straight into the demo), so it reads as text,
+              not an icon. The demo.enter/exit trace rides the demoMode
+              transition effect; the click only fires the swap. */}
+          {demoMode && (
+            <button
+              className="demo-exit"
+              onClick={() => demoApi.exit().catch((e) => log.error("demo exit failed", e))}
+              title="Leave the sample data — back to your real list"
+            >
+              Exit Demo
+            </button>
+          )}
           {/* The running timer is always visible here — survives scrolling away
               from the timed row, and doubles as a "current focus" display.
               Pulse + elapsed only; the task name rides in the tooltip so the
@@ -2553,7 +2568,7 @@ function DayAppBody() {
                 lens is stricter than the default working view, and exiting
                 restores whatever the toggle was. */}
             {goalsEnabled && goalsVisible && (!activeView || activeView.goals) && (
-              <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} reloadEpoch={dataEpoch} hiddenFilter={goalPauseEnabled && showHiddenGoals ? "include" : "exclude"} />
+              <Goals projects={projects} onCreateProject={handleCreateProject} focusedId={focusGoalId} reloadEpoch={dataEpoch} hiddenFilter={goalPauseEnabled && showHiddenGoals ? "include" : "exclude"} demo={demoMode} />
             )}
             {/* Notes — the lowest-friction capture surface, right under the
                 goals. Lives above the DnD area so typing/pasting isn't a drag
@@ -2575,6 +2590,7 @@ function DayAppBody() {
                 hiddenPriorities={effHiddenNotePriorities}
                 onCreateProject={handleCreateProject}
                 onEntryRouted={handleEntryRouted}
+                demo={demoMode}
               />
             )}
             {(effHiddenPriorities.length > 0 || effTaskProjectFilter !== null || effAgentFilter !== null) && tasksEnabled && tasksVisible && allVisible.length === 0 && (
@@ -2632,6 +2648,7 @@ function DayAppBody() {
                 liveElapsed={liveElapsed}
                 timeTotals={rowTimeTotals}
                 onToggleTimer={handleToggleTimer}
+                demo={demoMode}
               />
             )}
           </>

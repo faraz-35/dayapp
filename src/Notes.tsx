@@ -69,7 +69,7 @@ const sortNotes = (list: Note[]) =>
   );
 
 export default function Notes({
-  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, cardBg = true, entryRoutes, onCreateProject, onEntryRouted,
+  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, cardBg = true, entryRoutes, onCreateProject, onEntryRouted, demo = false,
 }: {
   hiddenFilter: HiddenFilter;
   focusedId?: string | null;
@@ -100,6 +100,9 @@ export default function Notes({
    *  can refresh surfaces it owns (the quote modal). The capture itself is done
    *  here — the notes bar IS the bus. */
   onEntryRouted?: (kind: EntryKind) => void;
+  /** Demo mode: the capture teaches its grammar with rotating example lines
+   *  while it sits empty (TokenField's demoExamples). */
+  demo?: boolean;
 }) {
   const features = useFeatures();
   const [notes, setNotes] = useState<Note[]>([]);
@@ -377,6 +380,15 @@ export default function Notes({
             capture="notes"
             route
             multiline
+            demoExamples={demo ? [
+              // Demo capture hints — gated on the feature that makes each
+              // line's tokens real; a plain line is always on.
+              ...(entryRoutes.journal ? ["##j Shipped the demo build — felt easy"] : []),
+              ...(entryRoutes.quotes ? ["##q Simplicity is the ultimate sophistication"] : []),
+              ...(features.notePriorities ? ["Trip ideas: coast or mountains !2"] : []),
+              ...(features.noteProjects ? ["Call the bank about the card #admin"] : []),
+              "Meeting notes: keep the scope small",
+            ] : undefined}
             value={draft}
             onChange={setDraft}
             onKeyDown={(e) => {

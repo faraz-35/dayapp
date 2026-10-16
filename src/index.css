@@ -149,6 +149,26 @@ button {
    one accent icon at rest, since its whole job is to be noticed. */
 .icon-btn.update-ready { color: var(--accent); }
 
+/* Demo mode's Exit Demo button (first in .header-right, left of the icon
+   buttons): the one labeled header control — text, not a glyph — because it
+   IS the first-run tour's on-ramp. Calm bordered pill in the icon-btn's
+   radius and transition language. */
+.demo-exit {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  transition: background 0.08s ease, color 0.08s ease, border-color 0.08s ease;
+}
+.demo-exit:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
 /* ---- Search (⌘F) — floating modal ---------------------------------- */
 /* Mirrors the ⌘P command palette: a fixed dim backdrop + a centered card. NOT
    an inline/sticky bar — inline chrome pushes content and "feels inline." This
@@ -543,6 +563,33 @@ button {
 /* Every token family in the one accent — a token reads as "this processes",
    and only the real content stays plain text. */
 .token-mirror .tok { color: var(--accent); }
+
+/* Demo mode's rotating capture hint (TokenField's demoExamples): an example
+   line under the empty field — prose in the quietest shade, the raw sigils
+   (`##t`, `!1`, `$2`) in the dull accent. Same metrics as the mirror, so it
+   sits exactly where typed text would land. Each swap remounts the layer
+   (keyed) and the new line fades in over ~0.8s with a 2px rise — slow and
+   soft, a breath, not a blink. */
+.token-ph {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre;
+  animation: ph-in 0.8s ease-out;
+}
+@keyframes ph-in {
+  from { opacity: 0; transform: translateY(2px); }
+}
+.token-field.multiline .token-ph {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.token-ph .tok { color: rgba(var(--accent-rgb), 0.5); }
 /* TokenField's own caret + selection, drawn over the mirror's substituted
    layout (the native pair tracks the raw value — see the field rules above).
    Both position at the mirror's content origin and move with transform into

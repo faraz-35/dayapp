@@ -42,6 +42,24 @@ type FieldElement = HTMLInputElement | HTMLTextAreaElement;
 // content length; the caret locates indices over the actual DOM nodes.
 interface Seg { r0: number; r1: number; d0: number; dl: number; sub: boolean }
 
+// One hint line: the example split over scanTokens with the surface's own
+// grammar, prose faint and the raw sigils (`##t`, `!1`, `$2`) in the dull
+// accent. Raw, never the display forms — the hint teaches what to TYPE, and
+// the shared matcher keeps the coloring honest: a token the surface wouldn't
+// parse (a switched-off axis) stays plain text here too.
+function PlaceholderLine({ text, kinds }: { text: string; kinds: readonly TokenKind[] }) {
+  const spans = scanTokens(text, kinds);
+  const out: ReactNode[] = [];
+  let pos = 0;
+  spans.forEach((s, i) => {
+    if (s.start > pos) out.push(<span key={`p${i}`}>{text.slice(pos, s.start)}</span>);
+    out.push(<span key={i} className="tok">{text.slice(s.start, s.end)}</span>);
+    pos = s.end;
+  });
+  if (pos < text.length) out.push(<span key="tail">{text.slice(pos)}</span>);
+  return <>{out}</>;
+}
+
 export default function TokenField({
   kinds,
   capture,
@@ -53,6 +71,7 @@ export default function TokenField({
   className,
   multiline = false,
   route = false,
+  demoExamples,
   ref,
 }: {
   /** The surface's grammar — exactly the tokens its Enter handler parses. */
@@ -72,6 +91,13 @@ export default function TokenField({
   multiline?: boolean;
   /** Listen for the grammar's route prefill (nj/nq, nt/nd/nb). */
   route?: boolean;
+  /** Demo mode's rotating capture hints: example lines shown while the field
+   *  sits empty, one stepped to every few seconds, so the grammar teaches
+   *  itself. Tokens color through the surface's own `kinds` — a hint for a
+   *  switched-off axis would render plain, so callers gate their examples on
+   *  the features that make them real. Undefined (every real-db surface)
+   *  renders nothing. */
+  demoExamples?: readonly string[];
   /** The field element itself, for focus/caret control by the owning surface
    *  (EditInput's autofocus-at-end). */
   ref?: Ref<FieldElement>;
@@ -81,6 +107,31 @@ export default function TokenField({
   const caretRef = useRef<HTMLSpanElement>(null);
   const selRectsRef = useRef<HTMLSpanElement>(null);
   const [focused, setFocused] = useState(false);
+
+  // The hint rotation: the example index steps roughly every 6.5s while the
+  // field sits empty — each wait jittered ±0.7s so the swaps never land on a
+  // metronome beat — and the keyed layer below remounts on each step so the
+  // new line fades in slowly (the .token-ph ph-in). The chain re-arms from a
+  // timeout, not an interval, so the jitter is per-swap. The effect keys off
+  // the joined list, not the array identity — callers build their examples
+  // inline and any parent render would otherwise reset the clock. App-driven
+  // churn: it never traces.
+  const [phIdx, setPhIdx] = useState(0);
+  const phText = demoExamples?.[phIdx % demoExamples.length];
+  const phOn = !!phText && value.length === 0;
+  const phKey = demoExamples?.join("\n") ?? "";
+  useEffect(() => {
+    if (!phOn || !demoExamples || demoExamples.length < 2) return;
+    const wait = () => 6500 + (Math.random() * 2 - 1) * 700;
+    let id: number;
+    const step = () => {
+      setPhIdx((i) => (i + 1) % demoExamples.length);
+      id = window.setTimeout(step, wait());
+    };
+    id = window.setTimeout(step, wait());
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phOn, phKey]);
 
   // The multiline capture fits its drafted lines — one line at rest, one more
   // per Shift+Enter, shrinking back on deletes — never scrolling inside a
@@ -367,6 +418,13 @@ export default function TokenField({
 
   return (
     <div className={["token-field", className, multiline ? "multiline" : ""].filter(Boolean).join(" ")}>
+      {/* The demo hint sits under the mirror in DOM order, so the drawn caret
+          paints over it exactly like a native caret over a placeholder. */}
+      {phOn && phText && (
+        <div className="token-ph" aria-hidden="true" key={phIdx}>
+          <PlaceholderLine text={phText} kinds={kinds} />
+        </div>
+      )}
       <div ref={mirrorRef} className="token-mirror" aria-hidden="true">
         <span ref={selRectsRef} className="tok-sel" />
         <span ref={caretRef} className="tok-caret" />
