@@ -2,9 +2,10 @@ name: Release
 
 # The release pipeline, on every push to main. The version in
 # src-tauri/tauri.conf.json is the lever: a version that has no GitHub
-# release yet is built, signed, and published — the macOS updater bundle
-# (DayApp.app.tar.gz + .sig + latest.json, the in-app update channel) plus
-# the Windows NSIS installer on the same release. A version that already has
+# release yet is built, signed, and published — the macOS updater bundle,
+# the signed Windows NSIS installer, and the signed Linux AppImage on the
+# same release, all three referenced by latest.json (the in-app update
+# channel every platform's update icon reads). A version that already has
 # its release skips at the gate, so an ordinary push never ships anything
 # and the update channel only moves when the version does.
 #
@@ -74,55 +75,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY="$RUNNER_TEMP/updater.key" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
             npm run tauri build -- --config src-tauri/tauri.release.conf.json --bundles app
 
-      - name: Generate latest.json
-        env:
-          VERSION: ${{ needs.gate.outputs.version }}
-        run: |
-          bundle="src-tauri/target/release/bundle"
-          sig="$(cat "$bundle/macos/DayApp.app.tar.gz.sig")"
-          python3 - "$VERSION" "$sig" "$bundle/latest.json" <<'EOF'
-          import datetime, json, sys
-          version, sig, out = sys.argv[1:4]
-          doc = {
-              "version": version,
-              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "platforms": {"darwin-aarch64": {
-                  "signature": sig,
-                  "url": f"https://github.com/faraz-35/dayapp/releases/download/v{version}/DayApp.app.tar.gz",
-              }},
-          }
-          with open(out, "w") as f:
-              json.dump(doc, f, indent=2)
-              f.write("\n")
-          EOF
-
-      - name: Verify the manifest and signature
-        env:
-          VERSION: ${{ needs.gate.outputs.version }}
-        run: |
-          python3 - "$VERSION" "src-tauri/target/release/bundle" <<'EOF'
-          import base64, json, os, sys
-          version, bundle = sys.argv[1:3]
-          doc = json.load(open(os.path.join(bundle, "latest.json")))
-          assert doc["version"] == version, "latest.json version mismatch"
-          raw = open(os.path.join(bundle, "macos/DayApp.app.tar.gz.sig")).read()
-          assert doc["platforms"]["darwin-aarch64"]["signature"] == raw.strip(), "latest.json signature != .sig file"
-          b64 = "".join(l for l in raw.splitlines() if not l.startswith("untrusted comment:"))
-          assert b"file:DayApp.app.tar.gz" in base64.b64decode(b64), ".sig names the wrong file"
-          print("verified — latest.json is the", version, "manifest")
-          EOF
-
       - uses: actions/upload-artifact@v4
         with:
           name: macos-updater
           path: |
             src-tauri/target/release/bundle/macos/DayApp.app.tar.gz
             src-tauri/target/release/bundle/macos/DayApp.app.tar.gz.sig
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: latest-json
-          path: src-tauri/target/release/bundle/latest.json
 
   windows:
     if: needs.gate.outputs.release == 'true'
@@ -145,18 +103,71 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Build the NSIS installer
+      # createUpdaterArtifacts (the release config) makes the bundler sign the
+      # installer — the updater runs this exe on an update, so its signature
+      # ships with it.
+      - name: Build the signed NSIS installer
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
+          printf '%s' "$KEY" > "$RUNNER_TEMP/updater.key"
           npm ci
-          npm run tauri build -- --config src-tauri/tauri.windows.conf.json
+          TAURI_SIGNING_PRIVATE_KEY="$RUNNER_TEMP/updater.key" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+            npm run tauri build -- --config src-tauri/tauri.release.conf.json --bundles nsis
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-setup
-          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+
+  linux:
+    if: needs.gate.outputs.release == 'true'
+    needs: gate
+    runs-on: ubuntu-22.04 # oldest supported runner → glibc 2.35, matching the dev builds
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Tauri build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential file libssl-dev librsvg2-dev
+
+      - name: Build the signed AppImage
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          printf '%s' "$KEY" > "$RUNNER_TEMP/updater.key"
+          npm ci
+          TAURI_SIGNING_PRIVATE_KEY="$RUNNER_TEMP/updater.key" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+            npm run tauri build -- --config src-tauri/tauri.release.conf.json --bundles appimage
+          # The strip rewrites the AppImage after the bundler's own signing
+          # pass, so the shipped signature is made over the shipped bytes.
+          scripts/appimage-strip.sh src-tauri/target/release/bundle/appimage/DayApp_*_amd64.AppImage
+          TAURI_SIGNING_PRIVATE_KEY="$RUNNER_TEMP/updater.key" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+            npm run tauri signer sign -- src-tauri/target/release/bundle/appimage/DayApp_*_amd64.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: |
+            src-tauri/target/release/bundle/appimage/DayApp_*_amd64.AppImage
+            src-tauri/target/release/bundle/appimage/DayApp_*_amd64.AppImage.sig
 
   publish:
-    needs: [gate, macos, windows]
+    needs: [gate, macos, windows, linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -166,6 +177,66 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+
+      - name: Generate latest.json (the update channel manifest)
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          python3 - "$VERSION" dist <<'EOF'
+          import datetime, glob, json, os, sys
+          version, dist = sys.argv[1:3]
+          win_sig = glob.glob(f"{dist}/windows-setup/*-setup.exe.sig")[0]
+          lin_sig = glob.glob(f"{dist}/linux-appimage/*_amd64.AppImage.sig")[0]
+          base = f"https://github.com/faraz-35/dayapp/releases/download/v{version}"
+          platforms = {
+              "darwin-aarch64": {
+                  "signature": open(f"{dist}/macos-updater/DayApp.app.tar.gz.sig").read().strip(),
+                  "url": f"{base}/DayApp.app.tar.gz",
+              },
+              "windows-x86_64": {
+                  "signature": open(win_sig).read().strip(),
+                  "url": f"{base}/{os.path.basename(win_sig)[:-4]}",
+              },
+              "linux-x86_64": {
+                  "signature": open(lin_sig).read().strip(),
+                  "url": f"{base}/{os.path.basename(lin_sig)[:-4]}",
+              },
+          }
+          doc = {
+              "version": version,
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": platforms,
+          }
+          with open("latest.json", "w") as f:
+              json.dump(doc, f, indent=2)
+              f.write("\n")
+          EOF
+          cat latest.json
+
+      - name: Verify the manifest and every signature
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          python3 - "$VERSION" <<'EOF'
+          import base64, glob, json, os, sys
+          version = sys.argv[1]
+          doc = json.load(open("latest.json"))
+          assert doc["version"] == version, "latest.json version mismatch"
+          entries = {
+              "darwin-aarch64": "macos-updater/DayApp.app.tar.gz",
+              "windows-x86_64": glob.glob("windows-setup/*-setup.exe")[0],
+              "linux-x86_64": glob.glob("linux-appimage/*_amd64.AppImage")[0],
+          }
+          for platform, artifact in entries.items():
+              name = os.path.basename(artifact)
+              entry = doc["platforms"][platform]
+              assert entry["url"].endswith("/" + name), f"{platform}: latest.json url != the uploaded asset"
+              raw = open(artifact + ".sig").read()
+              assert entry["signature"] == raw.strip(), f"{platform}: latest.json signature != .sig file"
+              b64 = "".join(l for l in raw.splitlines() if not l.startswith("untrusted comment:"))
+              assert f"file:{name}".encode() in base64.b64decode(b64), f"{platform}: .sig names the wrong file"
+              print(f"verified — {platform} → {name}")
+          EOF
 
       - name: Release notes (commits since the last release tag)
         run: |
@@ -187,8 +258,11 @@ jobs:
           gh release create "v$VERSION" \
             dist/macos-updater/DayApp.app.tar.gz \
             dist/macos-updater/DayApp.app.tar.gz.sig \
-            dist/latest-json/latest.json \
             dist/windows-setup/*-setup.exe \
+            dist/windows-setup/*-setup.exe.sig \
+            dist/linux-appimage/*_amd64.AppImage \
+            dist/linux-appimage/*_amd64.AppImage.sig \
+            latest.json \
             --repo faraz-35/dayapp --target "$GITHUB_SHA" \
             --title "DayApp v$VERSION" --notes-file notes.md
 
@@ -208,7 +282,7 @@ jobs:
           echo "::error::the update channel doesn't serve v$VERSION — check the release assets"
           exit 1
 
-      - name: Install path check (the site's versionless curl one-liner)
+      - name: macOS install-path check (the site's versionless curl one-liner)
         env:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
@@ -226,4 +300,32 @@ jobs:
             sleep 10
           done
           echo "::error::the curl install path doesn't serve v$VERSION's bytes — check getdayapp.vercel.app/install.sh"
+          exit 1
+
+      - name: Linux + Windows install-path check (the site's installers)
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          want_appimage="$(sha256sum dist/linux-appimage/*_amd64.AppImage | cut -d' ' -f1)"
+          want_setup="$(sha256sum dist/windows-setup/*-setup.exe | cut -d' ' -f1)"
+          for _ in 1 2 3 4 5 6; do
+            script="$(curl -fsSL https://getdayapp.vercel.app/install.sh 2>/dev/null || true)"
+            ps1="$(curl -fsSL https://getdayapp.vercel.app/install.ps1 2>/dev/null || true)"
+            # Both installers must resolve the versioned channel, never the
+            # rolling dev tags, or updates would fork between two lineages.
+            if printf '%s' "$script" | grep -q 'releases/latest' \
+               && printf '%s' "$ps1" | grep -q 'releases/latest'; then
+              latest="$(curl -fsSL https://api.github.com/repos/faraz-35/dayapp/releases/latest 2>/dev/null || true)"
+              appimage_url="$(printf '%s' "$latest" | grep -o 'https://[^"]*\.AppImage' | head -1 || true)"
+              setup_url="$(printf '%s' "$latest" | grep -o 'https://[^"]*-setup\.exe' | head -1 || true)"
+              got_appimage="$(curl -fsL "$appimage_url" 2>/dev/null | sha256sum | cut -d' ' -f1 || true)"
+              got_setup="$(curl -fsL "$setup_url" 2>/dev/null | sha256sum | cut -d' ' -f1 || true)"
+              if [ "$got_appimage" = "$want_appimage" ] && [ "$got_setup" = "$want_setup" ]; then
+                echo "both installers resolve v$VERSION's bytes"
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo "::error::the site installers don't serve v$VERSION's bytes — check getdayapp.vercel.app/install.sh + install.ps1"
           exit 1

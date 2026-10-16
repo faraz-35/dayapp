@@ -40,54 +40,11 @@ jobs:
           npm ci
           npm run tauri build -- --config src-tauri/tauri.linux.conf.json
 
-      # The bundler ships the runner's libwayland-* (wayland 1.20), and the
-      # AppImage's RPATH ($ORIGIN/../lib) makes that stale copy shadow the
-      # host's. A current Mesa (25+) binds against it, misses the wayland-1.22
-      # symbols, and dies in EGL init — tauri-apps/tauri#15665. Repack without
-      # them so the host's copy is used: every Wayland session has it, and on
-      # X11-only boxes the installer's webkit2gtk-4.1 check pulls it in
-      # (libwebkit2gtk → libgtk-3 → libwayland-client). Don't remove this
-      # step — a stock repack re-breaks those machines.
-      - name: Strip bundled Wayland libs and repack
-        run: |
-          set -eu
-          img="$(readlink -f src-tauri/target/release/bundle/appimage/*.AppImage)"
-          chmod +x "$img"
-          work="$(mktemp -d)"
-          (
-            cd "$work"
-            "$img" --appimage-extract >/dev/null
-            rm -f squashfs-root/usr/lib/libwayland-*.so*
-            # linuxdeploy's prebuilt launcher lands as 0770 root:root — real
-            # FUSE mounts remap uid so it never shows, but a sandbox that execs
-            # the tree as a plain user (the AppImage catalog's firejail test)
-            # hits Permission denied. Normalize before packing.
-            chmod -R a+rX squashfs-root
-            chmod a+x squashfs-root/AppRun squashfs-root/AppRun.wrapped
-            curl -fsSL -o appimagetool \
-              https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-            chmod +x appimagetool
-            ARCH=x86_64 ./appimagetool --appimage-extract-and-run --comp zstd \
-              squashfs-root "$img"
-          )
-
-      - name: Assert the Wayland libs are gone
-        run: |
-          set -eu
-          img="$(readlink -f src-tauri/target/release/bundle/appimage/*.AppImage)"
-          verify="$(mktemp -d)"
-          (
-            cd "$verify"
-            "$img" --appimage-extract >/dev/null
-            leftover="$(find squashfs-root/usr/lib -name 'libwayland-*' || true)"
-            if [ -n "$leftover" ]; then
-              echo "::error::bundled libwayland survived the strip — refusing to ship"
-              echo "$leftover"
-              exit 1
-            fi
-            test -f squashfs-root/usr/lib/libwebkit2gtk-4.1.so.0
-            echo "clean: no bundled wayland libs, the host's copy will be used"
-          )
+      # scripts/appimage-strip.sh — why the strip and the mode normalization
+      # exist is in its header (EGL init on Mesa 25+ hosts, the AppImage
+      # catalog's plain-user sandbox); it also refuses to ship a broken strip.
+      - name: Strip bundled Wayland libs, normalize modes, repack
+        run: scripts/appimage-strip.sh src-tauri/target/release/bundle/appimage/*.AppImage
 
       - name: Refresh the rolling linux-dev prerelease
         env:

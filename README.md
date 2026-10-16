@@ -10,7 +10,7 @@ Keep today's tasks, notes, and goals in one fast window — every action you tak
 
 <a href="https://github.com/faraz-35/dayapp/releases/latest"><img src="https://img.shields.io/badge/macOS-native-7b8cff?style=for-the-badge&logo=apple&logoColor=white&labelColor=0e0f11" alt="macOS"></a>
 <a href="https://github.com/faraz-35/dayapp/releases/latest"><img src="https://img.shields.io/badge/Windows-native-7b8cff?style=for-the-badge&logo=windows&logoColor=white&labelColor=0e0f11" alt="Windows"></a>
-<a href="https://github.com/faraz-35/dayapp/releases/tags/linux-dev"><img src="https://img.shields.io/badge/Linux-native-7b8cff?style=for-the-badge&logo=linux&logoColor=white&labelColor=0e0f11" alt="Linux"></a>
+<a href="https://github.com/faraz-35/dayapp/releases/latest"><img src="https://img.shields.io/badge/Linux-native-7b8cff?style=for-the-badge&logo=linux&logoColor=white&labelColor=0e0f11" alt="Linux"></a>
 <a href="https://github.com/faraz-35/dayapp-mobile/releases/latest"><img src="https://img.shields.io/badge/Android-companion-7b8cff?style=for-the-badge&logo=android&logoColor=white&labelColor=0e0f11" alt="Android companion app"></a>
 <img src="https://img.shields.io/badge/Tauri-2-7b8cff?style=for-the-badge&logo=tauri&logoColor=white&labelColor=0e0f11" alt="Tauri 2">
 <img src="https://img.shields.io/badge/React-19-7b8cff?style=for-the-badge&logo=react&logoColor=white&labelColor=0e0f11" alt="React 19">
@@ -18,7 +18,7 @@ Keep today's tasks, notes, and goals in one fast window — every action you tak
 <a href="LICENSE"><img src="https://img.shields.io/github/license/faraz-35/dayapp?style=for-the-badge&labelColor=0e0f11&color=7b8cff" alt="MIT license"></a>
 <a href="https://github.com/faraz-35/dayapp/releases/latest"><img src="https://img.shields.io/github/v/release/faraz-35/dayapp?style=for-the-badge&labelColor=0e0f11&color=7b8cff" alt="Latest release"></a>
 
-[Website](https://getdayapp.vercel.app) · [Download for macOS or Windows](https://github.com/faraz-35/dayapp/releases/latest) · [Linux AppImage](https://github.com/faraz-35/dayapp/releases/tags/linux-dev) · [Android APK](https://github.com/faraz-35/dayapp-mobile/releases/latest)
+[Website](https://getdayapp.vercel.app) · [Download for macOS, Windows, or Linux](https://github.com/faraz-35/dayapp/releases/latest) · [Android APK](https://github.com/faraz-35/dayapp-mobile/releases/latest)
 
 </div>
 
@@ -113,7 +113,7 @@ The binary lives inside the app bundle. ⌘P → CLI: Enable installs the `dayap
 
 ## Update
 
-Installed from a release? A small accent icon appears at the top right of the header when a new version is out — one click downloads, verifies, and installs it. Building from source? ⌘P → Update App Locally rebuilds, swaps, and relaunches (or `npm run update`). Shipping a release: bump `version` in `src-tauri/tauri.conf.json` and push to `main` — CI builds, signs, and publishes the release (macOS updater bundle + Windows installer) and verifies the update channel and the site's curl installer serve it.
+Installed from a release? A small accent icon appears at the top right of the header when a new version is out — one click downloads, verifies, and installs it. Building from source? ⌘P → Update App Locally rebuilds, swaps, and relaunches (or `npm run update`). Shipping a release: bump `version` in `src-tauri/tauri.conf.json` and push to `main` — CI builds, signs, and publishes the release (macOS updater bundle, Windows installer, and Linux AppImage) and verifies the update channel and the site's installers serve it.
 
 ## Develop
 

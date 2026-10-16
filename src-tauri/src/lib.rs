@@ -892,8 +892,8 @@ async fn self_update_macos(app: AppHandle) -> Result<(), String> {
 // newer release exists; clicking it runs `update_install`, which downloads,
 // verifies the release's minisign signature against the pubkey baked into
 // tauri.conf.json, swaps the bundle, and relaunches. Artifacts are only built
-// by scripts/release.sh (tauri.release.conf.json), so a plain source build
-// never needs the signing key.
+// by the release workflow (.github/workflows/release.yml, tauri.release.conf.json),
+// so a plain source build never needs the signing key.
 //
 // Progress rides the same "update-status" channel the local build uses, with
 // phase "downloading" instead of "building" — the overlay renders either.

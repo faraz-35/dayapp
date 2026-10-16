@@ -573,12 +573,20 @@ carry the build machine's path, which never exists on a user's Mac)?
   ships only when that version has no GitHub release yet — so the whole
   ritual is **bump the version, push**. A release run builds the signed
   macOS updater bundle (`tauri.release.conf.json` sets
-  `createUpdaterArtifacts`; `--bundles app`), the Windows NSIS installer, and
-  publishes all of it in one `gh release` (`v<version>` tagged at the pushed
-  commit), then re-runs the script's old end gates: the manifest/signature
-  verify, the channel check (`releases/latest/download/latest.json` must
-  serve the new version), and the install-path check (the site's versionless
-  curl one-liner must serve the new release's bytes). A plain `tauri build`
+  `createUpdaterArtifacts`; `--bundles app`), the signed Windows NSIS
+  installer (`--bundles nsis`), and the signed Linux AppImage
+  (`--bundles appimage` on ubuntu-22.04, re-signed after
+  `scripts/appimage-strip.sh` rewrites the file — the shipped signature is
+  made over the shipped bytes), then publishes all of it in one `gh release`
+  (`v<version>` tagged at the pushed commit) with a `latest.json` carrying
+  all three platform keys (`darwin-aarch64`, `windows-x86_64`,
+  `linux-x86_64`) — so the update icon works on every platform. Then the end
+  gates: the manifest/signature verify (every platform entry checked against
+  its `.sig`), the channel check (`releases/latest/download/latest.json`
+  must serve the new version), and the install-path checks (the site's
+  install.sh must serve the new macOS bundle and Linux AppImage's bytes,
+  install.ps1 the new Windows installer's — all three resolve the versioned
+  channel, never the dev tags). A plain `tauri build`
   still produces NO updater artifacts and needs NO signing key; artifacts
   only generate in the release config. The signing key is the passwordless
   minisign keypair, now living in the repo secret `TAURI_SIGNING_PRIVATE_KEY`
@@ -599,16 +607,26 @@ carry the build machine's path, which never exists on a user's Mac)?
 The Linux build rides CI, not a local ritual: every push to `main` runs
 `.github/workflows/linux.yml` on ubuntu-22.04 (glibc 2.35 — forward-compatible
 everywhere) and refreshes a rolling `linux-dev` prerelease with the AppImage
-(bundle targets come from `tauri.linux.conf.json`, merged via `--config`; no
-updater artifacts — the in-app release channel is still macOS-only, and on
-Linux the updater check just finds no artifact and stays quiet until Linux
-artifacts join `latest.json`). Host runtime dependency: `webkit2gtk-4.1`
-(`pacman -S webkit2gtk-4.1` on Arch/Omarchy). A post-build workflow step
-strips the bundler's `libwayland-*` out of the AppImage and repacks it — the
+(bundle targets come from `tauri.linux.conf.json`, merged via `--config`).
+That rolling build is the dev surface; **versioned releases carry the signed
+updater AppImage** (release.yml's linux job — same glibc 2.35 base, same
+strip script), and since the update channel serves `linux-x86_64` the
+in-app updater works on Linux: it replaces the AppImage file in place at the
+running path (install.sh puts it in `~/.local/bin`), and install.sh itself
+installs from the versioned channel (`releases/latest`, like install.ps1 for
+Windows) so a fresh install lands on the updater-capable lineage.
+Host runtime dependency: `webkit2gtk-4.1`
+(`pacman -S webkit2gtk-4.1` on Arch/Omarchy). A post-build step
+(`scripts/appimage-strip.sh`, shared with release.yml) strips the bundler's
+`libwayland-*` out of the AppImage and repacks it — the
 runner's wayland 1.20 otherwise shadows the host's newer copy through the
 AppImage RPATH and kills EGL init on Mesa 25+ hosts (tauri#15665); the host
 copy is guaranteed present on every graphical install. Removing the strip
-re-breaks those machines. The macOS-only paths are
+re-breaks those machines. The same script normalizes file modes
+(`a+rX`): linuxdeploy's prebuilt launcher lands as 0770 root:root, harmless
+under a real FUSE mount's uid remap but fatal in plain-user sandboxes (the
+AppImage catalog appimage.github.io lists DayApp; its firejail test caught
+exactly this). The macOS-only paths are
 cfg-gated: AeroSpace placement is macOS-compiled only, `self_update` errors
 loudly off-macOS (`update_source_available` returns `false`, so the palette
 entry never shows), backups reveal uses `xdg-open` off-macOS, and the CLI
@@ -695,11 +713,12 @@ dayapp/
 ├── icon-source.svg                 ← icon master; regenerate others via `npx tauri icon`
 ├── .github/
 │   └── workflows/
-│       ├── release.yml             ← CI releases: gate on tauri.conf.json's version → signed macOS bundle + latest.json + Windows installer → one v<version> release + channel/install checks
-│       ├── linux.yml               ← CI AppImage on every main push → rolling linux-dev prerelease
+│       ├── release.yml             ← CI releases: gate on tauri.conf.json's version → signed macOS bundle + signed Windows installer + signed Linux AppImage → latest.json (all three platforms) → one v<version> release + channel/install checks
+│       ├── linux.yml               ← CI AppImage on every main push → rolling linux-dev prerelease (shares scripts/appimage-strip.sh with release.yml)
 │       └── windows.yml             ← CI NSIS installer on every main push → rolling windows-dev prerelease
 ├── scripts/
-│   └── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
+│   ├── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
+│   └── appimage-strip.sh           ← strips libwayland-*, normalizes modes, repacks + verifies a built AppImage (linux.yml + release.yml's linux job)
 ├── src/
 │   ├── App.tsx                     ← shell only: state, effects, the focus grammar (key handler), header, view switching, timer chip
 │   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + goalsApi/parseGoalText + projectColor/formatReminder/formatDuration
@@ -1661,13 +1680,15 @@ git push origin main
 Every main push runs `.github/workflows/release.yml`; its gate ships only
 when the pushed `version` has no GitHub release yet — an ordinary push skips
 at the gate, so the update channel only moves when the version does. A
-release run builds the signed macOS updater bundle + `latest.json` and the
-Windows NSIS installer (two parallel jobs), then publishes one `v<version>`
-release carrying all of it — notes auto-generated from the commits since the
-last tag — and re-runs the end gates: manifest/signature verify, the channel
+release run builds the signed macOS updater bundle, the signed Windows NSIS
+installer, and the signed Linux AppImage (three parallel jobs), generates a
+`latest.json` referencing all three platforms, then publishes one
+`v<version>` release carrying all of it — notes auto-generated from the
+commits since the last tag — and re-runs the end gates: manifest/signature
+verify (per platform), the channel
 check (`releases/latest/download/latest.json` polled until it serves the new
-version), and the install-path check (the site's versionless curl one-liner
-must serve exactly the new release's bytes, so a release never edits or
+version), and the install-path checks (the site's installers must serve
+exactly the new release's bytes, so a release never edits or
 deploys the site — the tap's cask is no longer maintained; the site dropped
 brew; curl is the one install path). The signing key is the repo secret
 `TAURI_SIGNING_PRIVATE_KEY` (recovery copy: the macOS keychain, service
