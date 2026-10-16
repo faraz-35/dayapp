@@ -224,9 +224,9 @@ jobs:
           doc = json.load(open("latest.json"))
           assert doc["version"] == version, "latest.json version mismatch"
           entries = {
-              "darwin-aarch64": "macos-updater/DayApp.app.tar.gz",
-              "windows-x86_64": glob.glob("windows-setup/*-setup.exe")[0],
-              "linux-x86_64": glob.glob("linux-appimage/*_amd64.AppImage")[0],
+              "darwin-aarch64": "dist/macos-updater/DayApp.app.tar.gz",
+              "windows-x86_64": glob.glob("dist/windows-setup/*-setup.exe")[0],
+              "linux-x86_64": glob.glob("dist/linux-appimage/*_amd64.AppImage")[0],
           }
           for platform, artifact in entries.items():
               name = os.path.basename(artifact)
