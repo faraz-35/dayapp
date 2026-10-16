@@ -167,9 +167,12 @@ jobs:
         with:
           path: dist
 
-      - name: Release notes (commits since the last tag)
+      - name: Release notes (commits since the last release tag)
         run: |
-          prev="$(git tag --sort=-v:refname | head -1 || true)"
+          # Version tags only — the rolling linux-dev/windows-dev prerelease
+          # tags sort above vN.N.N in --sort=-v:refname and would narrow the
+          # walk to the last push, leaving nothing after the bump filter.
+          prev="$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.' | head -1 || true)"
           {
             echo "## Changes"
             echo
