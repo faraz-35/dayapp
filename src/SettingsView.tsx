@@ -25,7 +25,7 @@ import { IconPencil, IconX } from "./components/icons";
 
 export type FeatureKey =
   | "tasks" | "today" | "daily" | "backlog" | "notes" | "goals" | "journal" | "quotes"
-  | "taskProjects" | "noteProjects" | "goalProjects"
+  | "taskProjects" | "noteProjects" | "goalProjects" | "goalTimeframes"
   | "taskPriorities" | "notePriorities" | "agent" | "timer" | "reminders"
   | "taskHide" | "dailyPause" | "noteHide" | "goalPause"
   | "taskDetails" | "noteDownload";
@@ -166,6 +166,7 @@ const FEATURES: { key: FeatureKey; label: string; hint: string; group: (typeof F
   { key: "journal", label: "Journal", hint: "##j entries + the page — survives Notes off", group: "notes" },
   { key: "quotes", label: "Quotes", hint: "##q entries, the page + the idle moment — survives Notes off", group: "notes" },
   { key: "goals", label: "Goals", hint: "the identity layer", group: "goals" },
+  { key: "goalTimeframes", label: "Goal timeframes", hint: "the $1/$2/$3 tiers — off, goals are one simple list", group: "goals" },
   { key: "goalProjects", label: "Goal projects", hint: "the #tag link on a goal", group: "goals" },
   { key: "goalPause", label: "Goal pause", hint: "set a goal down — the ◐ with an expiry, resumed by ↺", group: "goals" },
 ];
@@ -191,6 +192,7 @@ const GATED_BY: Partial<Record<FeatureKey, FeatureKey>> = {
   noteHide: "notes",
   noteDownload: "notes",
   goalProjects: "goals",
+  goalTimeframes: "goals",
   goalPause: "goals",
 };
 

@@ -433,6 +433,14 @@ async fn edit_goal(
 }
 
 #[tauri::command]
+async fn move_goal(
+    db: State<'_, DbState>, id: String, to_horizon: String, new_index: i64,
+) -> Result<(), String>
+{
+    with_db(db, move |db| db.move_goal(&id, &to_horizon, new_index)).await
+}
+
+#[tauri::command]
 async fn set_goal_project(
     db: State<'_, DbState>, id: String, project_id: Option<String>,
 ) -> Result<(), String>
@@ -1153,7 +1161,7 @@ pub fn run() {
             list_entries, add_entry, update_entry, delete_entry,
             list_projects, create_project, rename_project, delete_project, set_item_project,
             set_reminder, set_item_priority, set_item_agent, set_item_details,
-            list_goals, create_goal, edit_goal, set_goal_project,
+            list_goals, create_goal, edit_goal, move_goal, set_goal_project,
             achieve_goal, unachieve_goal, delete_goal, hide_goal, unhide_goal,
             start_timer, stop_timer, discard_timer, get_active_timer,
             settings_get, settings_set, settings_remove,

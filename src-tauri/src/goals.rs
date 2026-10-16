@@ -162,6 +162,57 @@ impl Db {
         Ok(tx.commit()?)
     }
 
+    /// Move a goal to another horizon (the drag) or reorder within one. A
+    /// cross-horizon move logs `goal_edited` with the from/to horizon pair —
+    /// the same journal entry the leading-word edit writes, so no new action
+    /// verb and the actions CHECK stays untouched; a same-horizon reorder is
+    /// unlogged, like a same-section task reorder. Re-indexes the
+    /// destination horizon's visible (active, un-paused) rows to 0..N so
+    /// sort_order stays contiguous there — the frontend's drop index counts
+    /// that same group.
+    pub fn move_goal(&self, id: &str, to_horizon: &str, new_index: i64) -> anyhow::Result<()> {
+        if !HORIZONS.contains(&to_horizon) {
+            anyhow::bail!("horizon must be short, long, or timeless (got \"{to_horizon}\")");
+        }
+        let conn = self.conn.lock().unwrap();
+        let now = now_iso();
+        let tx = conn.unchecked_transaction()?;
+        let (text, from_horizon): (String, String) = tx.query_row(
+            "SELECT text, horizon FROM goals WHERE id = ?1", params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).map_err(|e| anyhow::anyhow!("no goal {id}: {e}"))?;
+
+        if from_horizon != to_horizon {
+            tx.execute(
+                "UPDATE goals SET horizon = ?1, updated_at = ?2 WHERE id = ?3",
+                params![to_horizon, now, id],
+            )?;
+            log_goal_action(&tx, id, &text, "goal_edited",
+                            Some(&from_horizon), Some(to_horizon), None, None, &now)?;
+        }
+
+        let mut ids: Vec<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT id FROM goals
+                 WHERE horizon = ?1 AND status = 'active' AND hidden = 0 AND id != ?2
+                 ORDER BY sort_order, created_at",
+            )?;
+            let rows = stmt.query_map(params![to_horizon, id], |r| r.get::<_, String>(0))?;
+            let mut v = Vec::new();
+            for r in rows { v.push(r?); }
+            v
+        };
+        let insert_at = (new_index as usize).min(ids.len());
+        ids.insert(insert_at, id.to_string());
+        for (i, row_id) in ids.iter().enumerate() {
+            tx.execute(
+                "UPDATE goals SET sort_order = ?1 WHERE id = ?2",
+                params![i as i64, row_id],
+            )?;
+        }
+        Ok(tx.commit()?)
+    }
+
     /// Assign (or clear) a goal's project. Housekeeping — not logged.
     pub fn set_goal_project(
         &self, id: &str, project_id: Option<&str>,
@@ -377,6 +428,41 @@ mod tests {
         let verbs: Vec<&str> = log.iter().map(|a| a.action.as_str()).collect();
         assert_eq!(verbs, ["unpaused", "paused", "goal_created"]);
         assert!(log.iter().all(|a| a.goal_id.as_deref() == Some(g.id.as_str())));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The drag: a cross-horizon move rewrites the horizon and logs the
+    /// goal_edited from/to pair (the leading-word edit's entry); a
+    /// same-horizon reorder re-indexes silently. Paused rows don't take part
+    /// in the destination's ordering.
+    #[test]
+    fn goal_move_moves_and_reindexes() {
+        let dir = tmp_dir();
+        let db = Db::open(&dir.join("t.db")).unwrap();
+        let a = db.create_goal("a", "short", None).unwrap();
+        let b = db.create_goal("b", "short", None).unwrap();
+        let c = db.create_goal("c", "long", None).unwrap();
+
+        // Reorder within short: b to the front, unlogged.
+        db.move_goal(&b.id, "short", 0).unwrap();
+        let short = |db: &Db| -> Vec<String> {
+            db.list_goals(HiddenFilter::Exclude).unwrap()
+                .into_iter().filter(|g| g.horizon == "short")
+                .map(|g| g.text).collect()
+        };
+        assert_eq!(short(&db), ["b", "a"]);
+        assert_eq!(db.list_actions(None, None, None).unwrap().len(), 3);
+
+        // Drag a across the seam: horizon flips, the journal shows the pair.
+        db.move_goal(&a.id, "long", 0).unwrap();
+        assert_eq!(short(&db), ["b"]);
+        let long: Vec<String> = db.list_goals(HiddenFilter::Exclude).unwrap()
+            .into_iter().filter(|g| g.horizon == "long").map(|g| g.text).collect();
+        assert_eq!(long, ["a", "c"]);
+        let moved = db.list_actions(None, None, None).unwrap()
+            .into_iter().find(|a| a.action == "goal_edited").unwrap();
+        assert_eq!(moved.from_section.as_deref(), Some("short"));
+        assert_eq!(moved.to_section.as_deref(), Some("long"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

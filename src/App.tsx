@@ -384,6 +384,9 @@ function DayAppBody() {
   const [goalProjectsEnabled, setGoalProjectsEnabled] = useState(
     () => sget("dayapp-goal-projects-enabled", "1") !== "0",
   );
+  const [goalTimeframesEnabled, setGoalTimeframesEnabled] = useState(
+    () => sget("dayapp-goal-timeframes-enabled", "1") !== "0",
+  );
   // Six more existence switches (same contract: off = the axis/feature
   // disappears everywhere, data never moves).
   const [taskPrioritiesEnabled, setTaskPrioritiesEnabled] = useState(
@@ -806,6 +809,7 @@ function DayAppBody() {
     sset("dayapp-task-projects-enabled", taskProjectsEnabled ? "1" : "0");
     sset("dayapp-note-projects-enabled", noteProjectsEnabled ? "1" : "0");
     sset("dayapp-goal-projects-enabled", goalProjectsEnabled ? "1" : "0");
+    sset("dayapp-goal-timeframes-enabled", goalTimeframesEnabled ? "1" : "0");
     sset("dayapp-task-priorities-enabled", taskPrioritiesEnabled ? "1" : "0");
     sset("dayapp-note-priorities-enabled", notePrioritiesEnabled ? "1" : "0");
     sset("dayapp-agent-enabled", agentEnabled ? "1" : "0");
@@ -824,7 +828,7 @@ function DayAppBody() {
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.) The shared projects/hide keys
     // leave via settings.ts's migrate().
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, windowDecorations, journalEnabled, quotesEnabled, taskProjectsEnabled, noteProjectsEnabled, goalProjectsEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, windowDecorations, journalEnabled, quotesEnabled, taskProjectsEnabled, noteProjectsEnabled, goalProjectsEnabled, goalTimeframesEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -1864,6 +1868,7 @@ function DayAppBody() {
       setNoteProjectsEnabled((v) => !v);
       if (noteProjectsEnabled && !taskProjectsEnabled) setProjectFilter(null);
     } else if (key === "goalProjects") setGoalProjectsEnabled((v) => !v);
+    else if (key === "goalTimeframes") setGoalTimeframesEnabled((v) => !v);
     else if (key === "taskPriorities") setTaskPrioritiesEnabled((v) => !v);
     else if (key === "notePriorities") setNotePrioritiesEnabled((v) => !v);
     else if (key === "agent") setAgentEnabled((v) => !v);
@@ -2291,18 +2296,18 @@ function DayAppBody() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allVisible, selectedId, focusNoteId, focusGoalId, view, helpOpen, syncSettingsOpen, paletteOpen, searchOpen, quoteOpen, updateStatus, renderItems, activeTimer]);
 
-  // The j/k walk spans the page's addressable rows in visual order — notes
-  // first (DOM order; Notes owns the list, so exactly the visible notes),
-  // then the task rows. A focused note and a focused row are one walk:
-  // focus crosses the two surfaces and clamps at the page's ends, never
-  // dropping. Goals aren't walk members — walking from one enters at the
-  // nearest end (down → first note, up → last row).
+  // The j/k walk spans the page's addressable rows in visual order — goal
+  // rows (DOM order; Goals owns the list), then notes, then the task rows.
+  // A focused goal, note, and row are one walk: focus crosses the surfaces
+  // and clamps at the page's ends, never dropping.
   const moveSelection = (delta: number) => {
-    const noteIds = Array.from(document.querySelectorAll("[data-note-id]"))
-      .map((el) => el.getAttribute("data-note-id") ?? "")
+    const attrs = (attr: string) => Array.from(document.querySelectorAll(`[${attr}]`))
+      .map((el) => el.getAttribute(attr) ?? "")
       .filter(Boolean);
-    const walk = [...noteIds, ...allVisible.map((i) => i.id)];
-    const cur = focusNoteId ?? selectedId;
+    const noteIds = attrs("data-note-id");
+    const goalIds = attrs("data-goal-id");
+    const walk = [...goalIds, ...noteIds, ...allVisible.map((i) => i.id)];
+    const cur = focusGoalId ?? focusNoteId ?? selectedId;
     const idx = walk.indexOf(cur ?? "");
     const next = idx === -1
       ? (delta > 0 ? 0 : walk.length - 1)
@@ -2312,7 +2317,8 @@ function DayAppBody() {
     // not a stream of no-ops.
     if (!id || id === cur) return;
     trace("focus.step", { to: id, dir: delta > 0 ? "next" : "prev" });
-    if (noteIds.includes(id)) focusNote(id);
+    if (goalIds.includes(id)) focusGoal(id);
+    else if (noteIds.includes(id)) focusNote(id);
     else focusItem(id);
   };
 
@@ -2322,6 +2328,7 @@ function DayAppBody() {
     taskProjects: taskProjectsEnabled,
     noteProjects: noteProjectsEnabled,
     goalProjects: goalProjectsEnabled,
+    goalTimeframes: goalTimeframesEnabled,
     taskPriorities: taskPrioritiesEnabled,
     notePriorities: notePrioritiesEnabled,
     agent: agentEnabled,
@@ -2637,6 +2644,7 @@ function DayAppBody() {
               taskProjects: taskProjectsEnabled,
               noteProjects: noteProjectsEnabled,
               goalProjects: goalProjectsEnabled,
+              goalTimeframes: goalTimeframesEnabled,
               taskPriorities: taskPrioritiesEnabled,
               notePriorities: notePrioritiesEnabled,
               agent: agentEnabled,

@@ -293,9 +293,11 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
 - `horizon` ∈ `timeless` | `long` | `short` — grouped and displayed in that
   order (constitution → career → now) under hairline dividers labeled with the
   horizon names (the same divider pattern as the Backlog's tiers). Set via a
-  leading horizon word in the capture/edit text (`parseGoalText` in `lib.ts`
-  strips it, default `short` on capture; no word on edit leaves the tier
-  alone); composes with `#tag` project tokens like item capture.
+  `$1/$2/$3` token in the capture/edit text ($1 short · $2 long · $3 timeless —
+  `parseGoalText` in `lib.ts` strips it, word-boundary-guarded so money like
+  "$100k" stays literal; default `short` on capture; no token on edit leaves
+  the tier alone; last token wins); composes with `#tag` project tokens like
+  item capture. (2026-10-16: replaced the old leading-horizon-word syntax.)
 - `status` ∈ `active` | `achieved` — short/long goals carry a checkbox;
   achieving stamps `achieved_at` (month-granular display, e.g. "Aug 2026") and
   moves the row to the dim "Achieved" group at the bottom, where the checkbox
@@ -330,8 +332,8 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
   (persisted in localStorage `dayapp-goals-visible`, **hidden by
   default** — a display preference like zoom). **Show Default View hides it** — the default
   working view is the plain task list. Goals don't take part
-  in the item visibility/priority/project filters, and there's no DnD — a calm
-  static list.
+  in the item visibility/priority/project filters; the horizons are drag targets like
+  the task sections (see the Goals bullet under UI/UX).
 - Logic lives in `src-tauri/src/goals.rs`; the UI is `src/Goals.tsx`; the CLI
   prints them grouped by horizon via `dayapp --goals`.
 
@@ -747,7 +749,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | File | Owns | Does NOT own |
 |---|---|---|
 | `App.tsx` | state (incl. the active timer + the one focused thing), effects, the focus grammar key handler, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
-| `Goals.tsx` | goals state + capture + horizon groups + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
+| `Goals.tsx` | goals state + capture + horizon groups + horizon drag (cross-group = horizon change, within-group = reorder) + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
 | `Quotes.tsx` | the ##q moment: quote pool fetch, the modal's pick (no consecutive repeats); every open is screensaver-born and lingers until input — no self-timer | capture (Notes' router adds quotes; the entry pages' captures too), the idle watcher (App's), the pool's archive (EntriesPage's Quotes view) |
 | `EntriesPage.tsx` | both entry views (kind prop): entries state, day groups, capture (plain = that page's kind; the opposite token routes), inline edit/delete (self-contained; remounts per view switch) | the quote modal (Quotes.tsx), analytics (AnalyticsView) |
 | `SectionList.tsx` | the task capture bus (##t/##d/##b route, default Today), `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
@@ -925,9 +927,9 @@ localStorage — that's what lets the mobile export carry it (`tasks.json`'s
 
 **Token coloring (`TokenField.tsx`):** every capture input AND the token-editing
 surfaces color the typed-token grammar live — the `##j`/`##q`/`##t`/`##d`/`##b` routes,
-`#tag`, `!N`, and `@` all in the one accent (Faraz's call, 2026-08-29: same purple for
+`#tag`, `!N`, `$N`, and `@` all in the one accent (Faraz's call, 2026-08-29: same purple for
 every family — a token reads as "this processes", nothing more). Edit surfaces: task
-inline edits (`EditInput` with the full grammar), goal edits (`#tag`), and a note body's
+inline edits (`EditInput` with the full grammar), goal edits (`$N` + `#tag`), and a note body's
 **pending footer line** — `scanNoteFooterTokens` in `lib.ts` is `splitNoteFooter`'s
 live twin, coloring exactly the line the blur-catch will strip and apply. Mechanism:
 the field's real text is transparent and a mirror div underneath (`.token-mirror`)
@@ -941,13 +943,14 @@ capture — plain prose there) stays uncolored, past a notes-bar route (`##j`/`#
 nothing colors either (the routed entry line is verbatim content), while the task
 capture's `##t`/`##d`/`##b` only routes the destination so its item grammar keeps
 coloring past it; inline tokens in a note body never color
-(they never process there). Horizon words in the Goals surfaces are prose, not sigil
-tokens — they stay plain. Entry EDITS stay plain too (entries store
+(they never process there). The Goals surfaces carry `$1/$2/$3` (horizon) and
+`#tag` — the same one-accent family. Entry EDITS stay plain too (entries store
 verbatim); the details body has no grammar at all.
 
 **Token display forms (2026-08-29):** a recognized token doesn't just tint — it
 converts to what it means in the mirror: `##j`→journal, `##q`→quote, `##t`→today,
-`##d`→daily, `##b`→backlog, any `@`-token→agent, and `!0..3`→the priority bars
+`##d`→daily, `##b`→backlog, any `@`-token→agent, `$1/$2/$3`→short/long/timeless,
+and `!0..3`→the priority bars
 markup (`!0` the empty track); `#tag` stays verbatim (arbitrary names — nothing to
 convert). `tokenDisplay` in `lib.ts` owns the vocabulary beside the matcher, so a
 token converts exactly when its surface colors it. Because the word is wider than
@@ -1048,8 +1051,9 @@ inert — a stray `1-6` can't do anything unseen. That bottom rung ("free mode")
 is a reading mode: `j`/`k`/`↑`/`↓` scroll the one `.scroll` container (120px,
 smooth — a view-only verb, so it can't act on anything unseen; it works in
 every view, Analytics included, where nothing is ever focused). While a row or
-note is focused, `j`/`k` walk the page's rows — notes first (visual order),
-then tasks, crossing the two surfaces freely — and clamp at the ends; they
+note is focused, `j`/`k` walk the page's rows — goals first, then notes, then
+tasks (visual order, 2026-10-16 — goals joined the walk with the horizon drag),
+crossing the surfaces freely — and clamp at the ends; they
 never drop focus;
 Esc, an outside click, or a new address is the only way out (an outside press
 that lands on another row instead lands that row's focus; with a popover open
@@ -1088,8 +1092,8 @@ its digit share the one real onClick handler).
 | `1`–`4` (note) | ⌃/⌄ expand · ⬇ download .txt · ◐ hide · × delete — ⬇ and × need content (hidden notes: `3` = ↺, `4` = ×) |
 | `1`–`4` (goal) | ✓ achieve · # project · ◐ pause · × delete — paused rows: `1` = ↺ resume, `2` = × (digits compact per switched-off axis — projects off, or Goal pause off in Settings → Goals) |
 | `↑`/`↓` + `Enter` (popover open) | move the highlight · pick — # project routes typing to its create field; the date input stays native (Tab reaches it) |
-| `j` / `↓` | select next — the walk spans the page's rows in visual order (notes first, then tasks); clamped at the ends; never drops focus |
-| `k` / `↑` | select previous — same walk, clamped at the first note |
+| `j` / `↓` | select next — the walk spans the page's rows in visual order (goals, then notes, then tasks); clamped at the ends; never drops focus |
+| `k` / `↑` | select previous — same walk, clamped at the first goal |
 | `j`/`k`/`↑`/`↓` (nothing focused) | scroll the page (120px, smooth) — free mode, every view |
 | `Enter` | complete focused task (toggles a crossed Today row or a done Daily back to active) |
 | `e` | edit the focused thing (task input / note textarea / goal row) |
@@ -1130,7 +1134,10 @@ the surface's name). **Tasks** — the master
 `Note hide`, `Note download`, plus `Journal` and `Quotes` (the ##j/##q capture rides
 the notes bar, but their pages capture on their own, so those two rows never dim —
 they outlive Notes being off) and the **quote screensaver's** idle wait (the Quotes
-feature's knob, dimming with it). **Goals** — the master over `Goal projects` and
+feature's knob, dimming with it). **Goals** — the master over `Goal timeframes`
+(the `$1/$2/$3` tiers — off, the page is one simple list: the token never
+parses, the groups/dividers and the drag disappear, stored horizons still
+drive ∞ vs ✓), `Goal projects` and
 `Goal pause`. The projects axes came from one shared `Projects` switch (the old
 `dayapp-projects-enabled` key seeded all three once and left the store; off, a
 surface never parses, labels, or filters its `#tag`); the archive completed its
@@ -1319,12 +1326,18 @@ into Notes or edit fields isn't hijacked.
   hairline labeled with the horizon's name (the Backlog's tier-divider pattern, text
   label instead of bars; empty groups render no divider). Achieved goals collapse
   into a dim "Achieved" group at the bottom — they never delete on their own.
-- Capture is line-only like the section inputs (no placeholder); it takes a leading
-  horizon word (`timeless be a better person`, `long better entrepreneur #hustle`),
-  plain text defaulting to short. Same parse on edit — no word leaves the tier alone.
-- Rows are the `.item` language minus the grip's function: the leading grip slot is
-  mirrored (invisible at every state — a spacer aligning the circle/text columns with
-  task rows, never a handle), and there's no DnD, no timer, no priority (pause — the
+- Capture is line-only like the section inputs (no placeholder); it takes a
+  `$1/$2/$3` horizon token ($1 short · $2 long · $3 timeless — `better
+  entrepreneur $2 #hustle`), plain text defaulting to short. Same parse on
+  edit — no token leaves the tier alone.
+- Rows are the `.item` language with the grip as a real drag handle on active rows
+  (2026-10-16): grip-drag between horizon groups changes the horizon (it writes the
+  same `goal_edited` from/to entry as the `$N` edit — no new verb), and
+  within a group reorders (`move_goal` re-indexes the destination's visible rows; a
+  same-horizon reorder is unlogged, like a same-section task reorder). Achieved and
+  paused rows sit out the drag — spacer grip, never a target. Empty groups render no
+  divider at rest; mid-drag each group's divider and drop strip appear so an empty
+  horizon stays reachable. No timer, no priority (pause — the
   hide axis — arrived 2026-10-12, see the data model).
   Short/long rows carry a checkbox (achieve / unachieve, month-granular date on the
   achieved row); timeless rows show ∞ in that slot and can only be edited or deleted (×).

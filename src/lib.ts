@@ -174,6 +174,8 @@ export const goalsApi = {
     invoke<Goal>("create_goal", { text, horizon, projectId }),
   edit: (id: string, text: string, horizon: GoalHorizon | null) =>
     invoke<void>("edit_goal", { id, text, horizon }),
+  move: (id: string, toHorizon: GoalHorizon, newIndex: number) =>
+    invoke<void>("move_goal", { id, toHorizon, newIndex }),
   setProject: (id: string, projectId: string | null) =>
     invoke<void>("set_goal_project", { id, projectId }),
   achieve: (id: string) => invoke<void>("achieve_goal", { id }),
@@ -184,12 +186,14 @@ export const goalsApi = {
   resume: (id: string) => invoke<void>("unhide_goal", { id }),
 };
 
-/** The goals capture/edit parser: a leading horizon word (short / long /
- *  timeless, case-insensitive) picks the tier and is stripped, then the normal
- *  `#tag` project rules apply to the remainder ("long better entrepreneur
- *  #hustle" → long horizon, "better entrepreneur", hustle project). When the
- *  word is the whole input it stays literal so the input is never lost — the
- *  same rule stripTag applies. `horizon` is null when no token was present;
+/** The goals capture/edit parser: a `$1/$2/$3` horizon token ($1 short ·
+ *  $2 long · $3 timeless) picks the tier and is stripped — anywhere in the
+ *  line, the item-grammar way, last one winning — then the normal `#tag`
+ *  project rules apply to the remainder ("better entrepreneur $2 #hustle" →
+ *  long horizon, "better entrepreneur", hustle project). Word-boundary
+ *  guarded like !N, so money ("$100k", "costs $3b") stays literal. A bare
+ *  token that would empty the row keeps the text intact so the input is
+ *  never lost (the !N rule). `horizon` is null when no token was present;
  *  callers decide whether that means "short" (on create) or "leave the tier
  *  alone" (on edit), mirroring parseItemTags. */
 export function parseGoalText(
@@ -198,17 +202,15 @@ export function parseGoalText(
   axes?: TokenAxes,
 ): { text: string; horizon: GoalHorizon | null; projectId: string | null; createProjectName?: string } {
   const allowProject = axes?.projects !== false;
-  const trimmed = text.trim();
-  const words = trimmed.split(/\s+/);
-  const first = words[0]?.toLowerCase() ?? "";
-  if (words.length > 1 && (GOAL_HORIZONS as readonly string[]).includes(first)) {
-    if (!allowProject) return { text: words.slice(1).join(" "), horizon: first as GoalHorizon, projectId: null };
-    const project = parseProjectTag(words.slice(1).join(" "), projects);
-    return { horizon: first as GoalHorizon, ...project };
-  }
-  if (!allowProject) return { text: trimmed, horizon: null, projectId: null };
-  const project = parseProjectTag(trimmed, projects);
-  return { horizon: null, ...project };
+  const allowTimeframe = axes?.timeframes !== false;
+  const spans = allowTimeframe ? matchSigil(text, HORIZON_RE) : [];
+  const horizon: GoalHorizon | null = spans.length
+    ? GOAL_HORIZONS[Number(spans[spans.length - 1].value) - 1] as GoalHorizon
+    : null;
+  const body = spans.length ? (stripSpans(text, spans) || text.trim()) : text.trim();
+  if (!allowProject) return { text: body, horizon, projectId: null };
+  const project = parseProjectTag(body, projects);
+  return { horizon, ...project };
 }
 
 /** Month-granular display for a goal's achievedAt timestamp ("Aug 2026") —
@@ -559,6 +561,7 @@ export interface TokenAxes {
   projects?: boolean;
   priorities?: boolean;
   agent?: boolean;
+  timeframes?: boolean;
 }
 
 const resolveAxes = (axes?: TokenAxes) => ({
@@ -588,7 +591,7 @@ export function parseItemTags(
 // what colors as a token while you type is exactly what processes at Enter —
 // the two can never drift apart.
 
-export type TokenKind = "entry" | "entry-journal" | "entry-quote" | "section" | "section-today" | "section-daily" | "section-backlog" | "project" | "priority" | "agent";
+export type TokenKind = "entry" | "entry-journal" | "entry-quote" | "section" | "section-today" | "section-daily" | "section-backlog" | "project" | "priority" | "agent" | "horizon";
 
 /** A matched token. `start`/`end` span the sigil through the token's last
  *  char (the word-boundary space before it stays plain text); `value` is the
@@ -606,6 +609,9 @@ export interface TokenSpan {
 const PROJECT_RE = /(?:^|\s)#([\w-]+)/g;
 const PRIORITY_RE = /(?:^|\s)!([0-3])(?=\s|$)/g;
 const AGENT_RE = /(?:^|\s)@([01]?)(?=\s|$)/g;
+// The goals' horizon: $1 short · $2 long · $3 timeless, word-boundary-guarded
+// like !N so "$100k" and "costs $3b" stay literal money.
+const HORIZON_RE = /(?:^|\s)\$([123])(?=\s|$)/g;
 // The notes-bus route: a leading ##j/##q only (lookahead, so the token itself
 // is exactly the three chars and the text after it starts at a boundary).
 const ENTRY_RE = /^##([jq])(?=\s|$)/;
@@ -688,6 +694,7 @@ export function scanTokens(text: string, kinds: readonly TokenKind[]): TokenSpan
     ["project", PROJECT_RE],
     ["priority", PRIORITY_RE],
     ["agent", AGENT_RE],
+    ["horizon", HORIZON_RE],
   ];
   for (const [kind, re] of sigils) {
     if (!kinds.includes(kind)) continue;
@@ -716,6 +723,8 @@ export function tokenDisplay(span: { kind: TokenKind; value: string }): string |
       return "";
     case "agent":
       return "agent";
+    case "horizon":
+      return span.value === "1" ? "short" : span.value === "2" ? "long" : "timeless";
     default:
       return null;
   }

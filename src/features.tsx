@@ -11,6 +11,9 @@ export interface Features {
   taskProjects: boolean;
   noteProjects: boolean;
   goalProjects: boolean;
+  /** The goals' $1/$2/$3 horizon tiers — off, goals are one simple list: the
+   *  token never parses, the groups and the drag go with it. */
+  goalTimeframes: boolean;
   taskPriorities: boolean;
   notePriorities: boolean;
   agent: boolean;
@@ -42,7 +45,7 @@ export interface Features {
 }
 
 export const FeaturesContext = createContext<Features>({
-  taskProjects: true, noteProjects: true, goalProjects: true,
+  taskProjects: true, noteProjects: true, goalProjects: true, goalTimeframes: true,
   taskPriorities: true, notePriorities: true, agent: true,
   timer: true, reminders: true,
   taskHide: true, dailyPause: true, noteHide: true, goalPause: true,

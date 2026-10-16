@@ -326,6 +326,13 @@ button {
   border-radius: 6px;
 }
 
+/* Goals' horizon groups: the drop strip grows while a drag is live so an
+   empty horizon stays reachable — at rest an empty group is just air (no
+   divider). */
+.goals .section-dropzone.drag-active {
+  min-height: 24px;
+}
+
 /* ---- Item rows --------------------------------------------------------- */
 
 .item {
@@ -1872,10 +1879,12 @@ button {
 }
 
 /* Goal rows mirror the task rows' leading grip slot so circle and text
-   columns line up across the two surfaces — but goals have no DnD, so the
-   glyph never reveals, not even on hover/focus: a spacer, never a handle
-   (the details-body precedent). */
-.item.goal-row .grip {
+   columns line up across the two surfaces. Active rows drag, so the grip
+   reveals on hover/focus through the shared .item rules above; achieved
+   (.done) and paused (.hidden) rows sit out the drag — their spacer never
+   reveals. */
+.item.goal-row.done .grip,
+.item.goal-row.hidden .grip {
   opacity: 0;
   cursor: default;
 }
