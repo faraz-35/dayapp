@@ -725,6 +725,11 @@ function DayAppBody() {
       const { listen } = await import("@tauri-apps/api/event");
       unlisten = await listen<{ active: boolean }>("demo-mode", (e) => {
         setDemoMode(e.payload.active);
+        // The db just swapped, so the owner read it holds is void — a demo-db
+        // read (always null) still in ownerName while demoMode already reads
+        // false is the race that re-asked the name on every exit. The refetch
+        // below re-decides the ask off the fresh answer.
+        setOwnerName(undefined);
         setSelectedId(null);
         setFocusNoteId(null);
         setFocusGoalId(null);
@@ -852,7 +857,9 @@ function DayAppBody() {
 
   // Owner name: fetched at mount and on every demo-mode swap (a launch tour
   // starts the app on the demo db); the first-run ask opens when the real db
-  // has never answered (null) and demo mode isn't covering the masthead.
+  // has never answered (null) and demo mode isn't covering the masthead. The
+  // swap listener voids the read before refetching, so a null here always
+  // means the CURRENT db answered null — never a stale demo-db read.
   // Saving trims; Esc on the first-run ask stores "" so it never nags again —
   // ⌘P → Set Your Name… is the door back.
   useEffect(() => {
