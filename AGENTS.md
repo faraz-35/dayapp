@@ -26,7 +26,7 @@ the constant, change the app's day.
 | Daily items reset overnight | `last_completed_date == today` comparison on render. At the 6am boundary the comparison just stops being true. |
 | Today items fall to Backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date` against the logical today). Idempotent. |
 | Completed Today items disappear overnight | The same sweep deletes today rows with `status='done'` dated before today — the completion already lives in `actions`, so no extra log row. `purge_completed_today()` repeats it un-gated on launch for rows a gated-out sweep left behind. |
-| Backlog reminders promote to Today | `promote_due_reminders()` runs on launch (un-gated, idempotent): backlog rows with `remind_at <= today` move to `today`. |
+| Backlog reminders promote to Today | `promote_due_reminders()` rides `run_sweep` — the 6am launch sweep **and** the frontend's 60s tick, so it fires without a relaunch (un-gated, idempotent): backlog rows with `remind_at <= today` move to `today`. |
 | "What I did this week" | `SELECT FROM actions WHERE action='completed'`. Every mutation logs itself. The Analytics view summarizes it; `--journal` prints the raw log. |
 | "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X`. ▶/⏸ write open/close timestamps; the Analytics day ledger totals them per day, `--journal` breaks them down per task. The open session row *is* the active timer — no separate state. |
 
@@ -339,9 +339,12 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
 
 ### Reminders (scheduled promotion via sweep — logged as `moved`)
 
-`items.remind_at` holds an ISO date. On app launch (`setup`, un-gated, idempotent),
-`promote_due_reminders()` moves any backlog item whose `remind_at <= today` to `today`,
-clears `remind_at`, and logs a `moved` action. No new action enum — reusing `moved` keeps
+`items.remind_at` holds an ISO date. On every `run_sweep` call (app launch via `setup`,
+and the frontend's 60s tick — un-gated, idempotent, so a due reminder fires without a
+relaunch), `promote_due_reminders()` moves any backlog item whose `remind_at <= today`
+to `today`, clears `remind_at`, and logs a `moved` action. It runs **after** the
+day-boundary fall: a promoted item belongs to the fresh day; ahead of the fall it would
+land in Today and fall straight back. No new action enum — reusing `moved` keeps
 the `actions` CHECK constraint untouched. Date-granular and fires only when the app is open
 (no background daemon); setting a reminder is **not** logged.
 
