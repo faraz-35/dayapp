@@ -8,7 +8,7 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, backupApi, demoApi, formatLiveDuration, hideExpiry, parseItemTags, projectsApi, syncApi, timersApi, todayStr, type ActiveTimer, type EntryKind, type HideDuration, type Item, type Project, type Section } from "./lib";
+import { api, backupApi, demoApi, formatLiveDuration, hideExpiry, isMac, parseItemTags, projectsApi, syncApi, timersApi, todayStr, type ActiveTimer, type EntryKind, type HideDuration, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import { clip, devlogActive, devlogStart, devlogStop, trace } from "./devlog";
 import Notes from "./Notes";
@@ -27,7 +27,7 @@ import KeyboardHelp from "./KeyboardHelp";
 import NamePrompt from "./NamePrompt";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, POPOVER_PICK_EVENT, popoverOpen, scrollIntoViewEl } from "./focusNav";
 import { BUILT_IN_THEMES, applyTheme, resolveTheme, themeIsLight, themeModeSlot, type Theme } from "./themes";
-import { IconMoon, IconSun, IconX } from "./components/icons";
+import { IconCommandPalette, IconMoon, IconSun, IconX } from "./components/icons";
 import { MIGRATED_KEYS, externallyChanged, initSettings, sget, sset, ssetMany } from "./settings";
 import { FeaturesContext, type Features } from "./features";
 
@@ -336,13 +336,14 @@ function DayAppBody() {
   );
   // Which header icon buttons show (Settings → Header). Journal and Quotes
   // default off — the written-entry pages are opt-in chrome; the working
-  // header is Hidden/Analytics/Settings/Theme. Off hides only the button; the
-  // view stays in ⌘P. The update icon and the timer chip aren't choices —
-  // they mount on their own conditions.
+  // header is Palette/Hidden/Analytics/Settings/Theme. Off hides only the
+  // button; the view stays in ⌘P. The update icon and the timer chip aren't
+  // choices — they mount on their own conditions.
   const [headerBtns, setHeaderBtns] = useState<Record<HeaderBtn, boolean>>(() => {
     try {
       const raw = JSON.parse(sget("dayapp-header-buttons", "{}"));
       return {
+        palette: raw.palette !== false,
         hidden: raw.hidden !== false,
         analytics: raw.analytics !== false,
         journal: raw.journal === true,
@@ -351,7 +352,7 @@ function DayAppBody() {
         theme: raw.theme !== false,
       };
     } catch {
-      return { hidden: true, analytics: true, journal: false, quotes: false, settings: true, theme: true };
+      return { palette: true, hidden: true, analytics: true, journal: false, quotes: false, settings: true, theme: true };
     }
   });
   // The native window title bar (Settings → Header's "Window title bar"):
@@ -2426,6 +2427,21 @@ function DayAppBody() {
                 aria-label="Discard timer"
               ><IconX /></button>
             </div>
+          )}
+          {/* The command palette's mouse door — opens what ⌘P opens. First in
+              the icon cluster: the palette is the primary door, and this is
+              the way in for people who never learn the chord. The glyph
+              mirrors the platform's real modifier: ⌘ on macOS, the prompt
+              field where Ctrl rules (no Ctrl pictograph exists to draw). */}
+          {headerBtns.palette && (
+            <button
+              className="icon-btn"
+              onClick={() => setPaletteOpen(true)}
+              title={isMac ? "Open command palette (⌘P)" : "Open command palette (Ctrl+P)"}
+              aria-label="Open command palette"
+            >
+              <IconCommandPalette />
+            </button>
           )}
           {/* ◐ toggles the hidden surfaces that exist (each archive axis has
               its Settings switch — a switched-off axis never flips): all

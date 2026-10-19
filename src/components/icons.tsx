@@ -10,6 +10,8 @@
 // Not here: the analytics card-nav chevrons (a smaller card chrome family)
 // and the agent badge (identity metadata, not an action).
 
+import { isMac } from "../lib";
+
 const base = {
   viewBox: "0 0 16 16",
   width: 14,
@@ -138,6 +140,26 @@ export function IconSun() {
     <svg {...base}>
       <circle cx="8" cy="8" r="2.7" />
       <path d="M8 1.7v1.8M8 12.5v1.8M1.7 8h1.8M12.5 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M12.4 3.6l-1.3 1.3M4.9 11.1l-1.3 1.3" />
+    </svg>
+  );
+}
+
+// The command palette's header glyph, per platform: the ⌘ modifier on macOS
+// (the icon mirrors the real ⌘P chord) and the prompt field on Windows/Linux,
+// where the modifier is Ctrl and no pictograph for it exists — there the icon
+// says "type a command" instead of naming a key.
+export function IconCommandPalette() {
+  return (
+    <svg {...base}>
+      {isMac ? (
+        <path d="M10 4v8a2 2 0 1 0 2-2H4a2 2 0 1 0 2 2V4a2 2 0 1 0-2 2h8a2 2 0 1 0-2-2" />
+      ) : (
+        <>
+          <rect x="2.2" y="3.4" width="11.6" height="9.2" rx="1.8" />
+          <path d="M5.2 6.4 7 8.1l-1.8 1.7" />
+          <path d="M9.2 10.2h2.3" />
+        </>
+      )}
     </svg>
   );
 }

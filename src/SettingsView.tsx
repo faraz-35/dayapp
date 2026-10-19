@@ -31,11 +31,13 @@ export type FeatureKey =
   | "taskDetails" | "noteDownload";
 
 // The header's icon buttons — each an On/Off choice in the Header group.
-export type HeaderBtn = "hidden" | "analytics" | "journal" | "quotes" | "settings" | "theme";
+export type HeaderBtn = "palette" | "hidden" | "analytics" | "journal" | "quotes" | "settings" | "theme";
 
 // `need` lists the features the button reads — the row goes inert only when
 // ALL of them are off (the ◐ button works while any archive axis exists).
+// Array order is both the card's row order and the header cluster's order.
 const HEADER_BUTTONS: { key: HeaderBtn; label: string; hint: string; need?: FeatureKey[] }[] = [
+  { key: "palette", label: "Command palette", hint: "⌘ on macOS, the prompt field elsewhere — the mouse door for ⌘P" },
   { key: "hidden", label: "Hidden entries", hint: "the ◐ archive peek", need: ["taskHide", "dailyPause", "noteHide", "goalPause"] },
   { key: "analytics", label: "Analytics", hint: "the chart icon" },
   { key: "journal", label: "Journal", hint: "the prose icon", need: ["journal"] },

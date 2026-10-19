@@ -1196,7 +1196,10 @@ Notes' Bare hover tint keys off the JS-tracked `.hovered` class, never `:hover` 
 textareas resize under a stationary pointer); tasks keep `:hover`. Persisted
 `dayapp-notes-card` / `dayapp-tasks-card` (2026-10-05). **Header** is its own card —
 which icon buttons mount top-right:
-`Hidden entries` (◐), `Analytics`, `Settings` (the gear),
+`Command palette` (first in the cluster — the mouse door for ⌘P; the glyph is
+per-platform, ⌘ on macOS and the prompt field on Windows/Linux, since Ctrl has
+no pictograph — `isMac` in `lib.ts` picks), `Hidden entries` (◐), `Analytics`,
+`Settings` (the gear),
 `Theme cycle` on by default, `Journal` and `Quotes` off by default (the written-entry
 pages are opt-in chrome) (`dayapp-header-buttons`) — off hides only the
 button; the view
