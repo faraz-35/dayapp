@@ -1,7 +1,7 @@
 [package]
 name = "dayapp"
 version = "0.1.0"
-description = "Live today list with auto-journaling"
+description = "Hyper-minimal, power-user superapp: tasks, notes, goals, analytics, journaling"
 authors = ["Faraz Shah"]
 edition = "2021"
 

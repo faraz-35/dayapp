@@ -4,9 +4,9 @@
 
 # DayApp
 
-**A minimal, local-first task list for macOS, Windows, and Linux.**
+**A hyper-minimal, power-user superapp for macOS, Windows, and Linux.**
 
-Keep today's tasks, notes, and goals in one fast window — every action you take is logged, so the journal writes itself.
+Local-first: tasks, notes, and goals in one fast window, with analytics and journaling built in. Make it yours — edit the appearance, pick your features in settings.
 
 <a href="https://github.com/faraz-35/dayapp/releases/latest"><img src="https://img.shields.io/badge/macOS-native-7b8cff?style=for-the-badge&logo=apple&logoColor=white&labelColor=0e0f11" alt="macOS"></a>
 <a href="https://github.com/faraz-35/dayapp/releases/latest"><img src="https://img.shields.io/badge/Windows-native-7b8cff?style=for-the-badge&logo=windows&logoColor=white&labelColor=0e0f11" alt="Windows"></a>

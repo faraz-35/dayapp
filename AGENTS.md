@@ -1,8 +1,10 @@
 # DayApp — Agent Guide
 
-A native macOS "live today list" with auto-journaling. Not a journal app — a focused
-daily-action tool whose **timestamped action log** *is* the journal, for free. Also
-includes free-form **Notes** (the notepad-replacement surface).
+A hyper-minimal, power-user macOS superapp: **tasks, notes, goals, analytics, and
+journaling** in one. The user shapes it — appearance is editable and features toggle
+in Settings (existence-gated; routes and ⌘P entries follow). Includes free-form
+**Notes** (the notepad-replacement surface) and an automatic **journal** over the
+timestamped action log.
 
 Before touching code, read this whole file. The UI/UX section is **load-bearing** — every
 decision in it exists for a reason and must be followed, not relitigated.
