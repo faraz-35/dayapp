@@ -398,8 +398,13 @@ architecture — don't grow this one into it.
 of the real file — so the app can be tried and shown without touching real
 data. The seed is `src-tauri/demo.sql` (embedded via `include_str!`, so it
 travels in the binary; git tracks it for reviewable history — never commit the
-generated `.db`). All timestamps in it are relative to seed day, so a freshly
-seeded demo always shows a live-looking week of journal history.
+generated `.db`). All timestamps in it are relative to seed day. The seed is
+deliberately small (2026-10-24, the first-minute-is-the-product pass — his
+brother called the old persona "too complex"): one daily done for today (its
+created row anchors a 4-day streak in the log), one backlog row carrying a
+pending reminder + priority + project link dormant until their Settings
+switches turn on, one plain note — Today empty, capture first. Count was cut,
+not capability.
 
 - **The swap lives under the one connection lock** (`Db::conn` in `db.rs`):
   commands lock it and use whatever `Connection` is inside, so the
