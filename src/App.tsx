@@ -26,7 +26,7 @@ import MobileSyncSettings from "./MobileSyncSettings";
 import KeyboardHelp from "./KeyboardHelp";
 import NamePrompt from "./NamePrompt";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, POPOVER_PICK_EVENT, popoverOpen, scrollIntoViewEl } from "./focusNav";
-import { BUILT_IN_THEMES, applyTheme, resolveTheme, themeIsLight, themeModeSlot, type Theme } from "./themes";
+import { BUILT_IN_THEMES, applyTheme, resolveTheme, systemTheme, themeIsLight, themeModeSlot, type Theme } from "./themes";
 import { IconCommandPalette, IconMoon, IconSun, IconX } from "./components/icons";
 import { MIGRATED_KEYS, externallyChanged, initSettings, sget, sset, ssetMany } from "./settings";
 import { FeaturesContext, type Features } from "./features";
@@ -310,8 +310,13 @@ function DayAppBody() {
   // renders nothing and isn't searchable or keyboard-navigable — and none of
   // its data moves: the rows stay in the db; Analytics, the CLI, and the
   // phone mirror read them regardless.
+  // Factory defaults are the minimal set (the plain task list + notes with
+  // projects): every power axis — goals, timer, reminders, priorities, agent,
+  // hide, details, journal, quotes — ships OFF and is one switch away in
+  // Settings → Features. The reader's second argument is the default; each
+  // store key overrides it.
   const [goalsEnabled, setGoalsEnabled] = useState(
-    () => sget("dayapp-goals-enabled", "1") !== "0",
+    () => sget("dayapp-goals-enabled", "0") !== "0",
   );
   const [notesEnabled, setNotesEnabled] = useState(
     () => sget("dayapp-notes-enabled", "1") !== "0",
@@ -325,26 +330,26 @@ function DayAppBody() {
     backlog: sget("dayapp-sec-backlog-enabled", "1") !== "0",
   }));
   // UI style (the Settings page's UI group): whether notes and task rows
-  // carry the soft card fill. Notes default ON (the cards), tasks default
-  // OFF (bare rows) — today's looks. The bare side is the row language:
-  // hover/focus tint instead of a resting fill, everything else unchanged.
+  // carry the soft card fill. Both default OFF — the bare row language:
+  // nothing at rest, hover/focus tint instead. The card side is one seg away.
   const [notesCard, setNotesCard] = useState(
-    () => sget("dayapp-notes-card", "1") !== "0",
+    () => sget("dayapp-notes-card", "0") !== "0",
   );
   const [tasksCard, setTasksCard] = useState(
     () => sget("dayapp-tasks-card", "0") === "1",
   );
-  // Which header icon buttons show (Settings → Header). Journal and Quotes
-  // default off — the written-entry pages are opt-in chrome; the working
-  // header is Palette/Hidden/Analytics/Settings/Theme. Off hides only the
-  // button; the view stays in ⌘P. The update icon and the timer chip aren't
-  // choices — they mount on their own conditions.
+  // Which header icon buttons show (Settings → Header). The minimal default:
+  // Analytics / Settings / Theme — ⌘P needs no mouse door, the archive peek
+  // needs an archive axis (all off by default), and the written-entry pages
+  // are opt-in chrome. Journal and Quotes additionally need their feature.
+  // Off hides only the button; the view stays in ⌘P. The update icon and the
+  // timer chip aren't choices — they mount on their own conditions.
   const [headerBtns, setHeaderBtns] = useState<Record<HeaderBtn, boolean>>(() => {
     try {
       const raw = JSON.parse(sget("dayapp-header-buttons", "{}"));
       return {
-        palette: raw.palette !== false,
-        hidden: raw.hidden !== false,
+        palette: raw.palette === true,
+        hidden: raw.hidden === true,
         analytics: raw.analytics !== false,
         journal: raw.journal === true,
         quotes: raw.quotes === true,
@@ -352,7 +357,7 @@ function DayAppBody() {
         theme: raw.theme !== false,
       };
     } catch {
-      return { palette: true, hidden: true, analytics: true, journal: false, quotes: false, settings: true, theme: true };
+      return { palette: false, hidden: false, analytics: true, journal: false, quotes: false, settings: true, theme: true };
     }
   });
   // The native window title bar (Settings → Header's "Window title bar"):
@@ -368,10 +373,10 @@ function DayAppBody() {
   // family disappears; the entries table itself is untouched (existence, not
   // deletion — the data comes back with the toggle).
   const [journalEnabled, setJournalEnabled] = useState(
-    () => sget("dayapp-journal-enabled", "1") !== "0",
+    () => sget("dayapp-journal-enabled", "0") !== "0",
   );
   const [quotesEnabled, setQuotesEnabled] = useState(
-    () => sget("dayapp-quotes-enabled", "1") !== "0",
+    () => sget("dayapp-quotes-enabled", "0") !== "0",
   );
   // The #tag axis is per surface (2026-10-13, like the archive below): off,
   // that surface's projects never parse, resolve, label, or filter — `#abc`
@@ -389,49 +394,52 @@ function DayAppBody() {
     () => sget("dayapp-goal-timeframes-enabled", "1") !== "0",
   );
   // Six more existence switches (same contract: off = the axis/feature
-  // disappears everywhere, data never moves).
+  // disappears everywhere, data never moves). All power axes default off.
   const [taskPrioritiesEnabled, setTaskPrioritiesEnabled] = useState(
-    () => sget("dayapp-task-priorities-enabled", "1") !== "0",
+    () => sget("dayapp-task-priorities-enabled", "0") !== "0",
   );
   const [notePrioritiesEnabled, setNotePrioritiesEnabled] = useState(
-    () => sget("dayapp-note-priorities-enabled", "1") !== "0",
+    () => sget("dayapp-note-priorities-enabled", "0") !== "0",
   );
   const [agentEnabled, setAgentEnabled] = useState(
-    () => sget("dayapp-agent-enabled", "1") !== "0",
+    () => sget("dayapp-agent-enabled", "0") !== "0",
   );
   const [timerEnabled, setTimerEnabled] = useState(
-    () => sget("dayapp-timer-enabled", "1") !== "0",
+    () => sget("dayapp-timer-enabled", "0") !== "0",
   );
   const [remindersEnabled, setRemindersEnabled] = useState(
-    () => sget("dayapp-reminders-enabled", "1") !== "0",
+    () => sget("dayapp-reminders-enabled", "0") !== "0",
   );
   // Soft-archive is per surface — and per half of the task surface (2026-10-13):
   // Today/Backlog rows hide, Daily habits pause (the same ◐ column, worded per
   // row), notes hide, goals pause. Each switch off leaves the others' buttons,
-  // reveal toggles, and the header ◐ fully working.
+  // reveal toggles, and the header ◐ fully working. All default off.
   const [taskHideEnabled, setTaskHideEnabled] = useState(
-    () => sget("dayapp-task-hide-enabled", "1") !== "0",
+    () => sget("dayapp-task-hide-enabled", "0") !== "0",
   );
   const [dailyPauseEnabled, setDailyPauseEnabled] = useState(
-    () => sget("dayapp-daily-pause-enabled", "1") !== "0",
+    () => sget("dayapp-daily-pause-enabled", "0") !== "0",
   );
   const [noteHideEnabled, setNoteHideEnabled] = useState(
-    () => sget("dayapp-note-hide-enabled", "1") !== "0",
+    () => sget("dayapp-note-hide-enabled", "0") !== "0",
   );
   const [goalPauseEnabled, setGoalPauseEnabled] = useState(
     () => sget("dayapp-goal-pause-enabled", "1") !== "0",
   );
   const [taskDetailsEnabled, setTaskDetailsEnabled] = useState(
-    () => sget("dayapp-task-details-enabled", "1") !== "0",
+    () => sget("dayapp-task-details-enabled", "0") !== "0",
   );
   const [noteDownloadEnabled, setNoteDownloadEnabled] = useState(
     () => sget("dayapp-note-download-enabled", "1") !== "0",
   );
   // Theme (Settings → Appearance): the active id resolves against the
   // built-ins plus the user's custom themes; the apply effect writes the
-  // token ladder onto <html> — the whole app re-skins in one paint. App-level
-  // like zoom (one set across demo/real).
-  const [themeId, setThemeId] = useState(() => sget("dayapp-theme", "dark"));
+  // token ladder onto <html> — the whole app re-skins in one paint. The
+  // factory default is "system": follow the OS light/dark, live, until an
+  // explicit theme is picked (picking stores its id; System itself is
+  // pickable again in Settings → Appearance). App-level like zoom (one set
+  // across demo/real).
+  const [themeId, setThemeId] = useState(() => sget("dayapp-theme", "system"));
   const [customThemes, setCustomThemes] = useState<Theme[]>(() => {
     try {
       const raw = JSON.parse(sget("dayapp-themes", "[]"));
@@ -441,9 +449,14 @@ function DayAppBody() {
     }
   });
   useEffect(() => {
-    const theme = resolveTheme(themeId, customThemes);
-    applyTheme(theme);
-    sset("dayapp-theme", theme.id);
+    applyTheme(resolveTheme(themeId === "system" ? systemTheme().id : themeId, customThemes));
+    // While in system mode the app tracks the OS: the scheme flipping
+    // mid-session re-skins in place. The listener exists only unpicked.
+    if (themeId !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => applyTheme(systemTheme());
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, [themeId, customThemes]);
   const [showHiddenItems, setShowHiddenItems] = useState(
     () => sget("dayapp-hidden-items", "0") === "1",
@@ -509,6 +522,13 @@ function DayAppBody() {
       return [];
     }
   });
+  // The views layer's own existence switch (Settings → Views' master,
+  // default OFF — lenses are a power feature): off, no view composes and the
+  // whole Enter/Exit family leaves ⌘P. The stored definitions and the active
+  // id are untouched — they come back with the toggle.
+  const [viewsEnabled, setViewsEnabled] = useState(
+    () => sget("dayapp-views-enabled", "0") !== "0",
+  );
   const [activeViewId, setActiveViewId] = useState<string | null>(
     () => sget("dayapp-active-view", "") || null,
   );
@@ -829,12 +849,13 @@ function DayAppBody() {
     sset("dayapp-note-download-enabled", noteDownloadEnabled ? "1" : "0");
     sset("dayapp-views", JSON.stringify(views));
     sset("dayapp-active-view", activeViewId ?? "");
+    sset("dayapp-views-enabled", viewsEnabled ? "1" : "0");
     // Retired keys: the single-tier "only" filter era, and the rotating
     // quote line the modal replaced — one-time cleanups. (The quote
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.) The shared projects/hide keys
     // leave via settings.ts's migrate().
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, windowDecorations, journalEnabled, quotesEnabled, taskProjectsEnabled, noteProjectsEnabled, goalProjectsEnabled, goalTimeframesEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, windowDecorations, journalEnabled, quotesEnabled, taskProjectsEnabled, noteProjectsEnabled, goalProjectsEnabled, goalTimeframesEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId, viewsEnabled]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -932,8 +953,8 @@ function DayAppBody() {
   // agent/project axis overrides the session filters while it's on — the
   // session values restore untouched on exit. A lens, never a mutation.
   const activeView = useMemo(
-    () => views.find((v) => v.id === activeViewId) ?? null,
-    [views, activeViewId],
+    () => (viewsEnabled ? views.find((v) => v.id === activeViewId) ?? null : null),
+    [views, activeViewId, viewsEnabled],
   );
   // A view's axes are contingent on Features: a scope along a switched-off
   // axis is inert (the axis doesn't exist to filter by — the same rule that
@@ -1254,8 +1275,8 @@ function DayAppBody() {
       },
     })) : []),
     // Custom views (Settings): the palette is their switch too — Enter/Exit
-    // <name>, the Focus Mode pattern.
-    ...views.map((v) => ({
+    // <name>, the Focus Mode pattern. Existence-gated on the Views master.
+    ...(viewsEnabled ? views.map((v) => ({
       id: `view-${v.id}`,
       label: activeViewId === v.id ? `Exit ${v.name} View` : `Enter ${v.name} View`,
       hint: viewSummary(v, projects) || "everything",
@@ -1263,7 +1284,7 @@ function DayAppBody() {
         setView("list");
         setActiveViewId((cur) => (cur === v.id ? null : v.id));
       },
-    })),
+    })) : []),
     ...(tasksEnabled && agentEnabled ? [{
       id: "toggle-agent-tasks",
       // The delegation axis: 🤖-marked rows are the agent's queue. Hiding them
@@ -1387,10 +1408,10 @@ function DayAppBody() {
     ...[...BUILT_IN_THEMES, ...customThemes].map((t) => ({
       id: `theme-${t.id}`,
       label: `Theme: ${t.name}`,
-      hint: themeId === t.id ? "active" : undefined,
+      hint: (themeId === "system" ? systemTheme().id : themeId) === t.id ? "active" : undefined,
       run: () => {
         trace("theme.activate", { id: t.id });
-        setThemeId(t.id);
+        pickTheme(t.id);
       },
     })),
     // The settings page: the feature toggles (what exists at all) and the
@@ -1423,7 +1444,7 @@ function DayAppBody() {
           },
         ]
       : []),
-  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, projects, themeId, customThemes, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled]);
+  ], [startUpdate, startReleaseUpdate, localRepo, refresh, showToast, goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, journalEnabled, quotesEnabled, demoMode, devlogOn, syncConfigured, view, views, activeViewId, viewsEnabled, projects, themeId, customThemes, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled]);
 
   // ⌘P toggles the palette; ⌘F opens search; ⌘+/⌘- zoom the whole UI in/out
   // (⌘0 resets). All intercept globally (they're modifier combos, so they
@@ -1938,42 +1959,53 @@ function DayAppBody() {
     setWindowDecorations(on);
     api.setWindowDecorations(on).catch((e) => log.warn("window decorations failed", e));
   }, []);
+  // An explicit theme pick: store the id (the apply effect skins the app),
+  // leaving system mode. The one persist path — the apply effect never
+  // writes, so an unpicked install keeps following the OS.
+  const pickTheme = useCallback((id: string) => {
+    sset("dayapp-theme", id);
+    setThemeId(id);
+  }, []);
   // The header theme button walks the whole ladder — Dark → Light → each
-  // custom theme in store order, wrapping. The Settings page stays the direct
+  // custom theme in store order, wrapping. In system mode it cycles from the
+  // theme the OS is currently wearing. The Settings page stays the direct
   // door (activate/delete/create); the button is the one-click cycle.
   const cycleTheme = useCallback(() => {
     const all = [...BUILT_IN_THEMES, ...customThemes];
-    const i = all.findIndex((t) => t.id === themeId);
+    const cur = themeId === "system" ? systemTheme().id : themeId;
+    const i = all.findIndex((t) => t.id === cur);
     const next = all[(i + 1 + all.length) % all.length] ?? all[0];
     trace("theme.cycle", { from: themeId, to: next.id });
-    setThemeId(next.id);
-  }, [themeId, customThemes]);
+    pickTheme(next.id);
+  }, [themeId, customThemes, pickTheme]);
   // The cycle's glyph: night skins wear the moon, day skins the sun (the mode
   // read off the background, the scrims' divide), subscripted by the theme's
   // slot within its mode's ladder — shown only while that mode holds more
   // than one theme.
-  const activeTheme = resolveTheme(themeId, customThemes);
+  const activeTheme = resolveTheme(themeId === "system" ? systemTheme().id : themeId, customThemes);
   const themeSlot = themeModeSlot(activeTheme, [...BUILT_IN_THEMES, ...customThemes]);
-  // Themes (Settings → Appearance). Activating stores the id (the apply
-  // effect skins the app); deleting the active theme falls back to Dark.
-  const activateTheme = useCallback((id: string) => {
-    setThemeId(id);
-  }, []);
+  // Themes (Settings → Appearance). Activating stores the id; deleting the
+  // active theme falls back to Dark.
+  const activateTheme = pickTheme;
   const createTheme = useCallback((theme: Theme) => {
     setCustomThemes((ts) => {
       const next = [...ts, theme];
       sset("dayapp-themes", JSON.stringify(next));
       return next;
     });
-    setThemeId(theme.id);
-  }, []);
+    pickTheme(theme.id);
+  }, [pickTheme]);
   const deleteTheme = useCallback((id: string) => {
     setCustomThemes((ts) => {
       const next = ts.filter((t) => t.id !== id);
       sset("dayapp-themes", JSON.stringify(next));
       return next;
     });
-    setThemeId((cur) => (cur === id ? "dark" : cur));
+    setThemeId((cur) => {
+      if (cur !== id) return cur;
+      sset("dayapp-theme", "dark");
+      return "dark";
+    });
   }, []);
   const createView = useCallback((v: CustomView) => {
     setViews((vs) => [...vs, v]);
@@ -1984,6 +2016,12 @@ function DayAppBody() {
   const deleteView = useCallback((id: string) => {
     setViews((vs) => vs.filter((v) => v.id !== id));
     setActiveViewId((cur) => (cur === id ? null : cur));
+  }, []);
+  // The views layer's existence switch. Switching it off exits any active
+  // lens with it — nothing may compose while the layer is off.
+  const toggleViewsEnabled = useCallback((on: boolean) => {
+    setViewsEnabled(on);
+    if (!on) setActiveViewId(null);
   }, []);
   const toggleViewActive = useCallback((id: string) => {
     setActiveViewId((cur) => (cur === id ? null : id));
@@ -2728,6 +2766,8 @@ function DayAppBody() {
             onDeleteTheme={deleteTheme}
             views={views}
             activeViewId={activeViewId}
+            viewsEnabled={viewsEnabled}
+            onToggleViewsEnabled={toggleViewsEnabled}
             onToggleViewActive={toggleViewActive}
             onCreateView={createView}
             onUpdateView={updateView}

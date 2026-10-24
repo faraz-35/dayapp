@@ -97,6 +97,13 @@ export function resolveTheme(id: string, custom: Theme[]): Theme {
   return [...BUILT_IN_THEMES, ...custom].find((t) => t.id === id) ?? DARK;
 }
 
+// The OS scheme, read live — the factory default ("system" in dayapp-theme)
+// follows it until an explicit theme is picked. Callers re-read on the
+// matchMedia change event, so the app tracks the OS while in system mode.
+export function systemTheme(): Theme {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? DARK : LIGHT;
+}
+
 export const BUILT_IN_THEMES: Theme[] = [DARK, LIGHT];
 
 // ---- Mode ------------------------------------------------------------------

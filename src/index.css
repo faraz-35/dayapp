@@ -1570,6 +1570,11 @@ button {
   top: calc(100% + 4px);
   z-index: 20;
   min-width: 168px;
+  max-height: 240px;
+  overflow-y: auto;
+  /* A long roster (many projects) scrolls inside the card — no scrollbar
+     chrome; the wheel and the moving highlight are the affordances. */
+  scrollbar-width: none;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1579,6 +1584,7 @@ button {
   flex-direction: column;
   gap: 1px;
 }
+.hide-menu::-webkit-scrollbar { display: none; }
 
 /* Flip the menu open upward when opening downward would overflow the viewport
    (rows near the bottom). Prevents .scroll's scrollable region from growing

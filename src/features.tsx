@@ -44,14 +44,17 @@ export interface Features {
   quotes: boolean;
 }
 
+// The factory defaults (a fresh install's store is empty): the plain task
+// list + notes, projects on every surface — every power axis off. App's
+// sget defaults must stay in sync with these.
 export const FeaturesContext = createContext<Features>({
   taskProjects: true, noteProjects: true, goalProjects: true, goalTimeframes: true,
-  taskPriorities: true, notePriorities: true, agent: true,
-  timer: true, reminders: true,
-  taskHide: true, dailyPause: true, noteHide: true, goalPause: true,
-  taskDetails: true, noteDownload: true,
+  taskPriorities: false, notePriorities: false, agent: false,
+  timer: false, reminders: false,
+  taskHide: false, dailyPause: false, noteHide: false, goalPause: true,
+  taskDetails: false, noteDownload: true,
   tasks: true, today: true, daily: true, backlog: true,
-  notes: true, goals: true, journal: true, quotes: true,
+  notes: true, goals: false, journal: false, quotes: false,
 });
 
 export const useFeatures = () => useContext(FeaturesContext);

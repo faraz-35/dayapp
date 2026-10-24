@@ -226,7 +226,7 @@ fn settings_cmd(rest: &[String]) -> anyhow::Result<()> {
             println!("  screensaver {} min idle", get("dayapp-screensaver-mins").unwrap_or_else(|| "2".into()));
             println!("  header     {}", get("dayapp-header-buttons").unwrap_or_else(|| "{}".into()));
             println!("  titlebar   {}", on("dayapp-window-decorations"));
-            println!("theme:      {}", get("dayapp-theme").unwrap_or_else(|| "dark".into()));
+            println!("theme:      {}", get("dayapp-theme").unwrap_or_else(|| "system".into()));
             let views = get("dayapp-views").unwrap_or_else(|| "[]".into());
             let active = get("dayapp-active-view").unwrap_or_default();
             let n = serde_json::from_str::<serde_json::Value>(&views)
@@ -272,7 +272,7 @@ fn write_themes(themes: &[serde_json::Value]) -> anyhow::Result<()> {
 fn active_theme_colors(
     map: &std::collections::HashMap<String, String>,
 ) -> anyhow::Result<serde_json::Map<String, serde_json::Value>> {
-    let active_id = map.get("dayapp-theme").map(String::as_str).unwrap_or("dark");
+    let active_id = map.get("dayapp-theme").map(String::as_str).unwrap_or("system");
     let themes = read_themes(map)?;
     let mut all: Vec<serde_json::Value> = vec![
         serde_json::json!({ "id": "dark", "name": "Dark",
@@ -299,7 +299,7 @@ fn active_theme_colors(
 
 fn themes_cmd() -> anyhow::Result<()> {
     let map = store()?;
-    let active = map.get("dayapp-theme").map(String::as_str).unwrap_or("dark");
+    let active = map.get("dayapp-theme").map(String::as_str).unwrap_or("system");
     let mut all: Vec<serde_json::Value> = vec![
         serde_json::json!({ "id": "dark", "name": "Dark" }),
         serde_json::json!({ "id": "light", "name": "Light" }),

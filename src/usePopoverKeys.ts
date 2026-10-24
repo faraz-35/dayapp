@@ -43,6 +43,14 @@ export function usePopoverKeys({
     menuRef.current?.focus();
   }, [open, menuRef]);
 
+  // Menus taller than max-height scroll internally (no scrollbar) — keep the
+  // moving highlight in view, whichever way it moved (arrows here, mouse
+  // hover in the caller).
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector(".hi")?.scrollIntoView({ block: "nearest" });
+  }, [hi, open, menuRef]);
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     // The menu's own inputs (create field, date picker) own their keys —
     // typing, the native caret, Escape bubbling to the document closer.

@@ -887,16 +887,20 @@ keyboard-first.** Every choice below is intentional.
 4. **Dense rows, single-line text, ellipsis.** This is a list, not a document.
 5. **One accent colour.** `#7b8cff` means "active/selected/completed/done-today." Do not
    introduce a second accent.
-6. **Dark by default, themeable by choice.** The default is the dark ladder; a
-   complete Light theme ships beside it, and custom themes are eleven-color
-   token sets (Settings → Appearance, 2026-10-05). No `prefers-color-scheme`
-   — the scheme is an explicit choice, persisted (`dayapp-theme`), applied by
+6. **System by default, themeable by choice.** The factory default theme id is
+   `system` — follow the OS light/dark, live (a `matchMedia` listener re-skins
+   mid-session while it holds); a complete Light theme ships beside Dark, and
+   custom themes are eleven-color token sets (Settings → Appearance,
+   2026-10-05). Picking any ladder theme — including System itself, the
+   first card in the grid — stores its id (`dayapp-theme`) and ends the
+   tracking; only explicit picks persist, applied by
    `applyTheme` in `themes.ts` writing the custom properties onto `<html>`.
    Everything renders through the tokens, so a theme is one paint; the derived
    layer (scrims, shadows, the accent's alpha triplet, `color-scheme`) is
    computed from the eleven shades, never stored. The header's theme button
    (2026-10-12) cycles the whole ladder — Dark → Light → each custom theme in
-   store order, wrapping — and the glyph is the active theme's computed mode
+   store order, wrapping (in system mode it cycles from the theme the OS is
+   wearing) — and the glyph is the active theme's computed mode
    (2026-10-15): the background's luminance picks night (moon) or day (sun),
    subscripted by the theme's slot within its mode's ladder — shown only
    while that mode holds more than one theme; Settings → Appearance stays
@@ -909,7 +913,8 @@ keyboard-first.** Every choice below is intentional.
 ### Colour tokens (from `index.css` — use these, do not hardcode hex)
 
 The table is the DARK theme's resting values — the runtime truth is whatever
-`applyTheme` last wrote onto `<html>` (Dark by default, Light built-in, custom
+`applyTheme` last wrote onto `<html>` (System by default — the OS's side of the
+ladder, Light built-in, custom
 themes from Settings → Appearance). Alongside the colors ride the derived
 tokens: `--accent-rgb` (the accent triplet — every accent alpha tints as
 `rgba(var(--accent-rgb), a)`), `--scrim`/`--scrim-strong` (floating-surface
@@ -1191,11 +1196,19 @@ disabled surface renders nothing, isn't searchable or keyboard-navigable, and it
 whole ⌘P option family disappears with it — and none of its data moves: the rows
 stay in the db; Analytics, the CLI, and the phone mirror read them regardless.
 Persisted in the
-`dayapp-*-enabled` keys (default on; 2026-10-04, two layers after Faraz's correction:
-Settings is high-level configuration, ⌘P is the working door). **Appearance** is one
+`dayapp-*-enabled` keys. **The factory defaults are the minimal set** (2026-10-24,
+Faraz's call — a fresh install is the plain working app, every power axis one
+switch away): Tasks + Notes exist with all three sections, projects on every
+surface, note download on; Goals (the whole master), Timer, Reminders, Task/Note
+priorities, Agent delegation, Task details, and all four archive axes default OFF,
+as do Journal and Quotes. Existing installs are untouched — the defaults live in
+the readers' second argument, and a stored key always wins (two layers since
+2026-10-04, Faraz's correction: Settings is high-level configuration, ⌘P is the
+working door). **Appearance** is one
 look card — the resting fill behind
-notes and task rows — each surface picks Card (the `--bg-soft` fill; notes' default) or
-Bare (the row language: nothing at rest, hover/focus tint instead; tasks' default).
+notes and task rows — each surface picks Card (the `--bg-soft` fill) or
+Bare (the row language: nothing at rest, hover/focus tint instead) — both
+default Bare.
 Notes' Bare hover tint keys off the JS-tracked `.hovered` class, never `:hover` (the
 textareas resize under a stationary pointer); tasks keep `:hover`. Persisted
 `dayapp-notes-card` / `dayapp-tasks-card` (2026-10-05). **Header** is its own card —
@@ -1203,8 +1216,10 @@ which icon buttons mount top-right:
 `Command palette` (first in the cluster — the mouse door for ⌘P; the glyph is
 per-platform, ⌘ on macOS and the prompt field on Windows/Linux, since Ctrl has
 no pictograph — `isMac` in `lib.ts` picks), `Hidden entries` (◐), `Analytics`,
-`Settings` (the gear),
-`Theme cycle` on by default, `Journal` and `Quotes` off by default (the written-entry
+`Settings` (the gear), `Theme cycle` — Analytics/Settings/Theme default on,
+`Command palette` and `Hidden entries` default off (the minimal header: ⌘P
+needs no mouse door, the ◐ peek needs an archive axis, all off by default),
+`Journal` and `Quotes` off by default (the written-entry
 pages are opt-in chrome) (`dayapp-header-buttons`) — off hides only the
 button; the view
 stays in ⌘P (the two-layers rule). The update icon, the timer chip, and demo
@@ -1219,12 +1234,20 @@ state flashes; the GUI toggle calls `set_window_decorations` live, a CLI
 key-write lands at next launch. **Views:** custom lenses
 like Focus/Fun Mode — a named combination of priority tiers, the delegation axis
 (agent/mine/all), one project, notes + their tiers, built from pill chips on the page
-(no edit yet — delete + recreate). `Enter/Exit <name> View` rides ⌘P and the page;
+(no edit yet — delete + recreate). Existence-gated like every feature (2026-10-24):
+the **Views pane's master** — the switch on the card title — decides whether the
+app has lenses at all, **default OFF** (lenses are a power feature; Focus/Fun
+narrow by priority tiers, which default off too). Off, no view composes and the
+whole `Enter/Exit` family leaves ⌘P; the stored definitions and active id are
+untouched — they return with the toggle (switching off exits the active lens).
+`Enter/Exit <name> View` rides ⌘P and the page;
 the active view composes through the same `displayItems`/Notes pipelines — its unshown
 tiers fold into the hidden sets, its agent/project axis overrides the session filters —
 and never mutates the toggles or filters: exiting restores everything (the Focus Mode
-contract). Persisted in localStorage (`dayapp-views`, active id `dayapp-active-view`);
-Show Default View exits the active view.
+contract). Persisted (`dayapp-views`, active id `dayapp-active-view`, master
+`dayapp-views-enabled`);
+Show Default View exits the active view (and stays — it is the universal reset,
+not a view).
 
 **Show/Hide toggles (⌘P):** every enabled surface keeps its state-aware Show/Hide
 entry here (`Goals`, `Notes`, `Tasks` + the per-section toggles — each appears only
@@ -1276,7 +1299,9 @@ notes' tier groups — independent of the task tiers.
 
 **Focus Mode (⌘P):** `Enter/Exit Focus Mode` is a **lens**, not a batch of toggle
 mutations — P1 notes only, Today, Daily, and P1 Backlog only (Goals hidden too: the
-lens is stricter than the default working view). It composes with the filters/toggles in the
+lens is stricter than the default working view). Both classic lenses ship as seeded
+view rows under the Views master (default OFF — see Views above; no master, no
+lenses anywhere). It composes with the filters/toggles in the
 same `displayItems`/Notes pipelines and never mutates them: exiting restores whatever
 they were. Persisted (`dayapp-focus-mode`); Show Default View exits it. A capture that
 doesn't match the lens (an unmarked note, a non-P1 backlog row) is created but not
@@ -1611,11 +1636,14 @@ Journal / Quotes icons):**
 
 ### What NOT to add (explicit non-goals)
 
-- No `prefers-color-scheme` and no automatic theme switching — Light exists as
-  an explicit built-in theme beside Dark, and custom themes are user-built
-  token sets (Settings → Appearance). Don't grow this toward a theming product:
-  a theme is exactly the eleven shades, nothing more (no per-surface colors, no
-  wallpaper/accent-pair picker beyond the ladder).
+- No theming product. The one system hook is the `system` theme id — the
+  factory default that follows the OS light/dark until an explicit pick
+  (2026-10-24, Faraz's call; the 2026-10-05 "no automatic switching" rule it
+  replaced applied to a Dark-at-rest default). Light exists as an explicit
+  built-in beside Dark, and custom themes are user-built token sets
+  (Settings → Appearance). Don't grow this further: a theme is exactly the
+  eleven shades, nothing more (no per-surface colors, no wallpaper/accent-pair
+  picker beyond the ladder).
 - No second accent colour. No status colours per section.
 - No tags or arbitrary due-date fields. (Projects are a first-class filter axis; reminders
   are a date-granular promotion; timers are a measurement layer; priorities are a `!1..3`

@@ -4,8 +4,10 @@
 // each carrying its existence master as the card title's own switch with the
 // sub-features beneath (the Notes card also carries the quote screensaver's
 // idle wait — the Quotes feature's knob); Appearance (the two fills, themes
-// as ladder cards); Header (which icon buttons mount); Views (cards with an
-// Active/Enter state and the builder with a live "shows …" summary).
+// as ladder cards, System — follow the OS — first); Header (which icon
+// buttons mount); Views (the existence master on the card title, default
+// off; cards with an Active/Enter state and the builder with a live
+// "shows …" summary).
 //
 // Rows are dependency-aware: a feature that's off sends its dependents inert
 // with a hint saying why — every sub-row needs its card's master (daily pause
@@ -20,7 +22,7 @@
 import { useState } from "react";
 import { type Project } from "./lib";
 import { clip, trace } from "./devlog";
-import { BUILT_IN_THEMES, COLOR_FIELDS, applyTheme, type Theme, type ThemeColors } from "./themes";
+import { BUILT_IN_THEMES, COLOR_FIELDS, DARK, LIGHT, applyTheme, systemTheme, type Theme, type ThemeColors } from "./themes";
 import { IconPencil, IconX } from "./components/icons";
 
 export type FeatureKey =
@@ -304,7 +306,7 @@ function Group({ title, count, master, children }: {
 }
 
 export default function SettingsView({
-  features, onToggleFeature, projects, views, activeViewId,
+  features, onToggleFeature, projects, views, activeViewId, viewsEnabled, onToggleViewsEnabled,
   onToggleViewActive, onCreateView, onUpdateView, onDeleteView,
   notesCard, tasksCard, onSetCard, screensaverMins, onSetScreensaverMins, headerBtns, onToggleHeaderBtn,
   windowDecorations, onToggleWindowDecorations,
@@ -315,6 +317,8 @@ export default function SettingsView({
   projects: Project[];
   views: CustomView[];
   activeViewId: string | null;
+  viewsEnabled: boolean;
+  onToggleViewsEnabled: (on: boolean) => void;
   onToggleViewActive: (id: string) => void;
   onCreateView: (view: CustomView) => void;
   onUpdateView: (id: string, view: CustomView) => void;
@@ -359,7 +363,9 @@ export default function SettingsView({
     setDraft(null);
     // Re-apply the active theme directly — setThemeId(same id) wouldn't re-run
     // App's apply effect, and the preview would stick.
-    applyTheme([...BUILT_IN_THEMES, ...customThemes].find((t) => t.id === themeId) ?? BUILT_IN_THEMES[0]);
+    applyTheme(themeId === "system"
+      ? systemTheme()
+      : [...BUILT_IN_THEMES, ...customThemes].find((t) => t.id === themeId) ?? BUILT_IN_THEMES[0]);
   };
   const createThemeNow = () => {
     if (!draft || !draft.name.trim()) return;
@@ -564,6 +570,24 @@ export default function SettingsView({
         </InfoRow>
       </div>
       <div className="set-theme-grid">
+        {/* System — the factory default: follow the OS light/dark, live. The
+            strip wears both ladders (dark's shades left, light's right). */}
+        <div
+          role="button"
+          className={`set-theme-card${themeId === "system" ? " on" : ""}`}
+          title="Follow the OS light/dark"
+          onClick={() => { trace("theme.activate", { id: "system" }); onActivateTheme("system"); }}
+        >
+          <span className="set-strip">
+            {COLOR_FIELDS.map(({ key }, i) => (
+              <i key={key} style={{ background: i < 6 ? DARK.colors[key] : LIGHT.colors[key] }} />
+            ))}
+          </span>
+          <span className="set-theme-foot">
+            <span className="set-theme-name">System</span>
+            {themeId === "system" && <span className="set-state on">Active</span>}
+          </span>
+        </div>
         {[...BUILT_IN_THEMES, ...customThemes].map((t) => {
           const active = themeId === t.id;
           const builtIn = BUILT_IN_THEMES.some((b) => b.id === t.id);
@@ -656,161 +680,180 @@ export default function SettingsView({
     </Group>
   );
 
-  // Views: named lenses over the display axes. The builder's summary line
-  // describes the lens as you click it.
+  // Views: named lenses over the display axes (Focus/Fun and any custom
+  // ones). Existence-gated like every feature — the master on the card title
+  // decides whether the app has lenses at all; off, none of it renders and
+  // no view rides ⌘P. The builder's summary line describes the lens as you
+  // click it.
   const viewsPane = (
-    <Group title="Views">
-      <div className="set-views">
-        {views.map((v) => {
-          const active = activeViewId === v.id;
-          return (
-            <div
-              key={v.id}
-              role="button"
-              className={`set-view-card${active ? " on" : ""}`}
-              onClick={() => {
-                trace("views.activate", { name: clip(v.name), to: !active });
-                onToggleViewActive(v.id);
-              }}
-            >
-              <span className="set-view-text">
-                <span className="set-view-name">{v.name}</span>
-                <span className="set-view-sum">{viewSummary(v, projects)}</span>
-              </span>
-              <span className={`set-state${active ? " on" : ""}`}>{active ? "Active" : "Enter"}</span>
-              <span className="set-view-act">
-                <button
-                  className="set-edit"
-                  title="Edit view"
-                  aria-label={`Edit ${v.name}`}
-                  onClick={(e) => { e.stopPropagation(); edit(v.id); }}
-                ><IconPencil /></button>
-                <button
-                  className="set-x"
-                  title="Delete view"
-                  aria-label={`Delete ${v.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    trace("views.delete", { name: clip(v.name) });
-                    onDeleteView(v.id);
+    <Group
+      title="Views"
+      master={{
+        on: viewsEnabled,
+        hint: "the lenses — Focus, Fun, and any custom view",
+        onToggle: () => {
+          trace("views.toggle", { to: !viewsEnabled });
+          onToggleViewsEnabled(!viewsEnabled);
+        },
+      }}
+    >
+      {viewsEnabled ? (
+        <>
+          <div className="set-views">
+            {views.map((v) => {
+              const active = activeViewId === v.id;
+              return (
+                <div
+                  key={v.id}
+                  role="button"
+                  className={`set-view-card${active ? " on" : ""}`}
+                  onClick={() => {
+                    trace("views.activate", { name: clip(v.name), to: !active });
+                    onToggleViewActive(v.id);
                   }}
-                ><IconX /></button>
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      {!creatingView && (
-        <button
-          className="set-new"
-          title="Combine priorities, agent, project, notes"
-          onClick={() => setCreatingView(true)}
-        >
-          <b>+</b> New view
-        </button>
-      )}
-      {creatingView && (
-        <div className="settings-form">
-          <input
-            className="settings-name-input"
-            placeholder="View name"
-            value={name}
-            autoFocus
-            spellCheck={false}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); save(); }
-              else if (e.key === "Escape") { e.preventDefault(); setCreatingView(false); resetDraft(); }
-            }}
-          />
-          <div className="set-form-summary">{draftSummary || "everything"}</div>
-          {features.taskPriorities && (
-            <div className="settings-field">
-              <span className="settings-field-label">Priorities</span>
-              {ALL_TIERS.map((n) => (
-                <button
-                  key={n}
-                  className={`set-chip${priorities.includes(n) ? " on" : ""}`}
-                  onClick={() => toggleTier(n, priorities, setPriorities)}
-                >P{n}</button>
-              ))}
-            </div>
-          )}
-          <div className="settings-field">
-            <span className="settings-field-label">Sections</span>
-            {([["today", "Today"], ["daily", "Daily"], ["backlog", "Backlog"]] as const).map(
-              ([sec, label]) => (
-                <button
-                  key={sec}
-                  className={`set-chip${sections[sec] ? " on" : ""}`}
-                  onClick={() => setSections((sc) => ({ ...sc, [sec]: !sc[sec] }))}
-                >{label}</button>
-              ),
-            )}
+                >
+                  <span className="set-view-text">
+                    <span className="set-view-name">{v.name}</span>
+                    <span className="set-view-sum">{viewSummary(v, projects)}</span>
+                  </span>
+                  <span className={`set-state${active ? " on" : ""}`}>{active ? "Active" : "Enter"}</span>
+                  <span className="set-view-act">
+                    <button
+                      className="set-edit"
+                      title="Edit view"
+                      aria-label={`Edit ${v.name}`}
+                      onClick={(e) => { e.stopPropagation(); edit(v.id); }}
+                    ><IconPencil /></button>
+                    <button
+                      className="set-x"
+                      title="Delete view"
+                      aria-label={`Delete ${v.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        trace("views.delete", { name: clip(v.name) });
+                        onDeleteView(v.id);
+                      }}
+                    ><IconX /></button>
+                  </span>
+                </div>
+              );
+            })}
           </div>
-          <div className="settings-field">
-            <span className="settings-field-label">Tasks from</span>
-            <Seg
-              value={agent}
-              options={[{ v: "all", label: "All" }, { v: "agent", label: "Agent" }, { v: "mine", label: "Mine" }]}
-              onPick={(v) => setAgent(v as CustomView["agent"])}
+          {!creatingView && (
+            <button
+              className="set-new"
+              title="Combine priorities, agent, project, notes"
+              onClick={() => setCreatingView(true)}
+            >
+              <b>+</b> New view
+            </button>
+          )}
+        {creatingView && (
+          <div className="settings-form">
+            <input
+              className="settings-name-input"
+              placeholder="View name"
+              value={name}
+              autoFocus
+              spellCheck={false}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); save(); }
+                else if (e.key === "Escape") { e.preventDefault(); setCreatingView(false); resetDraft(); }
+              }}
             />
-          </div>
-          {(features.taskProjects || features.noteProjects) && (
+            <div className="set-form-summary">{draftSummary || "everything"}</div>
+            {features.taskPriorities && (
+              <div className="settings-field">
+                <span className="settings-field-label">Priorities</span>
+                {ALL_TIERS.map((n) => (
+                  <button
+                    key={n}
+                    className={`set-chip${priorities.includes(n) ? " on" : ""}`}
+                    onClick={() => toggleTier(n, priorities, setPriorities)}
+                  >P{n}</button>
+                ))}
+              </div>
+            )}
             <div className="settings-field">
-              <span className="settings-field-label">Projects</span>
-              <button
-                className={`set-chip${projectIds.length === 0 ? " on" : ""}`}
-                onClick={() => setProjectIds([])}
-              >Any</button>
-              {projects.map((p) => (
-                <button
-                  key={p.id}
-                  className={`set-chip${projectIds.includes(p.id) ? " on" : ""}`}
-                  onClick={() => setProjectIds((ids) =>
-                    ids.includes(p.id) ? ids.filter((x) => x !== p.id) : [...ids, p.id],
-                  )}
-                >{p.name}</button>
-              ))}
+              <span className="settings-field-label">Sections</span>
+              {([["today", "Today"], ["daily", "Daily"], ["backlog", "Backlog"]] as const).map(
+                ([sec, label]) => (
+                  <button
+                    key={sec}
+                    className={`set-chip${sections[sec] ? " on" : ""}`}
+                    onClick={() => setSections((sc) => ({ ...sc, [sec]: !sc[sec] }))}
+                  >{label}</button>
+                ),
+              )}
             </div>
-          )}
-          {features.notes && (
             <div className="settings-field">
-              <span className="settings-field-label">Notes</span>
+              <span className="settings-field-label">Tasks from</span>
               <Seg
-                value={notes ? "show" : "hide"}
-                options={[{ v: "show", label: "Show" }, { v: "hide", label: "Hide" }]}
-                onPick={(v) => setNotes(v === "show")}
+                value={agent}
+                options={[{ v: "all", label: "All" }, { v: "agent", label: "Agent" }, { v: "mine", label: "Mine" }]}
+                onPick={(v) => setAgent(v as CustomView["agent"])}
               />
             </div>
-          )}
-          {features.goals && (
-            <div className="settings-field">
-              <span className="settings-field-label">Goals</span>
-              <Seg
-                value={goals ? "show" : "hide"}
-                options={[{ v: "show", label: "Show" }, { v: "hide", label: "Hide" }]}
-                onPick={(v) => setGoals(v === "show")}
-              />
-            </div>
-          )}
-          {features.notes && features.notePriorities && (
-            <div className="settings-field">
-              <span className="settings-field-label">Note tiers</span>
-              {ALL_TIERS.map((n) => (
+            {(features.taskProjects || features.noteProjects) && (
+              <div className="settings-field">
+                <span className="settings-field-label">Projects</span>
                 <button
-                  key={n}
-                  className={`set-chip${notePriorities.includes(n) ? " on" : ""}`}
-                  onClick={() => toggleTier(n, notePriorities, setNotePriorities)}
-                >P{n}</button>
-              ))}
+                  className={`set-chip${projectIds.length === 0 ? " on" : ""}`}
+                  onClick={() => setProjectIds([])}
+                >Any</button>
+                {projects.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`set-chip${projectIds.includes(p.id) ? " on" : ""}`}
+                    onClick={() => setProjectIds((ids) =>
+                      ids.includes(p.id) ? ids.filter((x) => x !== p.id) : [...ids, p.id],
+                    )}
+                  >{p.name}</button>
+                ))}
+              </div>
+            )}
+            {features.notes && (
+              <div className="settings-field">
+                <span className="settings-field-label">Notes</span>
+                <Seg
+                  value={notes ? "show" : "hide"}
+                  options={[{ v: "show", label: "Show" }, { v: "hide", label: "Hide" }]}
+                  onPick={(v) => setNotes(v === "show")}
+                />
+              </div>
+            )}
+            {features.goals && (
+              <div className="settings-field">
+                <span className="settings-field-label">Goals</span>
+                <Seg
+                  value={goals ? "show" : "hide"}
+                  options={[{ v: "show", label: "Show" }, { v: "hide", label: "Hide" }]}
+                  onPick={(v) => setGoals(v === "show")}
+                />
+              </div>
+            )}
+            {features.notes && features.notePriorities && (
+              <div className="settings-field">
+                <span className="settings-field-label">Note tiers</span>
+                {ALL_TIERS.map((n) => (
+                  <button
+                    key={n}
+                    className={`set-chip${notePriorities.includes(n) ? " on" : ""}`}
+                    onClick={() => toggleTier(n, notePriorities, setNotePriorities)}
+                  >P{n}</button>
+                ))}
+              </div>
+            )}
+            <div className="settings-form-actions">
+              <button className="pill" onClick={() => { setCreatingView(false); resetDraft(); }}>Cancel</button>
+              <button className="settings-save" disabled={!name.trim()} onClick={save}>{editingId ? "Save Changes" : "Create View"}</button>
             </div>
-          )}
-          <div className="settings-form-actions">
-            <button className="pill" onClick={() => { setCreatingView(false); resetDraft(); }}>Cancel</button>
-            <button className="settings-save" disabled={!name.trim()} onClick={save}>{editingId ? "Save Changes" : "Create View"}</button>
           </div>
-        </div>
+        )}
+        </>
+      ) : (
+        <InfoRow label="No lenses" hint="turn Views on to enter Focus, Fun, or a custom view" />
       )}
     </Group>
   );
