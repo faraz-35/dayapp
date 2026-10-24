@@ -108,6 +108,16 @@ export function IconHash() {
   );
 }
 
+// The priority trigger: the signal-bars language (filled mass grows with
+// urgency, left to right), drawn as round-capped strokes like every glyph here.
+export function IconBars() {
+  return (
+    <svg {...base}>
+      <path d="M4 12.6v-2.2M8 12.6V7.6M12 12.6V3.4" />
+    </svg>
+  );
+}
+
 export function IconDots() {
   return (
     <svg {...base} stroke="none">

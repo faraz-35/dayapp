@@ -122,7 +122,9 @@ meta    key, value           — currently holds last_sweep_date
   keep theirs.
 - `priority` ∈ `1..3` | NULL — urgency tier, set via a `!1`/`!2`/`!3` token in the capture or
   edit text (`parseItemTags` in `lib.ts` strips it; composable with `#tag` in either order;
-  last token wins; no token on edit leaves the value alone; `!0` clears). Housekeeping —
+  last token wins; no token on edit leaves the value alone; `!0` clears). The mouse
+  door is the row's ▮ popover (`PriorityMenu.tsx` — the ProjectMenu pattern, one of the
+  four identical row menus). Housekeeping —
   **not** logged. Shown as signal bars (`▮▮▮` `▮▮▯` `▮▯▯` — filled count = urgency, so
   P1 carries the most visual mass; filled bars use the accent, empty slots a faint track)
   on Today/Daily rows only; Backlog rows are clean. The Backlog is sorted by it (priority
@@ -144,7 +146,8 @@ meta    key, value           — currently holds last_sweep_date
 - `details` — free-form body under the one-line title: the task's spec/context, and for
   agent-delegated rows **the prompt an autonomous session executes**. Edited in the GUI via
   the hover button (⋯ when the row has no body, ⌄ once it does — the icon itself signals
-  "has details") or digit `5` on the focused row (auto-growing textarea under the
+  "has details") or the details digit on the focused row (`6` with priorities
+  on, `5` with them off — slots compact) (auto-growing textarea under the
   open row — Notes' debounce/autosave pattern; a sibling of the row, never inside the
   dragged element). Content like notes, not state: edits are housekeeping — **not** logged —
   and the field stays out of the phone export. `dayapp --task <query>` prints the row plus
@@ -739,6 +742,7 @@ dayapp/
 │   ├── Quotes.tsx                  ← the ##q moment: one quote on a dim backdrop, screensaver-summoned (self-contained fetch + pick; `version` prop is the refresh trigger)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
 │   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
+│   ├── PriorityMenu.tsx            ← ▮ priority-tier popover (per item; the mouse door for !N)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
 │   ├── TokenField.tsx              ← capture/edit field with live token coloring + display forms (##q → quote, !N → bars; transparent text + mirror div + own caret/selection overlay; scanTokens is the one matcher; demoExamples = the rotating demo hints)
 │   ├── CommandPalette.tsx          ← ⌘P modal: filter + keyboard nav
@@ -1058,7 +1062,7 @@ overlay there), so its footer bars render width-fitted to the raw `!N`
   Enter/blur, cancels on Escape.
 - Details: the spec under the title — a full-width, full-strength writing surface
   under the open row (the hover button — ⋯ when empty, ⌄ once it has a body — or
-  digit `5` on the focused row; Escape saves + collapses; Settings → Features can
+  the details digit on the focused row; Escape saves + collapses; Settings → Features can
   switch the whole feature off — button, digit, and open body go with it, data
   stays); zero chrome, the expanded task reads as a small
   document (headline + body) — **primary content, never styled secondary** (no dim
@@ -1088,7 +1092,7 @@ The Esc ladder is `open popover → find bar (in a note) → editing → focused
 one press, with the row still focused underneath; each edit surface's own Escape
 cancels/flushes and blurs onto the still-focused thing; a global Escape clears
 focus entirely, and at that bottom rung digits are
-inert — a stray `1-6` can't do anything unseen. That bottom rung ("free mode")
+inert — a stray `1-7` can't do anything unseen. That bottom rung ("free mode")
 is a reading mode: `j`/`k`/`↑`/`↓` scroll the one `.scroll` container (120px,
 smooth — a view-only verb, so it can't act on anything unseen; it works in
 every view, Analytics included, where nothing is ever focused). While a row or
@@ -1104,7 +1108,7 @@ still-focused row, and the next outside press clears). The focused thing
 buttons** (focus mirrors hover exactly: same tint, same revealed actions, same
 metadata fades), so the digits' targets are visible on screen. An open popover
 borrows the keyboard from the grammar entirely (`usePopoverKeys`): focus moves
-into the menu on open (like digit `5` focusing the details body), ↑/↓ move a
+into the menu on open (like the details digit focusing the details body), ↑/↓ move a
 highlight, Enter picks, ProjectMenu routes printable keys into its create
 field, and App's handler stands down while `popoverOpen()` — digits/Enter/e
 never act on the row underneath a menu the user is inside. **A pick is the
@@ -1129,8 +1133,8 @@ its digit share the one real onClick handler).
 | `b11`–`49` | focus a Backlog row — tier digit first (4 = unprioritized), then row |
 | `n11`–`49` | focus a note — tier digit first (4 = unmarked), then row within the tier's visible group (the `b11`–`49` scheme over the notes' tier groups; flat `n1`–`9` retired) |
 | `g1`–`9` | focus a goal (DOM order = visual order) |
-| `1`–`6` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ◷ remind · ◐ hide (Pause on Daily — its own switch) · ⋯ details · × delete — on the focused row (hidden rows: `4` = ↺, `6` = ×) |
-| `1`–`4` (note) | ⌃/⌄ expand · ⬇ download .txt · ◐ hide · × delete — ⬇ and × need content (hidden notes: `3` = ↺, `4` = ×) |
+| `1`–`7` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ▮ priority · ◷ remind · ◐ hide (Pause on Daily — its own switch) · ⋯ details · × delete — on the focused row (digits compact per switched-off axis; hidden rows: `1` = ↺, `2` = ×) |
+| `1`–`4` (note) | ⌃/⌄ expand · ⬇ download .txt · ◐ hide · × delete — ⬇ and × need content (hidden notes: `1` = ↺, `2` = ×) |
 | `1`–`4` (goal) | ✓ achieve · # project · ◐ pause · × delete — paused rows: `1` = ↺ resume, `2` = × (digits compact per switched-off axis — projects off, or Goal pause off in Settings → Goals) |
 | `↑`/`↓` + `Enter` (popover open) | move the highlight · pick — # project routes typing to its create field; the date input stays native (Tab reaches it) |
 | `j` / `↓` | select next — the walk spans the page's rows in visual order (goals, then notes, then tasks); clamped at the ends; never drops focus |

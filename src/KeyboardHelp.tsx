@@ -51,6 +51,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
   const taskDigits = 1
     + (tm ? 1 : 0)
     + (p ? 1 : 0)
+    + (tp ? 1 : 0)
     + (rm ? 1 : 0)
     + (th || dp ? 1 : 0)
     + 1 /* details */
@@ -61,6 +62,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
   const taskVerbList = [
     ...(tm ? ["▶ timer (Backlog: ↑ send to Today)"] : []),
     ...(p ? ["# project"] : []),
+    ...(tp ? ["▮ priority"] : []),
     ...(rm ? ["◷ remind"] : []),
     ...(th || dp ? ["◐ hide (pause on Daily)"] : []),
     "⋯ details",
@@ -80,6 +82,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
   ].join(" · ");
   const popoverList = [
     ...(p ? ["# project"] : []),
+    ...(tp ? ["▮ priority"] : []),
     ...(rm ? ["◷ remind"] : []),
     ...(th ? ["◐ hide"] : []),
   ].join(" / ");
@@ -109,7 +112,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
         <Row keys={[`1–${taskDigits}`]}>task: {taskVerbList}</Row>
         <Row keys={[`1–${noteDigits}`]}>note: {noteVerbList}</Row>
         {features.goals && <Row keys={[`1–${goalDigits}`]}>goal: {goalVerbList}</Row>}
-        {(p || rm || th || dp) && (
+        {(p || tp || rm || th || dp) && (
           <Row keys={["↑", "↓", "Enter"]}>inside an open popover ({popoverList}): move · pick — a pick clears focus, Esc returns to the row{p ? " · typing in # creates" : ""}</Row>
         )}
         <Row keys={["e"]}>edit it</Row>

@@ -1,10 +1,11 @@
 // ItemRow — a single task row: checkbox, text (or inline editor), metadata,
 // and the hover-revealed action buttons (timer / promote / project / reminder /
 // hide / details / delete). Drag handle is the ⠿ grip; DnD is wired by the
-// parent via useSortable. The buttons carry data-kb markers (1-6, visual
-// order) so the focus grammar's digits fire them through their real onClick
-// handlers. Slot 1 is section-dependent: ▶ timer on Today/Daily, ↑ send to
-// Today on the Backlog (⏸ stop on whichever row is timing).
+// parent via useSortable. The buttons carry data-kb markers (digits in visual
+// order, compacting per switched-off feature) so the focus grammar's digits
+// fire them through their real onClick handlers. Slot 1 is section-dependent:
+// ▶ timer on Today/Daily, ↑ send to Today on the Backlog (⏸ stop on whichever
+// row is timing).
 //
 // Completed Today rows render like a done daily — crossed out, in place — until
 // the day-boundary sweep retires them; the checkbox (or Enter) toggles them back.
@@ -22,6 +23,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { formatDuration, formatLiveDuration, formatReminder, projectColor, todayStr, type HideDuration, type Item, type Project, type TokenKind } from "../lib";
 import { clip, trace } from "../devlog";
 import HideMenu from "../HideMenu";
+import PriorityMenu from "../PriorityMenu";
 import ProjectMenu from "../ProjectMenu";
 import ReminderMenu from "../ReminderMenu";
 import TokenField from "../TokenField";
@@ -34,7 +36,7 @@ import { useFeatures } from "../features";
 export default function ItemRow({
   item, projects, selected, editing, detailsOpen,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide, onUnhide,
-  onSetProject, onCreateProject, onSetReminder, onToggleDetails, onToggleTimer, onPromote, isTiming, elapsedSec, totalSec,
+  onSetProject, onSetPriority, onCreateProject, onSetReminder, onToggleDetails, onToggleTimer, onPromote, isTiming, elapsedSec, totalSec,
 }: {
   item: Item;
   projects: Project[];
@@ -49,6 +51,7 @@ export default function ItemRow({
   onHide: (duration: HideDuration) => void;
   onUnhide: () => void;
   onSetProject: (projectId: string | null) => void;
+  onSetPriority: (priority: 1 | 2 | 3 | null) => void;
   onCreateProject: (name: string) => Promise<Project>;
   onSetReminder: (remindAt: string | null) => void;
   onToggleDetails: () => void;
@@ -99,6 +102,7 @@ export default function ItemRow({
       // Backlog — movement, not timing, so it survives the timer switch).
       if (item.section === "backlog" || features.timer) slots.timer = next();
       if (features.taskProjects) slots.project = next();
+      if (features.taskPriorities) slots.priority = next();
       if (features.reminders) slots.remind = next();
       if (canArchive) slots.hide = next();
       if (features.taskDetails) slots.details = next();
@@ -281,6 +285,9 @@ export default function ItemRow({
                   onAssign={onSetProject}
                   onCreateProject={onCreateProject}
                 />
+              )}
+              {features.taskPriorities && (
+                <PriorityMenu kb={slots.priority} priority={item.priority} onSet={onSetPriority} />
               )}
               {features.reminders && (
                 <ReminderMenu kb={slots.remind} remindAt={item.remindAt} onSet={onSetReminder} />

@@ -17,7 +17,7 @@ import { useFeatures } from "../features";
 export default function SectionView({
   section, label, hint, items, projects, selectedId, editingId, detailsOpenId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide, onUnhide,
-  onSetProject, onCreateProject, onSetReminder, onPromote, onToggleDetails, onSetDetails,
+  onSetProject, onSetPriority, onCreateProject, onSetReminder, onPromote, onToggleDetails, onSetDetails,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
   section: Section;
@@ -36,6 +36,7 @@ export default function SectionView({
   onHide: (id: string, section: Section, duration: HideDuration) => void;
   onUnhide: (id: string) => void;
   onSetProject: (id: string, projectId: string | null) => void;
+  onSetPriority: (id: string, priority: 1 | 2 | 3 | null) => void;
   onCreateProject: (name: string) => Promise<Project>;
   onSetReminder: (id: string, remindAt: string | null) => void;
   /** Send a Backlog row to the end of Today — the section's slot-1 verb. */
@@ -99,6 +100,7 @@ export default function SectionView({
                 onHide={(duration) => onHide(item.id, section, duration)}
                 onUnhide={() => onUnhide(item.id)}
                 onSetProject={(projectId) => onSetProject(item.id, projectId)}
+                onSetPriority={(priority) => onSetPriority(item.id, priority)}
                 onCreateProject={onCreateProject}
                 onSetReminder={(remindAt) => onSetReminder(item.id, remindAt)}
                 onToggleDetails={() => onToggleDetails(item.id)}

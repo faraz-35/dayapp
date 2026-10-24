@@ -37,7 +37,7 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
 export default function SectionList({
   items, visible, projects, routes, selectedId, editingId, detailsOpenId, rowBg = false, demo = false,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
-  onSetProject, onCreateProject, onSetReminder, onMoveItem, onPromote, onToggleDetails, onSetDetails,
+  onSetProject, onSetPriority, onCreateProject, onSetReminder, onMoveItem, onPromote, onToggleDetails, onSetDetails,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
 }: {
   items: Record<Section, Item[]>;
@@ -67,6 +67,7 @@ export default function SectionList({
   onHide: (id: string, section: Section, duration: HideDuration) => void;
   onUnhide: (id: string) => void;
   onSetProject: (id: string, projectId: string | null) => void;
+  onSetPriority: (id: string, priority: 1 | 2 | 3 | null) => void;
   onCreateProject: (name: string) => Promise<Project>;
   onSetReminder: (id: string, remindAt: string | null) => void;
   onMoveItem: (id: string, toSection: Section, newIndex: number) => void;
@@ -240,6 +241,7 @@ export default function SectionList({
               onHide={onHide}
               onUnhide={onUnhide}
               onSetProject={onSetProject}
+              onSetPriority={onSetPriority}
               onCreateProject={onCreateProject}
               onSetReminder={onSetReminder}
               onPromote={onPromote}

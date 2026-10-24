@@ -1696,6 +1696,18 @@ function DayAppBody() {
     await api.setItemProject(id, projectId);
   };
 
+  // Set (or clear) an item's priority tier. Housekeeping — not journal
+  // activity. Today/Daily stay manual; a Backlog row can move across tiers,
+  // so its list re-applies the tier ordering (identity when the tier didn't
+  // change — the same rule the !N edit path follows).
+  const handleSetPriority = async (id: string, priority: 1 | 2 | 3 | null) => {
+    setItems((s) => {
+      const upd = (list: Item[]) => list.map((i) => (i.id === id ? { ...i, priority } : i));
+      return { today: upd(s.today), daily: upd(s.daily), backlog: sortBacklog(upd(s.backlog)) };
+    });
+    await api.setItemPriority(id, priority);
+  };
+
   const handleSetReminder = async (id: string, remindAt: string | null) => {
     updateItemField(id, { remindAt });
     await api.setReminder(id, remindAt);
@@ -2654,6 +2666,7 @@ function DayAppBody() {
                 onHide={handleHide}
                 onUnhide={handleUnhide}
                 onSetProject={handleSetProject}
+                onSetPriority={handleSetPriority}
                 onCreateProject={handleCreateProject}
                 onSetReminder={handleSetReminder}
                 onToggleDetails={handleToggleDetails}
