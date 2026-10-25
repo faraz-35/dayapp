@@ -45,6 +45,7 @@ import { type EntryKind, type HideDuration, type HiddenFilter, baseTextWidth, en
 import { log } from "./log";
 import { clip, trace } from "./devlog";
 import HideMenu from "./HideMenu";
+import PriorityMenu from "./PriorityMenu";
 import TokenField from "./TokenField";
 import { PriorityBars } from "./components/PriorityBars";
 import { IconChevron, IconDownload, IconX } from "./components/icons";
@@ -296,6 +297,14 @@ export default function Notes({
     if (projectId !== undefined) notesApi.setProject(id, projectId);
   }, [projects, onCreateProject]);
 
+  // The ▮ popover's pick — the priority's mouse door, exactly the footer
+  // catch's priority path: optimistic column write, then sortNotes re-lands
+  // the card in its tier group immediately.
+  const handleSetPriority = useCallback(async (id: string, tier: 1 | 2 | 3 | null) => {
+    setNotes((s) => sortNotes(s.map((n) => (n.id === id ? { ...n, priority: tier } : n))));
+    await notesApi.setPriority(id, tier);
+  }, []);
+
   // Collapse/expand a note card in place. Persisted so a relaunch keeps the
   // list as compact as the user left it.
   const toggleCollapse = (id: string) => {
@@ -437,6 +446,7 @@ export default function Notes({
               onToggleCollapse={() => toggleCollapse(note.id)}
               onUpdate={handleUpdate}
               onCatchTokens={handleCatchTokens}
+              onSetPriority={handleSetPriority}
               onDelete={() => handleDelete(note.id)}
               onHide={(duration) => handleHide(note.id, duration)}
               onUnhide={() => handleUnhide(note.id)}
@@ -452,7 +462,7 @@ export default function Notes({
 // ---- Single note textarea ------------------------------------------------
 
 function NoteInput({
-  note, projects, hovered, focused, collapsed, findOpen, onToggleCollapse, onUpdate, onCatchTokens, onDelete, onHide, onUnhide, onFindClose,
+  note, projects, hovered, focused, collapsed, findOpen, onToggleCollapse, onUpdate, onCatchTokens, onSetPriority, onDelete, onHide, onUnhide, onFindClose,
 }: {
   note: Note;
   projects: Project[];
@@ -465,6 +475,8 @@ function NoteInput({
   onUpdate: (id: string, body: string) => void;
   /** Applies a caught trailing token line to the columns (see Notes). */
   onCatchTokens: (id: string, parsed: { priority: 0 | 1 | 2 | 3 | null; tag: string | null; clearProject: boolean }) => void;
+  /** The ▮ popover's pick (the !N token's mouse door; Notes' handleSetPriority). */
+  onSetPriority: (id: string, tier: 1 | 2 | 3 | null) => void;
   onDelete: () => void;
   onHide: (duration: HideDuration) => void;
   onUnhide: () => void;
@@ -699,6 +711,22 @@ function NoteInput({
     return parts;
   }, [findOpen, matches, cur, val]);
 
+  // Digit slots are DYNAMIC — assigned left-to-right over whatever renders
+  // (the existence switches in Settings remove buttons; the numbering
+  // compacts, never holes). Hidden notes swap the ◐ hide menu for ↺ restore
+  // and skip ▮/⬇, mirroring hidden item rows.
+  let slot = 0;
+  const slots: Record<string, string> = {};
+  if (note.hidden) {
+    slots.unhide = String(++slot);
+    slots.delete = String(++slot);
+  } else {
+    if (features.notePriorities) slots.priority = String(++slot);
+    if (features.noteDownload) slots.download = String(++slot);
+    if (features.noteHide) slots.hide = String(++slot);
+    slots.delete = String(++slot);
+  }
+
   return (
     <div
       className={`note${collapsed ? " collapsed" : ""}${hovered ? " hovered" : ""}${focused ? " focused" : ""}${note.hidden ? " hidden" : ""}${findOpen && !collapsed ? " finding" : ""}`}
@@ -803,60 +831,50 @@ function NoteInput({
           title={collapsed ? "Expand note" : "Collapse note"}
           aria-label={collapsed ? "Expand note" : "Collapse note"}
         >{collapsed ? <IconChevron /> : <IconChevron up />}</button>
+        {/* ▮ priority — the !N token's mouse door, the items' shared menu.
+            Second slot on a live card (before the content/archive verbs, the
+            task rows' metadata-before-actions order); hidden notes keep their
+            restore/delete pair only, like hidden item rows. */}
+        {!note.hidden && features.notePriorities && (
+          <PriorityMenu
+            kb={slots.priority}
+            priority={note.priority}
+            onSet={(tier) => onSetPriority(note.id, tier)}
+          />
+        )}
         {/* ⬇ exports the body as a .txt via the native save panel — the slot
             after collapse. Only for notes with content, like the delete slot;
             hidden notes skip it entirely (their slots are restore/delete
             only). */}
-        {/* Digit slots are DYNAMIC — assigned left-to-right over whatever
-            renders (the existence switches in Settings remove buttons; the
-            numbering compacts, never holes). Hidden notes swap the ◐ hide
-            menu for ↺ restore and skip ⬇, mirroring hidden item rows. */}
-        {(() => {
-          let n = 0;
-          const next = () => String(++n);
-          const slots: Record<string, string> = {};
-          if (note.hidden) {
-            slots.unhide = next();
-            slots.delete = next();
-          } else {
-            if (features.noteDownload) slots.download = next();
-            if (features.noteHide) slots.hide = next();
-            slots.delete = next();
-          }
-          return (
-            <>
-              {!note.hidden && features.noteDownload && val.trim() && (
-                <button
-                  className="item-action"
-                  data-kb={slots.download}
-                  onClick={handleDownload}
-                  title="Download as .txt"
-                  aria-label="Download as .txt"
-                ><IconDownload /></button>
-              )}
-              {note.hidden ? (
-                <button
-                  className="item-action unhide-btn"
-                  data-kb={slots.unhide}
-                  onClick={onUnhide}
-                  title="Unhide note"
-                  aria-label="Unhide note"
-                >↺</button>
-              ) : (
-                features.noteHide && <HideMenu kb={slots.hide} onHide={onHide} />
-              )}
-              {val.trim() && (
-                <button
-                  className="note-delete"
-                  data-kb={slots.delete}
-                  onClick={onDelete}
-                  title="Delete note"
-                  aria-label="Delete note"
-                ><IconX /></button>
-              )}
-            </>
-          );
-        })()}
+        {!note.hidden && features.noteDownload && val.trim() && (
+          <button
+            className="item-action"
+            data-kb={slots.download}
+            onClick={handleDownload}
+            title="Download as .txt"
+            aria-label="Download as .txt"
+          ><IconDownload /></button>
+        )}
+        {note.hidden ? (
+          <button
+            className="item-action unhide-btn"
+            data-kb={slots.unhide}
+            onClick={onUnhide}
+            title="Unhide note"
+            aria-label="Unhide note"
+          >↺</button>
+        ) : (
+          features.noteHide && <HideMenu kb={slots.hide} onHide={onHide} />
+        )}
+        {val.trim() && (
+          <button
+            className="note-delete"
+            data-kb={slots.delete}
+            onClick={onDelete}
+            title="Delete note"
+            aria-label="Delete note"
+          ><IconX /></button>
+        )}
       </div>
     </div>
   );
