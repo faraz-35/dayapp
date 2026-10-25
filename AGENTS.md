@@ -300,8 +300,9 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
 (mobile is a task mirror).
 
 - `horizon` ∈ `timeless` | `long` | `short` — grouped and displayed in that
-  order (constitution → career → now) under hairline dividers labeled with the
-  horizon names (the same divider pattern as the Backlog's tiers). Set via a
+  order (constitution → career → now) under centered horizon labels (the
+  stack-head pattern: centered text, no hairline — 2026-10-25; the Backlog's
+  tier dividers keep their lines). Set via a
   `$1/$2/$3` token in the capture/edit text ($1 short · $2 long · $3 timeless —
   `parseGoalText` in `lib.ts` strips it, word-boundary-guarded so money like
   "$100k" stays literal; default `short` on capture; no token on edit leaves
@@ -872,6 +873,25 @@ swap outranks everything).
 - **The only `transform` on item rows** is the dnd-kit drag transform
   (`ItemRow.tsx`), which is `null` at rest. Do not add static transforms.
 - **No negative margins.** Ever. If you reach for one, the layout model is wrong.
+
+### 4. Two left edges (`--row-x` and `--text-col`)
+
+The page aligns on two shared left edges, both defined in `index.css` from
+the task row's named slot widths (`--grip-w`/`--check-w`), so neither can
+drift from the rows:
+
+- **`--row-x`, the chrome edge** — where the row's checkbox circle sits.
+  Surface heads (Tasks / Notes / Goals / Journal / Quotes), all four capture
+  lines (text and underline together), and the journal day labels start
+  here.
+- **`--text-col`, the content column** — one checkbox deeper. Notes, task
+  and goal row text, and the entry lines sit here; the details body matches
+  by mirroring the row's slots.
+
+Off the edges by design: the centered Today/Daily/Backlog heads and tier
+dividers (centering is their hierarchy signal), and Goals' horizon labels —
+centered, no hairline (the Backlog's tier dividers keep theirs). New
+surfaces derive from the variables; they never hardcode an inset.
 
 ---
 
@@ -1632,6 +1652,8 @@ Journal / Quotes icons):**
   left-aligned against a fixed-width priority-bars slot that pins the edge and renders
   even when empty; fell rows carry their at-the-fall snapshots, missed habits their
   current axes — the scope filter's call; the ↓/○ mark is the row's kind, no text tag),
+  gated on the Settings switches like the list itself — Task projects off drops the
+  name, Task priorities off the bars (2026-10-25),
   and the counts derive from the day detail itself, so a day
   outside the range reads as correctly as one inside it. Still counts-first: never the
   raw action stream.

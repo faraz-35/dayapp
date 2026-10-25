@@ -355,12 +355,6 @@ export default function Goals({
         />
       </div>
 
-      {goals.length === 0 && (
-        <div className="empty">{features.goalTimeframes
-          ? "What are you building toward? $1 short · $2 long · $3 timeless."
-          : "What are you building toward?"}</div>
-      )}
-
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}

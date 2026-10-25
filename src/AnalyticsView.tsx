@@ -1088,10 +1088,12 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
                       {subject === "done" && features.timer && t.secs > 0 && (
                         <span className="dd-secs">{formatDuration(t.secs)}</span>
                       )}
-                      <span className="dd-proj">{t.project ?? ""}</span>
-                      <span className="dd-axis">
-                        {t.priority != null && <PriorityBars priority={t.priority} />}
-                      </span>
+                      {features.taskProjects && <span className="dd-proj">{t.project ?? ""}</span>}
+                      {features.taskPriorities && (
+                        <span className="dd-axis">
+                          {t.priority != null && <PriorityBars priority={t.priority} />}
+                        </span>
+                      )}
                     </div>
                   ))}
                   {detail?.fell.map((f) => (
@@ -1099,20 +1101,24 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
                       <span className="dd-mark">↓</span>
                       <span className="dd-time">{f.time}</span>
                       <span className="dd-text">{f.text}</span>
-                      <span className="dd-proj">{f.project ?? ""}</span>
-                      <span className="dd-axis">
-                        {f.priority != null && <PriorityBars priority={f.priority} />}
-                      </span>
+                      {features.taskProjects && <span className="dd-proj">{f.project ?? ""}</span>}
+                      {features.taskPriorities && (
+                        <span className="dd-axis">
+                          {f.priority != null && <PriorityBars priority={f.priority} />}
+                        </span>
+                      )}
                     </div>
                   ))}
                   {detail?.dailyMissed.map((m) => (
                     <div key={`m-${m.text}-${m.project ?? ""}`} className="dd-row missed">
                       <span className="dd-mark">○</span>
                       <span className="dd-text">{m.text}</span>
-                      <span className="dd-proj">{m.project ?? ""}</span>
-                      <span className="dd-axis">
-                        {m.priority != null && <PriorityBars priority={m.priority} />}
-                      </span>
+                      {features.taskProjects && <span className="dd-proj">{m.project ?? ""}</span>}
+                      {features.taskPriorities && (
+                        <span className="dd-axis">
+                          {m.priority != null && <PriorityBars priority={m.priority} />}
+                        </span>
+                      )}
                     </div>
                   ))}
                   {detail != null &&

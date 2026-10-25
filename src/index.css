@@ -20,6 +20,17 @@
   --track: var(--track);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
+  /* Two left edges, both derived from the task row's own slots so neither
+     can drift from the rows. --row-x is the chrome edge — where the row's
+     checkbox circle sits (.sections 8 + .item 8 + grip + gap 8), and where
+     every label and input line starts: surface heads, the four capture
+     lines (text + underline), day labels. --text-col is one checkbox
+     deeper — the content column where notes, task and goal text and the
+     entry lines sit. */
+  --check-w: 15px;  /* the done-circle slot (.item-check / .goal-eternal / .details-slot) */
+  --grip-w: 10px;   /* the ⠿ slot, fixed — the glyph's own advance is not deterministic */
+  --row-x: calc(8px + 8px + var(--grip-w) + 8px);
+  --text-col: calc(var(--row-x) + var(--check-w) + 8px);
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif;
   font-size: 13px;
   color-scheme: dark;
@@ -321,16 +332,24 @@ button {
 }
 
 /* The Tasks head isn't wrapped in a padded section like Notes' (whose head
-   sits 16px in: the section's 8px + its own 8px), so it carries the full
-   inset itself. The top margin gives the Notes→Tasks seam the sections' 36px
-   rhythm (28px here + the 8px the Notes block already adds below it). */
+   is inset by the section's own 8px), so it carries the full inset itself.
+   Heads sit on the chrome edge, with the circles. The top margin gives the
+   Notes→Tasks seam the sections' 36px rhythm (28px here + the 8px the
+   Notes block already adds below it). */
 .section-head.surface-head {
   margin-top: 28px;
-  padding: 0 16px 6px;
+  padding: 0 var(--row-x) 6px;
+}
+/* Surface heads inside their 8px-padded containers (Notes, Goals, the entry
+   pages) land on the same chrome edge. */
+.notes .section-head,
+.goals .section-head,
+.entry-page .section-head {
+  padding-left: calc(var(--row-x) - 8px);
 }
 /* Today/Daily/Backlog label subsections of the task stack — centered, so
-   they read as a level below the left-aligned surface labels (Tasks, Notes)
-   that carry their own inset edge. Same shade and size as the surface
+   they read as a level below the surface labels (Tasks, Notes, Goals) that
+   sit on the shared text column. Same shade and size as the surface
    names: alignment alone carries the hierarchy (2026-10-04 contrast pass). */
 .section-head.stack-head {
   justify-content: center;
@@ -377,7 +396,7 @@ button {
 .item.done { color: var(--done); }
 
 .item-check {
-  width: 15px;
+  width: var(--check-w);
   height: 15px;
   border-radius: 50%;
   border: 1.5px solid var(--text-faint);
@@ -462,11 +481,12 @@ button {
 .item-action.danger:hover { color: var(--danger); }
 
 .grip {
+  width: var(--grip-w);      /* fixed slot — keeps the text column deterministic */
+  text-align: center;
   color: var(--text-faint);
   opacity: 0;
   cursor: grab;
   font-size: 12px;
-  padding: 0 1px;
   line-height: 1;
 }
 :is(.item:hover, .item.selected, .item.dragging, .item:has(.hide-menu)) .grip { opacity: 0.6; }
@@ -478,16 +498,24 @@ button {
 
 .capture {
   margin: 0 8px 6px;
-  padding: 4px 2px 5px;
+  padding: 4px 0 5px;
   border-bottom: 1px solid var(--border);
   transition: border-color 0.1s ease;
 }
 .capture:focus-within { border-color: var(--accent); }
 
+/* Capture lines sit on the chrome edge — the text and its underline
+   together, with the heads and the circles. Contained captures
+   (notes/goals/entries) are inset by their section's own 8px. */
+.capture.task-capture { margin: 2px 8px 8px var(--row-x); }
+.notes .capture,
+.goals .capture,
+.entry-page .capture { margin-left: calc(var(--row-x) - 8px); }
+
 /* The task capture rides above the section stack (outside .sections' own
-   padding), so its margins re-align it: rows' left edge, one notes-gap above
-   the Today head. One input for all three destinations — ##t/##d/##b route. */
-.capture.task-capture { margin: 2px 8px 8px; }
+   padding), so its left margin is the whole inset — one notes-gap above
+   the Today head. One input for all three destinations — ##t/##d/##b
+   route. */
 .capture input,
 .capture textarea {
   width: 100%;
@@ -1374,7 +1402,9 @@ button {
 .note {
   position: relative;
   margin: 4px 0;
-  padding: 8px 48px 8px 10px;
+  /* Body text on the content column; the card box (fill, focus underline)
+     stays at the section's edge — text moves, chrome doesn't. */
+  padding: 8px 48px 8px calc(var(--text-col) - 8px);
   /* No radius: the focus underline is the capture-input language, and a
      rounded corner would bend it up at both ends. */
   background: var(--bg-soft);
@@ -1728,7 +1758,7 @@ button {
 /* The mirrored grip is a spacer only — never a drag handle. */
 .item-details .grip { cursor: default; }
 /* The checkbox's slot (.item-check is 15px wide). */
-.item-details .details-slot { width: 15px; flex-shrink: 0; }
+.item-details .details-slot { width: var(--check-w); flex-shrink: 0; }
 .item-details textarea {
   flex: 1;
   min-width: 0;
@@ -1766,6 +1796,15 @@ button {
   height: 1px;
   background: var(--border);
 }
+
+/* Goals' horizon labels read like the stack heads — centered text, no
+   hairline (the Backlog keeps its tier lines; goals don't). */
+.goals .tier-divider {
+  width: auto;
+  justify-content: center;
+}
+.goals .tier-divider::before,
+.goals .tier-divider::after { content: none; }
 
 /* Per-project label. Color is set inline per project (deterministic hue) so the
    eye can group items across sections at a glance. */
@@ -1921,9 +1960,10 @@ button {
 }
 
 /* The timeless slot where short/long rows carry their checkbox: ∞ marks a
-   direction that never completes. Same 15px width so goal rows align. */
+   direction that never completes. The check slot's width, so goal rows sit
+   on the same text column as task rows. */
 .goal-eternal {
-  width: 15px;
+  width: var(--check-w);
   text-align: center;
   color: var(--text-faint);
   font-size: 13px;
@@ -1996,21 +2036,23 @@ button {
   padding: 8px 8px 0;
 }
 
-/* Day header — the section-name language, but marking a day, not a section. */
+/* Day header — the section-name language, but marking a day, not a section.
+   A label, so it sits on the chrome edge with the heads; the entry lines
+   below it sit on the content column. */
 .entry-day {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-dim);
-  margin: 14px 8px 2px;
+  margin: 14px 8px 2px calc(var(--row-x) - 8px);
 }
 
 .entry-row {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 4px 8px;
+  padding: 4px 8px 4px calc(var(--text-col) - 8px);
   border-radius: 6px;
   cursor: default;
   transition: background 0.08s ease;
