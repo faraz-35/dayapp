@@ -56,9 +56,14 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
     + (th || dp ? 1 : 0)
     + 1 /* details */
     + 1; /* delete */
-  // The note card's slots: collapse, then priority / download / hide per
-  // feature, delete.
-  const noteDigits = 1 + (np ? 1 : 0) + (features.noteDownload ? 1 : 0) + (nh ? 1 : 0) + 1;
+  // The note card's slots: collapse, then project / priority / download /
+  // hide per feature, delete.
+  const noteDigits = 1
+    + (features.noteProjects ? 1 : 0)
+    + (np ? 1 : 0)
+    + (features.noteDownload ? 1 : 0)
+    + (nh ? 1 : 0)
+    + 1;
   const goalDigits = 1 + (gp ? 1 : 0) + (features.goalPause ? 1 : 0) + 1;
   const taskVerbList = [
     ...(tm ? ["▶ timer (Backlog: ↑ send to Today)"] : []),
@@ -71,6 +76,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
   ].join(" · ");
   const noteVerbList = [
     "⌃ expand",
+    ...(features.noteProjects ? ["# project"] : []),
     ...(np ? ["▮ priority"] : []),
     ...(features.noteDownload ? ["⬇ download .txt"] : []),
     ...(nh ? ["◐ hide"] : []),
@@ -83,7 +89,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
     "× delete",
   ].join(" · ");
   const popoverList = [
-    ...(p ? ["# project"] : []),
+    ...(p || features.noteProjects ? ["# project"] : []),
     ...(tp || np ? ["▮ priority"] : []),
     ...(rm ? ["◷ remind"] : []),
     ...(th ? ["◐ hide"] : []),
@@ -114,7 +120,7 @@ export default function KeyboardHelp({ open, onClose }: { open: boolean; onClose
         <Row keys={[`1–${taskDigits}`]}>task: {taskVerbList}</Row>
         <Row keys={[`1–${noteDigits}`]}>note: {noteVerbList}</Row>
         {features.goals && <Row keys={[`1–${goalDigits}`]}>goal: {goalVerbList}</Row>}
-        {(p || tp || np || rm || th || dp) && (
+        {(p || tp || np || rm || th || dp || features.noteProjects) && (
           <Row keys={["↑", "↓", "Enter"]}>inside an open popover ({popoverList}): move · pick — a pick clears focus, Esc returns to the row{p ? " · typing in # creates" : ""}</Row>
         )}
         <Row keys={["e"]}>edit it</Row>

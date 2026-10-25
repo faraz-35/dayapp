@@ -202,9 +202,11 @@ from the body and applied to the columns through `set_note_priority`/`set_note_p
 (frontend-parse + setters, exactly the items' model; `parse_note_footer` survives in
 notes.rs only to migrate bodies an earlier footer-storing build wrote). No token leaves the
 current values alone (so ordinary edits never wipe metadata); `!0` clears the priority and
-`#0` the project — tasks' `!0` rule plus its project twin. The priority's mouse door is the
-card's ▮ popover (the items' `PriorityMenu.tsx`, second slot in the note's hover actions,
-gated on `Note priorities`); projects stay token-only.
+`#0` the project — tasks' `!0` rule plus its project twin. Both axes have mouse doors in
+the card's hover actions — the items' popovers verbatim (`ProjectMenu.tsx` for `#` with
+its inline create, `PriorityMenu.tsx` for `!N`), project before priority after expand,
+each gated on its own switch; the menu picks take the same optimistic paths the footer
+catch does.
 The tag resolves with exactly the items' trailing-`#tag` semantics (`resolveNoteTag` in
 `lib.ts`: case-insensitive exact, unique prefix, else create through App's
 handleCreateProject — so a tag whose project was deleted recreates it on the next catch;
@@ -748,7 +750,7 @@ dayapp/
 │   ├── EntriesPage.tsx             ← the two entry pages (Journal ¶ / Quotes ❝): day-grouped entries + capture + inline edit/delete, one component parameterized by kind
 │   ├── Quotes.tsx                  ← the ##q moment: one quote on a dim backdrop, screensaver-summoned (self-contained fetch + pick; `version` prop is the refresh trigger)
 │   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
-│   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item)
+│   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item or note)
 │   ├── PriorityMenu.tsx            ← ▮ priority-tier popover (per item or note; the mouse door for !N)
 │   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
 │   ├── TokenField.tsx              ← capture/edit field with live token coloring + display forms (##q → quote, !N → bars; transparent text + mirror div + own caret/selection overlay; scanTokens is the one matcher; demoExamples = the rotating demo hints)
@@ -1146,7 +1148,7 @@ its digit share the one real onClick handler).
 | `n11`–`49` | focus a note — tier digit first (4 = unmarked), then row within the tier's visible group (the `b11`–`49` scheme over the notes' tier groups; flat `n1`–`9` retired) |
 | `g1`–`9` | focus a goal (DOM order = visual order) |
 | `1`–`7` (task) | ▶ timer (Backlog: ↑ send to Today) · # project · ▮ priority · ◷ remind · ◐ hide (Pause on Daily — its own switch) · ⋯ details · × delete — on the focused row (digits compact per switched-off axis; hidden rows: `1` = ↺, `2` = ×) |
-| `1`–`5` (note) | ⌃/⌄ expand · ▮ priority · ⬇ download .txt · ◐ hide · × delete — ⬇ and × need content; digits compact per switched-off axis (hidden notes: `1` = ↺, `2` = ×) |
+| `1`–`6` (note) | ⌃/⌄ expand · # project · ▮ priority · ⬇ download .txt · ◐ hide · × delete — ⬇ and × need content; digits compact per switched-off axis (hidden notes: `1` = ↺, `2` = ×) |
 | `1`–`4` (goal) | ✓ achieve · # project · ◐ pause · × delete — paused rows: `1` = ↺ resume, `2` = × (digits compact per switched-off axis — projects off, or Goal pause off in Settings → Goals) |
 | `↑`/`↓` + `Enter` (popover open) | move the highlight · pick — # project routes typing to its create field; the date input stays native (Tab reaches it) |
 | `j` / `↓` | select next — the walk spans the page's rows in visual order (goals, then notes, then tasks); clamped at the ends; never drops focus |
@@ -1380,9 +1382,10 @@ into Notes or edit fields isn't hijacked.
 - **Priority + projects via the token grammar** (see "Notes" under Data model):
   inline tokens at capture, or a blank line + tokens-only final line in an existing note,
   caught on blur — stripped from the body, applied to the columns (`flushAndCatch` →
-  `handleCatchTokens`). No token leaves values alone; `!0`/`#0` clear. Priority has one
-  mouse door — the card's ▮ popover (the items' `PriorityMenu`, hover actions, gated on
-  `Note priorities`); projects stay token-only. On screen the tier group is the priority
+  `handleCatchTokens`). No token leaves values alone; `!0`/`#0` clear. Both axes have
+  mouse doors — the items' popovers in the hover actions (`ProjectMenu` for `#`, with
+  inline create; `PriorityMenu` for `▮`), project before priority, each gated on its own
+  Settings switch. On screen the tier group is the priority
   signal, the collapsed label the
   project signal. The list **groups by tier like the Backlog** — P1 → P3 → unmarked
   under tier dividers labeled with the bars — every marked tier labels itself even when

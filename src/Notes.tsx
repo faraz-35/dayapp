@@ -46,6 +46,7 @@ import { log } from "./log";
 import { clip, trace } from "./devlog";
 import HideMenu from "./HideMenu";
 import PriorityMenu from "./PriorityMenu";
+import ProjectMenu from "./ProjectMenu";
 import TokenField from "./TokenField";
 import { PriorityBars } from "./components/PriorityBars";
 import { IconChevron, IconDownload, IconX } from "./components/icons";
@@ -305,6 +306,14 @@ export default function Notes({
     await notesApi.setPriority(id, tier);
   }, []);
 
+  // The # popover's pick — the project's mouse door, the footer catch's
+  // project path minus the tag resolution (the menu hands over an id, or null
+  // to clear). Housekeeping: never logged, and the tier order is untouched.
+  const handleSetProject = useCallback(async (id: string, projectId: string | null) => {
+    setNotes((s) => s.map((n) => (n.id === id ? { ...n, projectId } : n)));
+    await notesApi.setProject(id, projectId);
+  }, []);
+
   // Collapse/expand a note card in place. Persisted so a relaunch keeps the
   // list as compact as the user left it.
   const toggleCollapse = (id: string) => {
@@ -447,6 +456,8 @@ export default function Notes({
               onUpdate={handleUpdate}
               onCatchTokens={handleCatchTokens}
               onSetPriority={handleSetPriority}
+              onSetProject={handleSetProject}
+              onCreateProject={onCreateProject}
               onDelete={() => handleDelete(note.id)}
               onHide={(duration) => handleHide(note.id, duration)}
               onUnhide={() => handleUnhide(note.id)}
@@ -462,7 +473,7 @@ export default function Notes({
 // ---- Single note textarea ------------------------------------------------
 
 function NoteInput({
-  note, projects, hovered, focused, collapsed, findOpen, onToggleCollapse, onUpdate, onCatchTokens, onSetPriority, onDelete, onHide, onUnhide, onFindClose,
+  note, projects, hovered, focused, collapsed, findOpen, onToggleCollapse, onUpdate, onCatchTokens, onSetPriority, onSetProject, onCreateProject, onDelete, onHide, onUnhide, onFindClose,
 }: {
   note: Note;
   projects: Project[];
@@ -477,6 +488,10 @@ function NoteInput({
   onCatchTokens: (id: string, parsed: { priority: 0 | 1 | 2 | 3 | null; tag: string | null; clearProject: boolean }) => void;
   /** The ▮ popover's pick (the !N token's mouse door; Notes' handleSetPriority). */
   onSetPriority: (id: string, tier: 1 | 2 | 3 | null) => void;
+  /** The # popover's pick (the #tag token's mouse door; Notes' handleSetProject). */
+  onSetProject: (id: string, projectId: string | null) => void;
+  /** App's create-project path, for the # menu's inline create field. */
+  onCreateProject: (name: string) => Promise<Project>;
   onDelete: () => void;
   onHide: (duration: HideDuration) => void;
   onUnhide: () => void;
@@ -721,6 +736,7 @@ function NoteInput({
     slots.unhide = String(++slot);
     slots.delete = String(++slot);
   } else {
+    if (features.noteProjects) slots.project = String(++slot);
     if (features.notePriorities) slots.priority = String(++slot);
     if (features.noteDownload) slots.download = String(++slot);
     if (features.noteHide) slots.hide = String(++slot);
@@ -831,10 +847,23 @@ function NoteInput({
           title={collapsed ? "Expand note" : "Collapse note"}
           aria-label={collapsed ? "Expand note" : "Collapse note"}
         >{collapsed ? <IconChevron /> : <IconChevron up />}</button>
+        {/* # project — the #tag token's mouse door, the items' shared menu
+            (roster, ✓ on the current link, inline create). Before ▮, the task
+            rows' metadata order; hidden notes keep their restore/delete pair
+            only, like hidden item rows. */}
+        {!note.hidden && features.noteProjects && (
+          <ProjectMenu
+            kb={slots.project}
+            projects={projects}
+            projectId={note.projectId}
+            onAssign={(projectId) => onSetProject(note.id, projectId)}
+            onCreateProject={onCreateProject}
+          />
+        )}
         {/* ▮ priority — the !N token's mouse door, the items' shared menu.
-            Second slot on a live card (before the content/archive verbs, the
-            task rows' metadata-before-actions order); hidden notes keep their
-            restore/delete pair only, like hidden item rows. */}
+            After the project axis (the task rows' metadata-before-actions
+            order); hidden notes keep their restore/delete pair only, like
+            hidden item rows. */}
         {!note.hidden && features.notePriorities && (
           <PriorityMenu
             kb={slots.priority}
