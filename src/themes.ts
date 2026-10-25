@@ -11,10 +11,12 @@
 // darks), the triplet from the accent hex. Derived, never stored — a custom
 // theme is eleven colors and nothing else.
 //
-// Built-ins: Dark (the original ladder, verbatim) and Light (the full white
-// reskin). Custom themes live in the settings store (settings.json — the
-// same file the CLI's theme verbs read and write); the active id in
-// dayapp-theme. App-level, like zoom — one set across demo/real.
+// Built-ins: Dark (the original ladder, verbatim), Light (the full white
+// reskin), and Nord + Rosé Pine (Faraz's own customs, promoted 2026-10-25 —
+// the shades below are the store's originals, byte for byte). Custom themes
+// live in the settings store (settings.json — the same file the CLI's theme
+// verbs read and write); the active id in dayapp-theme. App-level, like
+// zoom — one set across demo/real.
 
 export interface ThemeColors {
   bg: string;
@@ -72,6 +74,42 @@ export const LIGHT: Theme = {
   },
 };
 
+export const NORD: Theme = {
+  id: "nord",
+  name: "Nord",
+  colors: {
+    bg: "#2e3440",
+    bgElev: "#3b4252",
+    bgSoft: "#353b48",
+    bgHover: "#434c5e",
+    border: "#4c566a",
+    text: "#eceff4",
+    textDim: "#b9c2cc",
+    textFaint: "#8f98a8",
+    accent: "#88c0d0",
+    done: "#4c566a",
+    danger: "#bf616a",
+  },
+};
+
+export const ROSE_PINE: Theme = {
+  id: "rose-pine",
+  name: "Rosé Pine",
+  colors: {
+    bg: "#191724",
+    bgElev: "#1f1d2e",
+    bgSoft: "#1c1b26",
+    bgHover: "#26233a",
+    border: "#403d52",
+    text: "#e0def4",
+    textDim: "#908caa",
+    textFaint: "#6e6a86",
+    accent: "#ebbcba",
+    done: "#403d52",
+    danger: "#eb6f92",
+  },
+};
+
 // Editor order — the Settings form renders the shades in ladder order.
 export const COLOR_FIELDS: { key: keyof ThemeColors; label: string }[] = [
   { key: "bg", label: "Background" },
@@ -104,7 +142,7 @@ export function systemTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? DARK : LIGHT;
 }
 
-export const BUILT_IN_THEMES: Theme[] = [DARK, LIGHT];
+export const BUILT_IN_THEMES: Theme[] = [DARK, LIGHT, NORD, ROSE_PINE];
 
 // ---- Mode ------------------------------------------------------------------
 

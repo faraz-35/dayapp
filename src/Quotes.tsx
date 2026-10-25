@@ -20,15 +20,18 @@
 // archive lives on the Quotes page; this modal stays the moment, not the list.
 
 import { useEffect, useRef, useState } from "react";
-import { entriesApi, type Entry } from "./lib";
+import { entriesApi } from "./lib";
 import { log } from "./log";
 import { trace } from "./devlog";
 
-// Fun Mode's pool — app-owned chrome, the masthead's FUN_MASTHEAD_THEMES
-// move one layer down. The lens drops pressure everywhere, so while it's on
-// these stand in for the captured quotes instead of mixing with them: a
-// heavy quote from the real pool would break the register. Turn the lens
-// off and the ##q pool comes back untouched.
+// The pool's floor — one quote ships with the app (2026-10-25), so the
+// screensaver works before the first ##q lands. Chrome like the masthead
+// words: it rides the rotation but never enters the entries table, so the
+// Quotes page stays the archive of what you captured. A capture of the same
+// line dedups the built-in copy out.
+const BUILT_IN_QUOTES = [
+  "There is nothing so useless as doing efficiently that which should not be done at all.",
+];
 
 export default function Quotes({
   version = 0,
@@ -44,7 +47,7 @@ export default function Quotes({
   /** Reports the pool size up so App's idle watcher can skip an empty pool. */
   onCount?: (n: number) => void;
 }) {
-  const [quotes, setQuotes] = useState<Entry[]>([]);
+  const [quotes, setQuotes] = useState<string[]>([]);
   const [current, setCurrent] = useState<string | null>(null);
   // The quote shown before this one — the next pick avoids it, so summons
   // shuffle rather than dice-roll repeats (lastTheme's rule).
@@ -53,7 +56,8 @@ export default function Quotes({
   useEffect(() => {
     entriesApi.list()
       .then((all) => {
-        const pool = all.filter((e) => e.kind === "quote");
+        const captured = all.filter((e) => e.kind === "quote").map((e) => e.text);
+        const pool = [...captured, ...BUILT_IN_QUOTES.filter((t) => !captured.includes(t))];
         setQuotes(pool);
         onCount?.(pool.length);
       })
@@ -61,17 +65,18 @@ export default function Quotes({
   }, [version, onCount]);
 
   // Summoning picks: a random quote that isn't the last one shown, from the
-  // captured ##q entries. `quotes` may still be loading when open lands first — the
-  // effect re-runs when it arrives, so the pick happens either way.
+  // captured ##q entries plus the built-in floor. `quotes` may still be
+  // loading when open lands first — the effect re-runs when it arrives, so
+  // the pick happens either way.
   useEffect(() => {
     if (!open) return;
     const all = quotes;
     if (all.length === 0) return;
-    const pool = all.filter((q) => q.text !== lastText.current);
+    const pool = all.filter((q) => q !== lastText.current);
     const from = pool.length > 0 ? pool : all;
     const pick = from[Math.floor(Math.random() * from.length)];
-    lastText.current = pick.text;
-    setCurrent(pick.text);
+    lastText.current = pick;
+    setCurrent(pick);
   }, [open, quotes]);
 
   if (!open || current == null) return null;

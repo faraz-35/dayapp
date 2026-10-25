@@ -740,6 +740,7 @@ dayapp/
 │   ├── App.tsx                     ← shell only: state, effects, the focus grammar (key handler), header, view switching, timer chip
 │   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + goalsApi/parseGoalText + projectColor/formatReminder/formatDuration
 │   ├── notesApi.ts                 ← notes typed API wrapper
+│   ├── themes.ts                   ← the theme system: the eleven-shade ladder, the built-ins (Dark/Light/Nord/Rosé Pine), applyTheme — one paint over the tokens
 │   ├── log.ts                      ← prefixed console logger (webview side)
 │   ├── devlog.ts                   ← the demo-mode interaction trace: trace()/clip(), recording lifecycle, 250ms JSONL batching
 │   ├── focusNav.ts                 ← the grammar's DOM side: data-kb button dispatch, capture focus, nth note/goal, popover check
@@ -898,9 +899,11 @@ keyboard-first.** Every choice below is intentional.
    introduce a second accent.
 6. **System by default, themeable by choice.** The factory default theme id is
    `system` — follow the OS light/dark, live (a `matchMedia` listener re-skins
-   mid-session while it holds); a complete Light theme ships beside Dark, and
-   custom themes are eleven-color token sets (Settings → Appearance,
-   2026-10-05). Picking any ladder theme — including System itself, the
+   mid-session while it holds); four complete themes ship beside it — Dark,
+   Light, Nord, Rosé Pine (the last two are Faraz's own customs, promoted to
+   built-ins 2026-10-25) — and custom themes are eleven-color token sets
+   (Settings → Appearance, 2026-10-05). Picking any ladder theme — including
+   System itself, the
    first card in the grid — stores its id (`dayapp-theme`) and ends the
    tracking; only explicit picks persist, applied by
    `applyTheme` in `themes.ts` writing the custom properties onto `<html>`.
@@ -1207,10 +1210,12 @@ stay in the db; Analytics, the CLI, and the phone mirror read them regardless.
 Persisted in the
 `dayapp-*-enabled` keys. **The factory defaults are the minimal set** (2026-10-24,
 Faraz's call — a fresh install is the plain working app, every power axis one
-switch away): Tasks + Notes exist with all three sections, projects on every
-surface, note download on; Goals (the whole master), Timer, Reminders, Task/Note
-priorities, Agent delegation, Task details, and all four archive axes default OFF,
-as do Journal and Quotes. Existing installs are untouched — the defaults live in
+switch away; task/note projects joined the off set 2026-10-25): Tasks + Notes
+exist with all three sections, note download on; Goals (the whole master), Timer,
+Reminders, Task/Note priorities, Task/Note projects, Agent delegation, Task
+details, and all four archive axes default OFF, as do Journal and Quotes (goal
+projects stay ON — dormant under the already-off Goals master). Existing installs
+are untouched — the defaults live in
 the readers' second argument, and a stored key always wins (two layers since
 2026-10-04, Faraz's correction: Settings is high-level configuration, ⌘P is the
 working door). **Appearance** is one
@@ -1451,6 +1456,13 @@ into Notes or edit fields isn't hijacked.
   pause) — see the data model.
 
 **Quote modal (the screensaver's moment):**
+- **The pool has a floor (2026-10-25):** one quote ships with the app
+  (Drucker's "nothing so useless…"), so the screensaver works before the first
+  `##q` lands. The modal picks from captured entries plus the built-in; a
+  capture of the same line dedups the built-in copy out. It is chrome like the
+  masthead words — it never enters the `entries` table, so the Quotes view
+  stays the archive of what was captured, and it rides the Quotes feature's
+  switch like every quote surface.
 - One quote at a time on a dim, blurred backdrop (`rgba(0,0,0,0.65)` +
   `backdrop-filter: blur(12px)`, deeper than the palette's 0.4 — the dim *is* the
   pause) — a single centered serif-italic line, ~75% width,

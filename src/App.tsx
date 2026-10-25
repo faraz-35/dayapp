@@ -381,11 +381,13 @@ function DayAppBody() {
   // The #tag axis is per surface (2026-10-13, like the archive below): off,
   // that surface's projects never parse, resolve, label, or filter — `#abc`
   // in its capture stays literal prose. Existing links stay in the db.
+  // Task/note projects default off (2026-10-25 — the minimal set grew: a
+  // fresh install is a plain list); goals keep theirs on under its master.
   const [taskProjectsEnabled, setTaskProjectsEnabled] = useState(
-    () => sget("dayapp-task-projects-enabled", "1") !== "0",
+    () => sget("dayapp-task-projects-enabled", "0") !== "0",
   );
   const [noteProjectsEnabled, setNoteProjectsEnabled] = useState(
-    () => sget("dayapp-note-projects-enabled", "1") !== "0",
+    () => sget("dayapp-note-projects-enabled", "0") !== "0",
   );
   const [goalProjectsEnabled, setGoalProjectsEnabled] = useState(
     () => sget("dayapp-goal-projects-enabled", "1") !== "0",

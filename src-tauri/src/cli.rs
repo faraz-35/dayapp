@@ -303,6 +303,8 @@ fn themes_cmd() -> anyhow::Result<()> {
     let mut all: Vec<serde_json::Value> = vec![
         serde_json::json!({ "id": "dark", "name": "Dark" }),
         serde_json::json!({ "id": "light", "name": "Light" }),
+        serde_json::json!({ "id": "nord", "name": "Nord" }),
+        serde_json::json!({ "id": "rose-pine", "name": "Rosé Pine" }),
     ];
     all.extend(read_themes(&map)?);
     all.sort_by_key(|t| t["id"].as_str() != Some(active));
@@ -363,6 +365,8 @@ fn theme_activate(rest: &[String]) -> anyhow::Result<()> {
     let mut all: Vec<serde_json::Value> = vec![
         serde_json::json!({ "id": "dark", "name": "Dark" }),
         serde_json::json!({ "id": "light", "name": "Light" }),
+        serde_json::json!({ "id": "nord", "name": "Nord" }),
+        serde_json::json!({ "id": "rose-pine", "name": "Rosé Pine" }),
     ];
     all.extend(read_themes(&map)?);
     let hit = all
