@@ -116,7 +116,10 @@ meta    key, value           — currently holds last_sweep_date
   pipeline re-filters per row's section, so an off half's rows can never render
   with nothing able to unhide them (the da05edf rule, per half).
 - `project_id` — optional assignment to a `projects` row (housekeeping; **not** logged). Shown
-  as a color-coded label on the far right of each item row (deterministic hue per project id).
+  as a color-coded label in the row's fixed project column at the far right (deterministic
+  hue per project id; Appearance → Project colors → Single turns every label and dot one
+  grey), the name left-aligned within the column (2026-10-27 — same column width, names
+  read from one shared left edge).
   Deleting a project nulls the FK (items kept). The axis is per surface (2026-10-13):
   `Task projects` off leaves the label unparsed and unrendered here while Notes/Goals
   keep theirs.
@@ -133,7 +136,11 @@ meta    key, value           — currently holds last_sweep_date
   label is the empty track; an entirely unmarked Backlog renders undivided — a lone
   marked tier still labels itself, since the dividers are the tier signal there — derived
   purely from the rendered order in `SectionView.tsx`, so filters that drop tiers drop
-  their dividers); Today/Daily stay manual.
+  their dividers); Today/Daily stay manual. Settings → Appearance's **Backlog priorities**
+  seg (2026-10-27) swaps the dividers for bars on the rows — Today/Daily's look; display
+  only, the sort and the tier addressing stay. In bars mode an unmarked row renders the
+  empty track (the unmarked divider's own dull bars), so "not triaged yet" still reads
+  as a tier.
 - `assigned_to_agent` ∈ `0` | `1` — the delegation axis ("who executes"), set via a bare `@`
   token in the capture or edit text (`parseItemTags` in `lib.ts` strips it; composable with
   `#tag`/`!N` in any order; `@0` clears, no token on edit leaves it alone; `@word` stays
@@ -213,9 +220,12 @@ handleCreateProject — so a tag whose project was deleted recreates it on the n
 `#0` is the durable unlink). Notes
 group by tier exactly like the Backlog (`ORDER BY COALESCE(priority, 99), sort_order` —
 P1 → P3 → unmarked, tier dividers labeled with the bars; every marked tier labels
-itself even when alone, an entirely unmarked list renders undivided); the
+itself even when alone, an entirely unmarked list renders undivided); in the default
+treatment the
 cards carry no bars and no metadata chrome beyond the collapsed card's project label
-(right-aligned, the row language). Priority/project on notes are housekeeping —
+(right-aligned, the row language). Settings → Appearance's **Note priorities** seg
+(2026-10-27) swaps the dividers for each card's bars in the top-right corner — the
+action cluster's slot, revealed left of them. Priority/project on notes are housekeeping —
 **not logged** — and stay out of the phone export (mobile is a task mirror).
 `dayapp --notes` reconstructs the token line after each body from the columns, so agents
 still read the axes off the text.
@@ -1238,14 +1248,25 @@ projects stay ON — dormant under the already-off Goals master). Existing insta
 are untouched — the defaults live in
 the readers' second argument, and a stored key always wins (two layers since
 2026-10-04, Faraz's correction: Settings is high-level configuration, ⌘P is the
-working door). **Appearance** is one
-look card — the resting fill behind
+working door). **Appearance** is two
+cards — **Theme** on top (the ladder: System, then the eleven-shade cards, and the
+create form) and **Look** beneath it (the rows below). The look rows: the resting fill
+behind
 notes and task rows — each surface picks Card (the `--bg-soft` fill) or
 Bare (the row language: nothing at rest, hover/focus tint instead) — both
 default Bare.
 Notes' Bare hover tint keys off the JS-tracked `.hovered` class, never `:hover` (the
-textareas resize under a stationary pointer); tasks keep `:hover`. Persisted
-`dayapp-notes-card` / `dayapp-tasks-card` (2026-10-05). **Header** is its own card —
+textareas resize under a stationary pointer); tasks keep `:hover`. Three more look segs
+(2026-10-27): **Backlog priorities** and **Note priorities** pick Dividers (the tier
+groups' hairlines — the default) or Bars (each row/card carries its own bars,
+Today/Daily's look — display only, the priority-first sort stays), and **Project
+colors** picks Single (one grey for every label and dot — the default since
+2026-10-27, Faraz's call) or Multi (a hue per project) — `projectColor` reads
+the mode from a lib module flag set at init.
+Persisted
+`dayapp-notes-card` / `dayapp-tasks-card` / `dayapp-backlog-bars` /
+`dayapp-note-bars` / `dayapp-projects-single-color` (2026-10-05, the three segs
+2026-10-27). **Header** is its own card —
 which icon buttons mount top-right:
 `Command palette` (first in the cluster — the mouse door for ⌘P; the glyph is
 per-platform, ⌘ on macOS and the prompt field on Windows/Linux, since Ctrl has

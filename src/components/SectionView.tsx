@@ -15,7 +15,7 @@ import { PriorityBars } from "./PriorityBars";
 import { useFeatures } from "../features";
 
 export default function SectionView({
-  section, label, hint, items, projects, selectedId, editingId, detailsOpenId,
+  section, label, hint, items, barsInRows = false, projects, selectedId, editingId, detailsOpenId,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide, onUnhide,
   onSetProject, onSetPriority, onCreateProject, onSetReminder, onPromote, onToggleDetails, onSetDetails,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
@@ -24,6 +24,9 @@ export default function SectionView({
   label: string;
   hint: string;
   items: Item[];
+  /** Settings → Appearance: bars on the rows (Today/Daily's look) instead of
+   *  the tier dividers. Only ever true for the Backlog. */
+  barsInRows?: boolean;
   projects: Project[];
   selectedId: string | null;
   editingId: string | null;
@@ -71,12 +74,15 @@ export default function SectionView({
           // label is the empty track — is introduced by a hairline divider
           // labeled with the group's signal bars. Rows carry no bars there;
           // the dividers are the tier signal, and never read as a bare input
-          // underline. Divider state comes purely from the rendered order —
+          // underline. Bars mode (Settings → Appearance) drops the dividers
+          // and puts the bars on the rows instead — Today/Daily's look.
+          // Divider state comes purely from the rendered order —
           // filters that drop tiers just remove their boundaries — and the
           // dividers are inert: not sortable, not droppable.
           const dividerBefore =
             features.taskPriorities &&
             section === "backlog" &&
+            !barsInRows &&
             !allUnmarked &&
             (idx === 0 || items[idx - 1].priority !== item.priority);
           return (
@@ -89,6 +95,7 @@ export default function SectionView({
               <ItemRow
                 item={item}
                 projects={projects}
+                barsInRows={barsInRows}
                 selected={item.id === selectedId}
                 editing={item.id === editingId}
                 detailsOpen={detailsOpenId === item.id}

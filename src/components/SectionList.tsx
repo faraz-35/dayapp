@@ -35,7 +35,7 @@ const SECTIONS: { id: Section; label: string; hint: string }[] = [
 ];
 
 export default function SectionList({
-  items, visible, projects, routes, selectedId, editingId, detailsOpenId, rowBg = false, demo = false,
+  items, visible, projects, routes, selectedId, editingId, detailsOpenId, rowBg = false, backlogBars = false, demo = false,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onQuickAdd, onHide, onUnhide,
   onSetProject, onSetPriority, onCreateProject, onSetReminder, onMoveItem, onPromote, onToggleDetails, onSetDetails,
   activeTimerId, liveElapsed, timeTotals, onToggleTimer,
@@ -48,6 +48,10 @@ export default function SectionList({
   /** Settings → UI: the soft card fill behind each row (the notes-card look).
    *  False = the default bare row language. */
   rowBg: boolean;
+  /** Settings → Appearance: the Backlog shows bars on its rows (Today/Daily's
+   *  look) instead of the tier dividers. Display only — the priority-first
+   *  sort is the db's. */
+  backlogBars?: boolean;
   projects: Project[];
   /** Which destination sections EXIST (Settings → Features, view state
    *  excluded) — the capture routes degrade to Today for absent sections. */
@@ -229,6 +233,7 @@ export default function SectionList({
               label={sec.label}
               hint={sec.hint}
               items={items[sec.id]}
+              barsInRows={sec.id === "backlog" && backlogBars}
               projects={projects}
               selectedId={selectedId}
               editingId={editingId}

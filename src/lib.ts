@@ -533,9 +533,22 @@ export const formatReminder = (iso: string): string => {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 };
 
-/** Deterministic, well-spaced color per project so the eye can group items at a
- *  glance. Hash the id → hue; fixed S/L tuned for legibility on the dark bg. */
+// The project-color mode (Settings → Appearance): multi — a hue per project
+// id, the default — or single, one quiet grey for every label and dot.
+// Module state set once at App init (the settings cache is populated before
+// first render) and on the setting's own toggle; an external settings write
+// reloads the webview, so it can't go stale. MobileView exits before App
+// mounts, so the phone always reads multi.
+let singleColorProjects = false;
+export const setProjectColorMode = (single: boolean): void => {
+  singleColorProjects = single;
+};
+
+/** The color for a project's label/dot: a deterministic, well-spaced hue per
+ *  id (hash the id → hue; fixed S/L tuned for legibility on the dark bg), or
+ *  the metadata grey when the color axis is switched off. */
 export const projectColor = (id: string): string => {
+  if (singleColorProjects) return "var(--text-dim)";
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   const hue = h % 360;

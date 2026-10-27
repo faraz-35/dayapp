@@ -71,7 +71,7 @@ const sortNotes = (list: Note[]) =>
   );
 
 export default function Notes({
-  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, cardBg = true, entryRoutes, onCreateProject, onEntryRouted, demo = false,
+  hiddenFilter, focusedId, reloadEpoch = 0, projects, projectFilter, hiddenPriorities, cardBg = true, barsInRows = false, entryRoutes, onCreateProject, onEntryRouted, demo = false,
 }: {
   hiddenFilter: HiddenFilter;
   focusedId?: string | null;
@@ -90,6 +90,9 @@ export default function Notes({
    *  language — bare at rest, hover/focus tint (the JS-tracked .hovered
    *  class, never :hover — the textareas resize under a stationary pointer). */
   cardBg: boolean;
+  /** Settings → Appearance: bars on each card (the rows' look) instead of
+   *  the tier dividers. Display only — the tier-first order is the db's. */
+  barsInRows?: boolean;
   /** Settings → Features: which entry routes the bus still carries. A route
    *  whose destination is switched off doesn't process or color — the line
    *  stays an ordinary note with the token as literal prose. */
@@ -376,7 +379,7 @@ export default function Notes({
   };
 
   return (
-    <section className={`notes${cardBg ? "" : " notes-bare"}`}>
+    <section className={`notes${cardBg ? "" : " notes-bare"}${barsInRows ? " notes-bars" : ""}`}>
       <div className="section-head">
         <span className="section-name surface-name">Notes</span>
       </div>
@@ -434,10 +437,12 @@ export default function Notes({
           treatment: every tier group introduced by a hairline labeled with its
           bars (empty track for the unmarked tail), dividers derived purely
           from the rendered order so a filtered-out tier drops its divider
-          too, and a single-tier list renders undivided. */}
+          too, and a single-tier list renders undivided. Bars mode (Settings →
+          Appearance) drops the dividers — each card carries its bars in the
+          corner instead. */}
       {displayNotes.map((note, idx) => {
         const dividerBefore =
-          !allUnmarked && (idx === 0 || displayNotes[idx - 1].priority !== note.priority);
+          !barsInRows && !allUnmarked && (idx === 0 || displayNotes[idx - 1].priority !== note.priority);
         return (
           <Fragment key={note.id}>
             {dividerBefore && (
@@ -448,6 +453,7 @@ export default function Notes({
             <NoteInput
               note={note}
               projects={projects}
+              barsInRows={barsInRows}
               hovered={hoveredId === note.id}
               focused={focusedId === note.id}
               collapsed={collapsedIds.has(note.id)}
@@ -473,10 +479,13 @@ export default function Notes({
 // ---- Single note textarea ------------------------------------------------
 
 function NoteInput({
-  note, projects, hovered, focused, collapsed, findOpen, onToggleCollapse, onUpdate, onCatchTokens, onSetPriority, onSetProject, onCreateProject, onDelete, onHide, onUnhide, onFindClose,
+  note, projects, barsInRows = false, hovered, focused, collapsed, findOpen, onToggleCollapse, onUpdate, onCatchTokens, onSetPriority, onSetProject, onCreateProject, onDelete, onHide, onUnhide, onFindClose,
 }: {
   note: Note;
   projects: Project[];
+  /** Settings → Appearance: the card carries its bars in the top-right corner
+   *  (the action cluster's slot) instead of the list carrying dividers. */
+  barsInRows?: boolean;
   hovered: boolean;
   focused: boolean;
   collapsed: boolean;
@@ -905,6 +914,15 @@ function NoteInput({
           ><IconX /></button>
         )}
       </div>
+      {/* Bars mode (Settings → Appearance): the tier rides the corner the
+          action cluster otherwise owns — the cluster reveals left of it
+          (CSS on .notes-bars), in both card states. The axis off, or the
+          note unmarked: nothing here, like a row without the axis. */}
+      {barsInRows && features.notePriorities && note.priority != null && (
+        <span className="note-priority" title="Priority">
+          <PriorityBars priority={note.priority} />
+        </span>
+      )}
     </div>
   );
 }

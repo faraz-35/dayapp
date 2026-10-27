@@ -34,12 +34,15 @@ import {
 import { useFeatures } from "../features";
 
 export default function ItemRow({
-  item, projects, selected, editing, detailsOpen,
+  item, projects, barsInRows = false, selected, editing, detailsOpen,
   onSelect, onComplete, onDelete, onCommitEdit, onStartEdit, onHide, onUnhide,
   onSetProject, onSetPriority, onCreateProject, onSetReminder, onToggleDetails, onToggleTimer, onPromote, isTiming, elapsedSec, totalSec,
 }: {
   item: Item;
   projects: Project[];
+  /** Settings → Appearance: the Backlog shows bars on its rows (Today/Daily's
+   *  look) instead of the tier dividers. */
+  barsInRows?: boolean;
   selected: boolean;
   editing: boolean;
   detailsOpen: boolean;
@@ -77,11 +80,17 @@ export default function ItemRow({
   // switch), Today/Backlog rows hide. One ◐ column, two verbs, two switches.
   const canArchive = item.section === "daily" ? features.dailyPause : features.taskHide;
 
-  // Backlog rows carry no bars — the section's tier dividers label the groups
-  // there — so priority feeds the row's metadata only outside the Backlog.
-  // The axis off: no bars at all (the !N tokens never parsed, tiers can't exist).
+  // Bars on a row: Today/Daily always; the Backlog only in bars mode (its
+  // default treatment labels the tier groups with dividers instead). A marked
+  // row renders its bars; in bars mode an UNMARKED Backlog row renders the
+  // empty track — the same dull bars that label the unmarked divider — so
+  // "not triaged yet" reads as a tier, not a missing axis. Elsewhere an
+  // unmarked row leaves the slot blank. The axis off: no bars at all (the
+  // !N tokens never parsed, tiers can't exist).
+  const barsWanted = item.section !== "backlog" || barsInRows;
+  const showEmptyTrack = item.section === "backlog" && barsInRows;
   const priorityBars =
-    features.taskPriorities && item.priority != null && item.section !== "backlog" ? (
+    features.taskPriorities && barsWanted && (item.priority != null || showEmptyTrack) ? (
       <PriorityBars priority={item.priority} />
     ) : null;
 
@@ -171,18 +180,18 @@ export default function ItemRow({
 
       {/* Right-aligned metadata. Three identity axes — priority, agent,
           project — render as FIXED COLUMNS: a row lacking an axis renders
-          its empty slot (Backlog rows never carry bars, but keep priority's
-          slot so the columns hold across the section seam), and the project
-          column clips names to 6 letters + an ellipsis (clipProject — the
-          full name lives in the tooltip), so the metadata reads as one
-          aligned block down the list. The transient facts (hidden status,
-          cumulative time, reminder) flow left of the columns and fade on
-          hover, yielding to the buttons. Robot + priority + project stay
-          visible on hover (the row's identity, wanted while its actions are
-          on screen). While timing the priority slot carries the live elapsed
-          instead of bars — the running timer is the row's salient fact, and
-          the project column keeps its place. */}
-      {!editing && (item.hidden || (totalSec > 0 && !isTiming) || project || item.remindAt || item.assignedToAgent || isTiming) && (
+          its empty slot (Backlog rows carry bars only in bars mode, but keep
+          priority's slot either way so the columns hold across the section
+          seam), and the project column clips names to 6 letters + an ellipsis
+          (clipProject — the full name lives in the tooltip), so the metadata
+          reads as one aligned block down the list. The transient facts
+          (hidden status, cumulative time, reminder) flow left of the columns
+          and fade on hover, yielding to the buttons. Robot + priority +
+          project stay visible on hover (the row's identity, wanted while its
+          actions are on screen). While timing the priority slot carries the
+          live elapsed instead of bars — the running timer is the row's
+          salient fact, and the project column keeps its place. */}
+      {!editing && (item.hidden || (totalSec > 0 && !isTiming) || project || item.remindAt || item.assignedToAgent || isTiming || priorityBars) && (
         <div className="item-meta">
           {item.hidden && (
             <span

@@ -223,6 +223,9 @@ fn settings_cmd(rest: &[String]) -> anyhow::Result<()> {
             println!("ui:");
             println!("  notes-bg   {}", on("dayapp-notes-card"));
             println!("  tasks-bg   {}", on("dayapp-tasks-card"));
+            println!("  backlog-bars {} (bars on rows; off = tier dividers)", on("dayapp-backlog-bars"));
+            println!("  note-bars  {} (bars on cards; off = tier dividers)", on("dayapp-note-bars"));
+            println!("  proj-grey  {} (one grey; off = a hue per project)", on("dayapp-projects-single-color"));
             println!("  screensaver {} min idle", get("dayapp-screensaver-mins").unwrap_or_else(|| "2".into()));
             println!("  header     {}", get("dayapp-header-buttons").unwrap_or_else(|| "{}".into()));
             println!("  titlebar   {}", on("dayapp-window-decorations"));

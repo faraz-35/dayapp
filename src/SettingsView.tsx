@@ -309,6 +309,7 @@ export default function SettingsView({
   features, onToggleFeature, projects, views, activeViewId, viewsEnabled, onToggleViewsEnabled,
   onToggleViewActive, onCreateView, onUpdateView, onDeleteView,
   notesCard, tasksCard, onSetCard, screensaverMins, onSetScreensaverMins, headerBtns, onToggleHeaderBtn,
+  backlogBars, noteBars, onSetPriorityBars, projectColorsSingle, onSetProjectColors,
   windowDecorations, onToggleWindowDecorations,
   themeId, customThemes, onActivateTheme, onCreateTheme, onDeleteTheme,
 }: {
@@ -326,6 +327,14 @@ export default function SettingsView({
   notesCard: boolean;
   tasksCard: boolean;
   onSetCard: (surface: "notes" | "tasks", card: boolean) => void;
+  /** How the two grouped surfaces show priority tiers: dividers (the
+   *  default) or bars on each row/card. */
+  backlogBars: boolean;
+  noteBars: boolean;
+  onSetPriorityBars: (surface: "backlog" | "notes", bars: boolean) => void;
+  /** Project colors: a hue per project (false) or one grey for all. */
+  projectColorsSingle: boolean;
+  onSetProjectColors: (single: boolean) => void;
   screensaverMins: number;
   onSetScreensaverMins: (mins: number) => void;
   headerBtns: Record<HeaderBtn, boolean>;
@@ -547,29 +556,17 @@ export default function SettingsView({
     </Group>
   );
 
-  // Appearance: one look card — the resting fills, then themes as ladder
-  // cards (the eleven shades in editor order, so a theme reads at a glance).
+  // Appearance: two cards. Theme on top — the ladder (System first, then the
+  // eleven-shade cards in editor order, so a theme reads at a glance) with
+  // its create form. Look beneath it — the resting fills, how the two grouped
+  // surfaces show priority tiers, whether projects carry their own hue. The
+  // priority rows go inert while their surface's priority axis is off (no
+  // tiers can exist), the colors row while every projects axis is off (no
+  // labels render).
   const appearancePane = (
-    <Group title="Appearance">
-      <div className="set-rows">
-        <InfoRow label="Notes background" hint="the fill behind each note">
-          <span className={`set-swatch${notesCard ? " filled" : " empty"}`} />
-          <Seg
-            value={notesCard ? "card" : "bare"}
-            options={[{ v: "card", label: "Card" }, { v: "bare", label: "Bare" }]}
-            onPick={(v) => { trace("ui.card", { surface: "notes", to: v === "card" }); onSetCard("notes", v === "card"); }}
-          />
-        </InfoRow>
-        <InfoRow label="Tasks background" hint="the fill behind each row">
-          <span className={`set-swatch${tasksCard ? " filled" : " empty"}`} />
-          <Seg
-            value={tasksCard ? "card" : "bare"}
-            options={[{ v: "card", label: "Card" }, { v: "bare", label: "Bare" }]}
-            onPick={(v) => { trace("ui.card", { surface: "tasks", to: v === "card" }); onSetCard("tasks", v === "card"); }}
-          />
-        </InfoRow>
-      </div>
-      <div className="set-theme-grid">
+    <>
+      <Group title="Theme">
+        <div className="set-theme-grid">
         {/* System — the factory default: follow the OS light/dark, live. The
             strip wears both ladders (dark's shades left, light's right). */}
         <div
@@ -677,7 +674,62 @@ export default function SettingsView({
           </div>
         </div>
       )}
-    </Group>
+      </Group>
+      <Group title="Look">
+        <div className="set-rows">
+          <InfoRow label="Notes background" hint="the fill behind each note">
+            <Seg
+              value={notesCard ? "card" : "bare"}
+              options={[{ v: "card", label: "Card" }, { v: "bare", label: "Bare" }]}
+              onPick={(v) => { trace("ui.card", { surface: "notes", to: v === "card" }); onSetCard("notes", v === "card"); }}
+            />
+          </InfoRow>
+          <InfoRow label="Tasks background" hint="the fill behind each row">
+            <Seg
+              value={tasksCard ? "card" : "bare"}
+              options={[{ v: "card", label: "Card" }, { v: "bare", label: "Bare" }]}
+              onPick={(v) => { trace("ui.card", { surface: "tasks", to: v === "card" }); onSetCard("tasks", v === "card"); }}
+            />
+          </InfoRow>
+          <InfoRow
+            label="Backlog priorities"
+            hint="tier dividers between the groups, or bars on each row — Today's look"
+            needs={!features.taskPriorities}
+            needsLabel="Task priorities"
+          >
+            <Seg
+              value={backlogBars ? "bars" : "dividers"}
+              options={[{ v: "dividers", label: "Dividers" }, { v: "bars", label: "Bars" }]}
+              onPick={(v) => { trace("ui.priority-bars", { surface: "backlog", to: v }); onSetPriorityBars("backlog", v === "bars"); }}
+            />
+          </InfoRow>
+          <InfoRow
+            label="Note priorities"
+            hint="tier dividers between the groups, or bars on each card"
+            needs={!features.notePriorities}
+            needsLabel="Note priorities"
+          >
+            <Seg
+              value={noteBars ? "bars" : "dividers"}
+              options={[{ v: "dividers", label: "Dividers" }, { v: "bars", label: "Bars" }]}
+              onPick={(v) => { trace("ui.priority-bars", { surface: "notes", to: v }); onSetPriorityBars("notes", v === "bars"); }}
+            />
+          </InfoRow>
+          <InfoRow
+            label="Project colors"
+            hint="a hue per project, or one grey for every label"
+            needs={!features.taskProjects && !features.noteProjects && !features.goalProjects}
+            needsLabel="a projects switch"
+          >
+            <Seg
+              value={projectColorsSingle ? "single" : "multi"}
+              options={[{ v: "multi", label: "Multi" }, { v: "single", label: "Single" }]}
+              onPick={(v) => { trace("ui.project-colors", { to: v }); onSetProjectColors(v === "single"); }}
+            />
+          </InfoRow>
+        </div>
+      </Group>
+    </>
   );
 
   // Views: named lenses over the display axes (Focus/Fun and any custom

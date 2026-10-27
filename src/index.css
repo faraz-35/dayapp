@@ -1587,6 +1587,27 @@ button {
 .note-actions .item-action { opacity: 0; }
 :is(.note.hovered, .note.focused, .note:has(.hide-menu)) .note-actions .item-action { opacity: 1; }
 
+/* Bars-in-rows mode (Settings → Appearance): the card carries its tier in
+   the top-right corner — the slot the action cluster owns in the default
+   divider treatment — so the cluster reveals LEFT of it and the collapsed
+   preview's label clears the corner. The bars sit in the same 22px box as
+   the buttons, so the two states align on one row; the card's 48px right
+   padding already clears them on expanded cards. */
+.notes-bars .note-priority {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  z-index: 2;                    /* over the textarea, like the cluster */
+}
+.notes-bars .note-actions { right: 23px; }  /* the cluster sits left of the bars */
+.notes-bars .note-preview { padding-right: 26px; }  /* the label clears the bars */
+:is(.note.hovered, .note.focused, .note:has(.hide-menu)) .notes-bars .note-preview {
+  padding-right: 124px;          /* the shifted cluster (~100px) + the bars */
+}
+
 /* ---- Hide menu (shared by item rows + notes) -------------------------- */
 
 .hide-menu-wrap {
@@ -1692,7 +1713,10 @@ button {
 .meta-project {
   width: 7.5ch;
   display: flex;
-  justify-content: flex-end;
+  /* The column keeps its list-wide width; the name reads from its LEFT edge
+     (2026-10-27) — every label starts on the same x, the way English reads,
+     instead of ending on a shared right edge. */
+  justify-content: flex-start;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -1806,13 +1830,14 @@ button {
 .goals .tier-divider::before,
 .goals .tier-divider::after { content: none; }
 
-/* Per-project label. Color is set inline per project (deterministic hue) so the
-   eye can group items across sections at a glance. */
+/* Per-project label. Color is set inline per project (deterministic hue, or
+   the one metadata grey in single-color mode) so the eye can group items
+   across sections at a glance. */
 .project-label {
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
-  text-align: right;
+  text-align: left;
   max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2788,26 +2813,6 @@ button {
 .set-seg button + button { border-left: 1px solid var(--border); }
 .set-seg button:hover { color: var(--text); background: var(--bg-hover); }
 .set-seg button.on { color: var(--accent); background: rgba(var(--accent-rgb), 0.08); }
-
-/* The Card/Bare swatch: a well of the app background — Card fills it with
-   the soft chip, Bare shows a dashed empty frame. Show, don't tell. */
-.set-swatch {
-  width: 26px;
-  height: 16px;
-  border-radius: 3px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  position: relative;
-  flex-shrink: 0;
-}
-.set-swatch::after {
-  content: "";
-  position: absolute;
-  inset: 3px;
-  border-radius: 2px;
-}
-.set-swatch.filled::after { background: var(--bg-soft); border: 1px solid var(--border); }
-.set-swatch.empty::after { border: 1px dashed var(--text-faint); opacity: 0.5; }
 
 /* Theme cards: the ladder as a strip. */
 .set-theme-grid {

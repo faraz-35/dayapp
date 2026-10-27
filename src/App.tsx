@@ -8,7 +8,7 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, backupApi, demoApi, formatLiveDuration, hideExpiry, isMac, parseItemTags, projectsApi, syncApi, timersApi, todayStr, type ActiveTimer, type EntryKind, type HideDuration, type Item, type Project, type Section } from "./lib";
+import { api, backupApi, demoApi, formatLiveDuration, hideExpiry, isMac, parseItemTags, projectsApi, setProjectColorMode, syncApi, timersApi, todayStr, type ActiveTimer, type EntryKind, type HideDuration, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import { clip, devlogActive, devlogStart, devlogStop, trace } from "./devlog";
 import Notes from "./Notes";
@@ -338,6 +338,25 @@ function DayAppBody() {
   const [tasksCard, setTasksCard] = useState(
     () => sget("dayapp-tasks-card", "0") === "1",
   );
+  // Priority display for the two grouped surfaces (Settings → Appearance):
+  // tier dividers — the default, the current treatment — or bars on each
+  // row/card, Today/Daily's. Display only: the db's priority-first sort and
+  // the tier addressing built on it are untouched.
+  const [backlogBars, setBacklogBars] = useState(
+    () => sget("dayapp-backlog-bars", "0") === "1",
+  );
+  const [noteBars, setNoteBars] = useState(
+    () => sget("dayapp-note-bars", "0") === "1",
+  );
+  // Project colors (Settings → Appearance): one grey for every label and dot
+  // — the default since 2026-10-27, Faraz's call — or a hue per project id.
+  // projectColor reads the module flag lib keeps, so every surface follows
+  // this one write.
+  const [projectColorsSingle, setProjectColorsSingle] = useState(() => {
+    const on = sget("dayapp-projects-single-color", "1") !== "0";
+    setProjectColorMode(on);
+    return on;
+  });
   // Which header icon buttons show (Settings → Header). The minimal default:
   // Analytics / Settings / Theme — ⌘P needs no mouse door, the archive peek
   // needs an archive axis (all off by default), and the written-entry pages
@@ -829,6 +848,9 @@ function DayAppBody() {
     sset("dayapp-sec-backlog-enabled", sectionsEnabled.backlog ? "1" : "0");
     sset("dayapp-notes-card", notesCard ? "1" : "0");
     sset("dayapp-tasks-card", tasksCard ? "1" : "0");
+    sset("dayapp-backlog-bars", backlogBars ? "1" : "0");
+    sset("dayapp-note-bars", noteBars ? "1" : "0");
+    sset("dayapp-projects-single-color", projectColorsSingle ? "1" : "0");
     sset("dayapp-screensaver-mins", String(screensaverMins));
     sset("dayapp-header-buttons", JSON.stringify(headerBtns));
     sset("dayapp-window-decorations", windowDecorations ? "1" : "0");
@@ -857,7 +879,7 @@ function DayAppBody() {
     // screensaver's key stays lookup-only since its palette toggle retired:
     // it's read at mount, never rewritten.) The shared projects/hide keys
     // leave via settings.ts's migrate().
-  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, screensaverMins, headerBtns, windowDecorations, journalEnabled, quotesEnabled, taskProjectsEnabled, noteProjectsEnabled, goalProjectsEnabled, goalTimeframesEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId, viewsEnabled]);
+  }, [goalsVisible, notesVisible, tasksVisible, sectionsVisible, showHiddenItems, showPausedDaily, showHiddenNotes, showHiddenGoals, hiddenPriorities, hiddenNotePriorities, agentTasksVisible, goalsEnabled, notesEnabled, tasksEnabled, sectionsEnabled, notesCard, tasksCard, backlogBars, noteBars, projectColorsSingle, screensaverMins, headerBtns, windowDecorations, journalEnabled, quotesEnabled, taskProjectsEnabled, noteProjectsEnabled, goalProjectsEnabled, goalTimeframesEnabled, taskPrioritiesEnabled, notePrioritiesEnabled, agentEnabled, timerEnabled, remindersEnabled, taskHideEnabled, dailyPauseEnabled, noteHideEnabled, goalPauseEnabled, taskDetailsEnabled, noteDownloadEnabled, views, activeViewId, viewsEnabled]);
 
   // Brand rotation: every 2 minutes toggle home ↔ a random theme. The tick
   // runs in every view; the analytics title simply ignores it. Fun Mode owns
@@ -1952,6 +1974,16 @@ function DayAppBody() {
     if (surface === "notes") setNotesCard(card);
     else setTasksCard(card);
   }, []);
+  const setPriorityBars = useCallback((surface: "backlog" | "notes", bars: boolean) => {
+    if (surface === "backlog") setBacklogBars(bars);
+    else setNoteBars(bars);
+  }, []);
+  // The color mode rides the lib module flag too — every label/dot re-renders
+  // through it on the same state change.
+  const setProjectColors = useCallback((single: boolean) => {
+    setProjectColorMode(single);
+    setProjectColorsSingle(single);
+  }, []);
   const toggleHeaderBtn = useCallback((btn: HeaderBtn) => {
     setHeaderBtns((b) => ({ ...b, [btn]: !b[btn] }));
   }, []);
@@ -2650,6 +2682,7 @@ function DayAppBody() {
               <Notes
                 hiddenFilter={noteHideEnabled && showHiddenNotes ? "include" : "exclude"}
                 cardBg={notesCard}
+                barsInRows={noteBars}
                 entryRoutes={{ journal: journalEnabled, quotes: quotesEnabled }}
                 focusedId={focusNoteId}
                 reloadEpoch={dataEpoch}
@@ -2678,6 +2711,7 @@ function DayAppBody() {
               <SectionList
                 items={renderItems}
                 rowBg={tasksCard}
+                backlogBars={backlogBars}
                 routes={{
                   today: sectionsEnabled.today,
                   daily: sectionsEnabled.daily,
@@ -2755,6 +2789,11 @@ function DayAppBody() {
             notesCard={notesCard}
             tasksCard={tasksCard}
             onSetCard={setCardStyle}
+            backlogBars={backlogBars}
+            noteBars={noteBars}
+            onSetPriorityBars={setPriorityBars}
+            projectColorsSingle={projectColorsSingle}
+            onSetProjectColors={setProjectColors}
             screensaverMins={screensaverMins}
             onSetScreensaverMins={setScreensaverMins}
             headerBtns={headerBtns}
