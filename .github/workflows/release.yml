@@ -251,6 +251,11 @@ jobs:
             git log "${prev}..HEAD" --format='- %s' | grep -v '^- v[0-9]' || echo "- initial release"
           } > notes.md
 
+      # The site's download button links the versionless name — a byte-for-byte
+      # copy of the versioned installer, so the link survives every bump.
+      - name: Copy the Windows installer to its stable name
+        run: cp dist/windows-setup/*-setup.exe dist/DayApp-setup.exe
+
       - name: Publish the release (the channel goes live here)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -263,6 +268,7 @@ jobs:
             dist/windows-setup/*-setup.exe.sig \
             dist/linux-appimage/*_amd64.AppImage \
             dist/linux-appimage/*_amd64.AppImage.sig \
+            dist/DayApp-setup.exe \
             latest.json \
             --repo faraz-35/dayapp --target "$GITHUB_SHA" \
             --title "DayApp v$VERSION" --notes-file notes.md
@@ -321,12 +327,15 @@ jobs:
               setup_url="$(printf '%s' "$latest" | grep -o 'https://[^"]*-setup\.exe' | head -1 || true)"
               got_appimage="$(curl -fsL "$appimage_url" 2>/dev/null | sha256sum | cut -d' ' -f1 || true)"
               got_setup="$(curl -fsL "$setup_url" 2>/dev/null | sha256sum | cut -d' ' -f1 || true)"
-              if [ "$got_appimage" = "$want_appimage" ] && [ "$got_setup" = "$want_setup" ]; then
-                echo "both installers resolve v$VERSION's bytes"
+              # The stable name the site's download button links must serve
+              # this release's installer bytes too.
+              got_stable="$(curl -fsL https://github.com/faraz-35/dayapp/releases/latest/download/DayApp-setup.exe 2>/dev/null | sha256sum | cut -d' ' -f1 || true)"
+              if [ "$got_appimage" = "$want_appimage" ] && [ "$got_setup" = "$want_setup" ] && [ "$got_stable" = "$want_setup" ]; then
+                echo "both installers and the stable download resolve v$VERSION's bytes"
                 exit 0
               fi
             fi
             sleep 10
           done
-          echo "::error::the site installers don't serve v$VERSION's bytes — check getdayapp.vercel.app/install.sh + install.ps1"
+          echo "::error::the site installers or the stable download don't serve v$VERSION's bytes — check getdayapp.vercel.app/install.sh + install.ps1 and the DayApp-setup.exe asset"
           exit 1
