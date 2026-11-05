@@ -173,6 +173,21 @@ async fn journal_day_detail(
     .await
 }
 
+// The range task list — the subject's tasks across the window, flattened
+// newest-first for the analytics page's paginated Tasks card. Read-only,
+// scoped by the same filter as the dashboard.
+#[tauri::command]
+async fn journal_tasks(
+    db: State<'_, DbState>, since: Option<String>, until: Option<String>,
+    filter: Option<dashboard::ScopeFilter>, subject: dashboard::Subject,
+) -> Result<Vec<dashboard::RangeTask>, String> {
+    let filter = filter.unwrap_or_default();
+    with_db(db, move |db| {
+        db.journal_tasks(since.as_deref(), until.as_deref(), &filter, subject)
+    })
+    .await
+}
+
 // ---- Notes commands ------------------------------------------------------
 // Separate from items. Notes are content (not activity), so no journal logging.
 
@@ -1155,7 +1170,7 @@ pub fn run() {
             list_items, create_item, edit_item, complete_item, uncomplete_item,
             move_item, delete_item, run_sweep,
             hide_item, unhide_item,
-            list_actions, journal_dashboard, journal_day_detail,
+            list_actions, journal_dashboard, journal_day_detail, journal_tasks,
             list_notes, create_note, update_note, set_note_priority, set_note_project, delete_note,
             hide_note, unhide_note, save_text_file, devlog_append,
             list_entries, add_entry, update_entry, delete_entry,

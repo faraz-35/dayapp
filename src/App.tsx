@@ -16,7 +16,7 @@ import Goals from "./Goals";
 import Quotes from "./Quotes";
 import EntriesPage from "./EntriesPage";
 import SectionList from "./components/SectionList";
-import AnalyticsView from "./AnalyticsView";
+import AnalyticsView from "./analytics/AnalyticsView";
 import SettingsView, { normalizeView, SEED_VIEWS, viewSummary, type CustomView, type FeatureKey, type HeaderBtn } from "./SettingsView";
 import CommandPalette, { type Command } from "./CommandPalette";
 import SearchMenu, { type SearchHit } from "./components/SearchMenu";

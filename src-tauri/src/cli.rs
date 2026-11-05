@@ -123,7 +123,7 @@ usage: dayapp [--demo] <command> [args]
   --details <query> <body>       replace a task's details body (\"\" clears)
   --deploy                       force-push tasks.json now
   --sync-pull-peek               print the phone's pending captures
-  --analytics [range] [--from D --to D] [--created] [--agent|--mine]
+  --analytics [range] [--from D --to D] [--created|--missed] [--agent|--mine]
                                  [--project <name>] — the analytics dashboard:
                                  stats, splits, day ledger, the action log
   --journal [range]              the actual journal entries (##j), by day
@@ -775,12 +775,14 @@ fn analytics(db: &Db, rest: &[String]) -> anyhow::Result<()> {
     let mut from: Option<&str> = None;
     let mut to: Option<&str> = None;
     let mut created = false;
+    let mut missed = false;
     let mut agent: Option<bool> = None;
     let mut project: Option<String> = None;
     let mut it = rest.iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--created" => created = true,
+            "--missed" => missed = true,
             "--agent" => agent = Some(true),
             "--mine" => agent = Some(false),
             "--project" => {
@@ -835,8 +837,13 @@ fn analytics(db: &Db, rest: &[String]) -> anyhow::Result<()> {
         priorities: None,
         agent,
     };
+    if created && missed {
+        return Err(anyhow::anyhow!("--created and --missed are exclusive subjects"));
+    }
     let subject = if created {
         crate::dashboard::Subject::Created
+    } else if missed {
+        crate::dashboard::Subject::Missed
     } else {
         crate::dashboard::Subject::Done
     };
@@ -846,7 +853,13 @@ fn analytics(db: &Db, rest: &[String]) -> anyhow::Result<()> {
         &filter,
         subject,
     )?;
-    let noun = if created { "created" } else { "done" };
+    let noun = if created {
+        "created"
+    } else if missed {
+        "missed"
+    } else {
+        "done"
+    };
     let days = dash.days.len().max(1);
     let window = match (iso(since), iso(until)) {
         (Some(a), Some(b)) => format!("{} → {}", a, b),
@@ -856,12 +869,14 @@ fn analytics(db: &Db, rest: &[String]) -> anyhow::Result<()> {
     };
     println!("analytics · {noun} · {window}");
     let mut stats = format!(
-        "{} {noun} · avg/day {:.1} · streak {}",
+        "{} {noun} · avg/day {:.1}",
         dash.totals.count,
         dash.totals.count as f64 / days as f64,
-        dash.totals.streak
     );
-    if !created {
+    if subject == crate::dashboard::Subject::Done {
+        stats.push_str(&format!(" · streak {}", dash.totals.streak));
+    }
+    if subject != crate::dashboard::Subject::Created {
         stats.push_str(&format!(
             " · daily missed {} · today missed {}",
             dash.totals.daily_missed, dash.totals.today_missed

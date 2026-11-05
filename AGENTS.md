@@ -29,8 +29,8 @@ the constant, change the app's day.
 | Today items fall to Backlog | `run_sweep()` runs on launch (gated by `meta.last_sweep_date` against the logical today). Idempotent. |
 | Completed Today items disappear overnight | The same sweep deletes today rows with `status='done'` dated before today — the completion already lives in `actions`, so no extra log row. `purge_completed_today()` repeats it un-gated on launch for rows a gated-out sweep left behind. |
 | Backlog reminders promote to Today | `promote_due_reminders()` rides `run_sweep` — the 6am launch sweep **and** the frontend's 60s tick, so it fires without a relaunch (un-gated, idempotent): backlog rows with `remind_at <= today` move to `today`. |
-| "What I did this week" | `SELECT FROM actions WHERE action='completed'`. Every mutation logs itself. The Analytics view summarizes it; `--journal` prints the raw log. |
-| "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X`. ▶/⏸ write open/close timestamps; the Analytics day ledger totals them per day, `--journal` breaks them down per task. The open session row *is* the active timer — no separate state. |
+| "What I did this week" | `SELECT FROM actions WHERE action='completed'`. Every mutation logs itself. The Analytics view summarizes it; `--analytics` prints the raw log. |
+| "How long I worked on X" | `SELECT SUM(duration_secs) FROM sessions WHERE item_id=X`. ▶/⏸ write open/close timestamps; the Analytics day detail totals them per day, `--analytics` breaks them down per task. The open session row *is* the active timer — no separate state. |
 
 This is the spine of the product. New features should fit this model (state + a log that
 writes itself), not fight it.
@@ -169,7 +169,7 @@ meta    key, value           — currently holds last_sweep_date
   paused | unpaused | goal_created | goal_achieved | goal_unachieved | goal_edited | goal_deleted`
 - `actions` rows set exactly one subject: `item_id` on item rows, `goal_id` on goal rows
   (CHECK-enforced). On goal rows the section columns carry the horizon and the status
-  columns carry active/achieved, so `--journal` renders both subjects uniformly.
+  columns carry active/achieved, so `--analytics` renders both subjects uniformly.
 - **`actions.item_text` is snapshotted at write time.** History must survive edits and
   deletions — if it referenced the live row, renaming a task would silently rewrite the
   past.
@@ -274,7 +274,8 @@ capture-only, like the entry routes: an edit never re-routes a row — the drag 
   order, ULID text order breaking same-second ties). Entries have **no organising axes at
   all** — no priority, project, hide, or sort: just text and its day.
 - Entries are **content** (the notes/sessions call): never logged to `actions`, excluded
-  from the phone export, no CLI surface (the entry pages are their home). Logic lives in
+  from the phone export, read back over the CLI's `--journal [range]` (the entry pages
+  are their editing home). Logic lives in
   `src-tauri/src/journal.rs`; the UI is `src/EntriesPage.tsx` (the two views) +
   `src/Quotes.tsx` (modal).
 
@@ -305,7 +306,7 @@ Statements of direction at three horizons — the top of the app's timescale sta
 list its "why" and are prime agent context. Like items they are **state + logged
 activity**: every create/achieve/unachieve/edit/delete appends to `actions`
 (`goal_*` values; the horizon rides `from/to_section`, active/achieved rides
-`from/to_status`). `--journal` renders them with goal verbs ("set goal",
+`from/to_status`). `--analytics` renders them with goal verbs ("set goal",
 "achieved goal", …) and a **Goals** filter pill. Not exported to the phone
 (mobile is a task mirror).
 
@@ -330,7 +331,7 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
   Columns landed via `ensure_column`, deliberately NOT a new `status` value —
   that would have rebuilt the `goals` CHECK, and goal rows log the pause
   window under the **same `paused`/`unpaused` verbs items use** (goal_id on
-  the rows), so the actions CHECK and the journal's verb renderer are
+  the rows), so the actions CHECK and the action log's verb renderer are
   untouched. `pause_goal`/`resume_goal` mirror hide/unhide; the day-boundary
   sweep resumes expired pauses (logging the close). The ◐ button (the shared
   `HideMenu`, verb Pause) sits on active goal rows only — an achieved row has
@@ -458,7 +459,7 @@ not capability.
 
 ### CLI (remote access)
 
-The binary doubles as a headless CLI (`--list`, `--task`, `--search`, `--journal`, `--notes`,
+The binary doubles as a headless CLI (`--list`, `--task`, `--search`, `--journal`, `--analytics`, `--notes`,
 `--projects`, `--add`, `--complete`, `--start`, `--move`, `--details`, `--goals`, `--backup`,
 `--deploy`,
 `--sync-pull-peek`, the settings family — `--settings`, `--themes`, `--theme-create`,
@@ -484,11 +485,16 @@ The read flags deliberately mirror the GUI's surfaces — what the app renders a
 the CLI renders as text — so a remote session can access any information in any format:
 `--search` is ⌘F (a plain substring over item text; a leading `#` flips to the project
 axis — bare `#` lists projects, `#name` lists that project's rows — and `@agent`/`@my`
-flip to the delegation axis), `--journal [today|week|month|all|YYYY-MM-DD]` is the
+flip to the delegation axis), `--analytics [today|week|month|all|YYYY-MM-DD]` is the
 Analytics view's data plus the raw action log (the dashboard summary block — done/missed
 totals, streak, project/priority splits — then actions grouped newest-first by day with
 the per-day done/missed verdict, the per-task ⏱ breakdown and day total; the log's
-textual home is here, the GUI renders aggregates only; default `today`), `--notes`/`--projects` are their
+textual home is here, the GUI renders aggregates plus the paginated task list;
+default `today`; further scoped
+by `--from/--to`, `--created`/`--missed`, `--agent/--mine`, `--project <name>`; defaults Done-only
+like the GUI's default tab), `--journal [range]` is the actual journal — the ##j
+entries day-grouped newest-first (the Journal view's text; quotes stay GUI-only),
+`--notes`/`--projects` are their
 sections (`--notes` prints tier-ordered — the same ORDER BY the GUI groups from — and
 reconstructs each note's `!N #name` token line after the body from the columns, so
 priority/project read straight off the text), and the `--hidden` modifier on `--list`/`--notes` is the ⌘P "Show Hidden"
@@ -749,6 +755,15 @@ dayapp/
 │   └── appimage-strip.sh           ← strips libwayland-*, normalizes modes, repacks + verifies a built AppImage (linux.yml + release.yml's linux job)
 ├── src/
 │   ├── App.tsx                     ← shell only: state, effects, the focus grammar (key handler), header, view switching, timer chip
+│   ├── analytics/                  ← the analytics page — one folder, one surface per file (see the structure pattern under "Analytics view")
+│   │   ├── AnalyticsView.tsx       ← the shell: subject/range/month state, scope selections, fetches, composition
+│   │   ├── FilterBar.tsx           ← the toolbar: subject tabs centered, range presets, from–to popover, axis dropdowns
+│   │   ├── HeatmapCard.tsx         ← the calendar ⇄ day-detail card (month paging, back arrow)
+│   │   ├── TasksCard.tsx           ← the paginated task list (self-contained fetch + pager)
+│   │   ├── cards.tsx               ← StatCard, ProjectsCard, PriorityCard, DelegationCard
+│   │   ├── calendar.ts             ← pure helpers: month grid, intensity levels, colors
+│   │   ├── types.ts                ← shared prop shapes (AxisFilterHandle, AgentCountsLike)
+│   │   └── Chevron.tsx             ← the one chevron glyph
 │   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + goalsApi/parseGoalText + projectColor/formatReminder/formatDuration
 │   ├── notesApi.ts                 ← notes typed API wrapper
 │   ├── themes.ts                   ← the theme system: the eleven-shade ladder, the built-ins (Dark/Light/Nord/Rosé Pine), applyTheme — one paint over the tokens
@@ -771,7 +786,6 @@ dayapp/
 │   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
 │   ├── MobileView.tsx              ← Android client: read-only list + capture bar (GitHub fetch, renders when UA is Android)
 │   ├── MobileSyncSettings.tsx      ← ⌘P sync-config modal (repo/branch/token + validate-by-deploy)
-│   ├── AnalyticsView.tsx           ← the analytics page: stats + heatmap + splits + day ledger/day cards over dashboard.rs (no raw log)
 │   ├── SettingsView.tsx            ← the settings page (⌘P → Settings): tab bar over four panes — Features (Tasks/Notes/Goals three across), Appearance, Header, Views
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← the ONE task capture (##t/##d/##b routing) + DndContext + drag handlers + maps the 3 sections
@@ -793,7 +807,7 @@ dayapp/
     │   ├── backup.rs               ← db backups: VACUUM INTO snapshot into backups/ + reveal (--backup; demo-gated)
     │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API; demo-gated)
     │   ├── demo.rs                 ← demo mode: dayapp-demo.db open/seed + enter/exit/reset swap under the conn lock + the first-run tour gate
-    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--notes/--projects/--add/--complete/--start/--move/--details/--goals/--backup/--deploy/--sync-pull-peek (+ global --demo)
+    │   ├── cli.rs                  ← headless CLI for SSH/zcode: --list/--task/--search/--journal/--analytics/--notes/--projects/--add/--complete/--start/--move/--details/--goals/--backup/--deploy/--sync-pull-peek (+ global --demo)
     │   └── main.rs                 ← binary entrypoint (GUI, or cli::run when given flags)
     ├── schema.sql                  ← items + actions + meta + notes + projects + goals + sessions + entries
     ├── demo.sql                    ← the demo seed (relative timestamps; embedded via include_str!, never commit the .db)
@@ -821,7 +835,7 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | `SectionList.tsx` | the task capture bus (##t/##d/##b route, default Today), `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
-| `AnalyticsView.tsx` | the analytics page: range/day-pick state, dashboard + time fetch, stats/heatmap/splits/day-card render | derivation (all in `dashboard.rs`), item state |
+| `analytics/` (folder) | the analytics page — the shell (`AnalyticsView.tsx`) owns subject/range/month state, scope selections, the fetches, and composition; the surfaces live in focused files beside it (FilterBar / HeatmapCard / TasksCard / cards / calendar — the structure pattern under "Analytics view") | any derivation (all in `dashboard.rs`), item state |
 | `SettingsView.tsx` | the settings page: a tab bar (the seg's language) picks one of four panes — Features / Appearance / Header / Views (2026-10-16, the settings-look tabs mockup); Features lays the Tasks / Notes / Goals cards three across (`.set-grid3`, stacked below 760px) | the toggle/view state (App's — the palette reads it too) |
 | `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
@@ -1583,25 +1597,42 @@ Journal / Quotes icons):**
   two fields always show the effective window (a pill's included), and picking a
   day on either side switches to a session-only Custom range — an empty side is
   open-ended (its "Clear" empties that side), from>to auto-swaps, days between the
-  two sides carry a faint accent tint. The pills stay one-click presets whose
-  windows refill the fields; the picked-day card flow is unchanged (ledger rows
-  and calendar cells).
+  two sides carry a faint accent tint. The presets refill the fields; the
+  picked-day flow is unchanged (calendar cells).
 - The analytics page is **synthesis, never the log**: it answers questions over the
   append-only `actions` history, it does not enumerate events. The raw action log's
-  textual home is the CLI (`--journal`); the GUI shows aggregates only. The masthead
-  reads `Analytics`; the default range is **Week**. The whole toolbar is dropdowns
-  now (2026-10-12): subject · range (Today/Week/Month/All, a radio menu — Custom is
-  reached only through the from–to fields) · the from–to picker · the three axes + Clear.
-- **Subject dropdown (the toolbar's left end, session-only like the range)**: `Done |
-  Created` — what every card counts; a radio menu, a pick applies and closes (2026-10-12;
-  the pill pair before that). Done is the effective completion set with the
-  miss verdicts; Created is the tasks that entered the list (one `created` action
-  each, nothing to fold — no uncomplete inverse exists). Same shapes, same scope
-  filter (creations snapshot their axes at birth like every action); the done-only
-  stats (streak, both misses) stay zero and their cards hide in created mode, the
-  ledger surfaces creations only (time is done-flavored and isn't fetched), and the
-  expanded day lists the creations with a `+` mark. The dashboard fields are neutral
-  (`count`/`tasks`) for exactly this reason. The CLI's `--journal` stays Done-only.
+  textual home is the CLI (`--analytics`); the GUI shows aggregates plus the
+  paginated task list. The masthead reads `Analytics`. The toolbar (2026-11-06):
+  range · from–to picker · **subject tabs centered** · the three axes + Clear.
+- **Subject tabs (centered in the bar, session-only like the range)**: `Done ·
+  Created · Missed` — what every card counts (2026-11-06; the two-entry dropdown
+  before that). Done is the effective completion set with the miss verdicts;
+  Created is the tasks that entered the list (one `created` action each, nothing to
+  fold — no uncomplete inverse exists); Missed makes the two verdicts the subject
+  itself — the heatmap counts misses per day, the splits read the miss rows, the
+  hero shows Missed/Daily missed/Today missed (streak is a done-only stat; the
+  verdict stats show for done AND missed). Same shapes, same scope filter
+  (creations snapshot their axes at birth like every action); the day detail
+  surfaces the subject's rows (creations with a `+`; under Missed, no ✓ rows at
+  all — just ↓ and ○). The dashboard fields are neutral (`count`/`tasks`) for
+  exactly this reason. The CLI's `--analytics` stays Done-only unless `--created`
+  or `--missed` flips the subject (the entries' `--journal` has no done concept).
+- **Range presets**: `Week` (the current calendar week, Mon→Sun) · `Month` (the
+  current calendar month — **the default**, what the heatmap shows) · `Last 7
+  days` / `Last 30 days` (rolling back from today) · `All` (the whole log) ·
+  Custom through the from–to fields. Today is gone as a preset (2026-11-06).
+  **Month and the calendar are
+  one state**: the bounds derive from the viewed month, so the heatmap's ‹ ›
+  arrows move the whole dashboard with them. Every other preset ignores the
+  viewed month — browsing the calendar is preview-only until Month is picked
+  again (which snaps back to the current month).
+- **The heatmap window is range-independent** (2026-11-06, `scan_window` in
+  dashboard.rs): every subject's scan starts at min(since, the ~13-month
+  lookback) and ends past today, so months outside the range still carry lit
+  cells to click — a range-bounded scan showed empty months whose day details
+  then disagreed, and froze the month pager at the range's own edges (the
+  pager is bounded by the data window, not the range). The day rows, totals,
+  and splits filter to the range on their own.
 - **Axis scope filters (the toolbar's right end, session-only like the range)**: three
   multi-select dropdowns — **Projects** (color dots, "No project" as a value), **Priority**
   (the PriorityBars glyphs, empty track = unmarked), and **Delegation** (one axis whose
@@ -1611,7 +1642,7 @@ Journal / Quotes icons):**
   `journal_day_detail` take a `ScopeFilter` over the `actions` write-time snapshots —
   project, priority, and (2026-10-12) agent — so
   filtered history stays deletion-proof): done/streak/avg, heatmap intensities, splits,
-  ledger counts, day-detail rows, and the miss replay — a habit outside the filter is
+  day-detail rows, and the miss replay — a habit outside the filter is
   neither expected nor missed (population = the habit's current axes — the one
   remaining "currently" call; the done-check
   reads the unfiltered completion set, so a reassigned habit never reads as a phantom
@@ -1619,9 +1650,9 @@ Journal / Quotes icons):**
   it — a card scoped to the selection would restate the filter while disagreeing with
   the Done stat). **Tracked time deliberately does not follow the filter** (Faraz's
   call, 2026-08-25 — the timer is barely used, not worth snapshot columns on `sessions`):
-  while filtered the ledger hides its per-day time total and time alone can't surface a
-  day row; per-task time still renders in the day card (it rides the filtered task
-  rows). The Activity card is React-keyed on the rendered-sibling state because WKWebView
+  time has no per-day surface at all — per-task time renders only inside the day
+  detail, on the (filtered) task rows. The Activity card is React-keyed on the
+  rendered-sibling state because WKWebView
   doesn't re-resolve its aspect-ratio cells when the grid track re-widens on unfilter
   (the "heatmap didn't shrink back" bug, 2026-08-25).
 - **Stats**: Done (effective completions — a complete→uncheck→never-again arc doesn't
@@ -1638,10 +1669,13 @@ Journal / Quotes icons):**
   title — back through past months (bounded by the heatmap's data window), forward
   disabled on the current month (2026-10-05). The current month as the default view: — one square per
   day (aspect-ratio cells, so one shape serves every window width), intensity steps of
-  the one accent = that day's completions, the day number top-left, the count
-  bottom-right, today ringed, a Less→More legend. Clicking a cell opens that day's
-  card and the cell is ringed; clicking the picked day again closes it. Picking never
-  re-scopes the stats — the range pills own that. The calendar's width is capped at the
+  the one accent = that day's count of the active subject, the day number top-left,
+  the count bottom-right, today ringed, a Less→More legend. Under the Month range
+  the arrows move the whole dashboard (the bounds derive from the viewed month —
+  see the presets above); under any other preset they only browse. The calendar is
+  the day index: clicking a cell swaps the card itself for that day's detail
+  (below). Picking never
+  re-scopes the stats — the range owns that. The calendar's width is capped at the
   480px-window size and centers inside its card, so filtering an axis away (which
   unmounts its split card and frees the track) can't stretch the squares across the
   row — the cap is on the calendar, never the card: an auto-margin grid item sizes to
@@ -1653,50 +1687,86 @@ Journal / Quotes icons):**
   at the item's CURRENT flag — assignments are unlogged, the same "currently"
   exception as the miss-replay population; a deleted subject can't answer the axis
   and drops out while filtered — and, per the split-card rule, hides while the
-  agent axis names one side. Every project's share of the range's completions as label/bar/count rows
+  agent axis names one side. Every project's share of the range's rows as label/bar/count rows
   (zero-filled from the roster, sorted by count; the card shows the **top ten**, the
   tenth row sinking under a fade whose chip expands to the full roster and a
   chevron-up row folds it back — 2026-10-11; a trailing "none"
   bucket when unprojected work exists), and the priority card — one segmented bar (tier
   proportions as intensity steps of the accent, P1 the strongest) plus a signal-bars
-  glyph legend. Both read the `actions.project`/`actions.priority` write-time snapshots.
-- **Days ledger → day cards**: one line per day that had any signal — `MON, AUG 24 · 7
-  done · 1 missed · 2h 7m` (time only when tracked) — paginated client-side, ten days
-  a page under a minimal `‹ n/m ›` pager (2026-10-11; any fresh derivation resets to
-  page 1). Selecting a day — a ledger row, a calendar cell, or the Today pill (which
-  scopes the range to today and
-  opens its card) — replaces the ledger with that one day's card: day label + counts in
-  the title row, a back button (←) returning to the ledger (back from a Today-picked
-  card restores the Week range), and the day at task level (`journal_day_detail`): the
-  tasks done that day (✓, HH:MM, tracked time), what fell to Backlog (↓), and the
+  glyph legend. Both read the `actions.project`/`actions.priority` write-time
+  snapshots — under Missed, the miss rows' own (fell rows carry their at-the-fall
+  snapshots, missed habits the axes the replay saw).
+- **Day detail (in the calendar card)**: opening a day — a calendar cell — swaps the
+  calendar card itself in place (2026-11-06; the Days ledger it replaced was a second
+  index over what the cells already carry): the title becomes the back arrow (←) +
+  day label + counts (N <subject> · N missed · tracked time), and the body becomes the day
+  at task level (`journal_day_detail`): the
+  subject's rows for that day — done tasks (✓, HH:MM, tracked time), creations (+),
+  what fell to Backlog (↓), and the
   missed habits (○) — every row carries its axes at the right edge (project name
   left-aligned against a fixed-width priority-bars slot that pins the edge and renders
   even when empty; fell rows carry their at-the-fall snapshots, missed habits their
-  current axes — the scope filter's call; the ↓/○ mark is the row's kind, no text tag),
+  current axes — the scope filter's call; the ↓/○/+ mark is the row's kind, no text tag),
   gated on the Settings switches like the list itself — Task projects off drops the
-  name, Task priorities off the bars (2026-10-25),
-  and the counts derive from the day detail itself, so a day
-  outside the range reads as correctly as one inside it. Still counts-first: never the
-  raw action stream.
+  name, Task priorities off the bars (2026-10-25).
+  Back is the one exit — it restores the calendar (the picked day is always in the
+  viewed month, since the cell is the only entry). A tall day grows the card in flow
+  (the row3 neighbors stretch with it — never an internal scroll). The counts derive
+  from the
+  day detail itself, so a day outside the range reads as correctly as one inside it.
+  Still counts-first: never the raw action stream.
+- **Tasks card**: the subject's tasks across the whole window, flattened
+  newest-first (`journal_tasks` — the same derivations the dashboards run, keeping
+  rows) and paginated client-side, ten rows a page under the minimal `‹ n/m ›`
+  pager (2026-11-06, where the Days ledger used to be — the aggregates' row-level
+  counterpart). Each row: the kind mark (✓ done, + created, ↓ fell, ○ missed —
+  under Done only ✓, under Created only +, under Missed ↓ then ○), a dim day chip
+  ("Today" / "Nov 4"), HH:MM (missed habits have none — a day-end verdict), text,
+  and the axes at the right edge, gated on the Settings switches like every row.
+  It follows the subject + the scope filter like every card; tracked time stays
+  out (the day detail owns it). A fresh derivation (range, subject, filter) resets
+  to page 1.
 - **Responsive**: the page is a stack of elevated cards (the token system's elevated
-  surface — `.an-card`, bg-elev + border hairline + 12px radius): hero stats, then
-  Activity · Projects · Priority in one band, then the days ledger on its own full-width
-  row. The 480px window stacks all four; a wide window (Faraz fullscreens it via
-  AeroSpace) puts the three middle cards side by side (`auto-fit minmax(280px, 1fr)` —
-  the calendar's square cells size with their card). One `.scroll` flow either way: the
+  surface — `.an-card`, bg-elev + border hairline + 12px radius): hero stats,
+  Activity · Projects · Priority in one band, then the Tasks card full-width. The
+  480px window stacks them; a wide
+  window (Faraz fullscreens it via AeroSpace) puts the three middle cards side by side
+  (`auto-fit minmax(280px, 1fr)` — the calendar's square cells size with their card).
+  One `.scroll` flow either way: the
   grid columns are in-flow content, never nested scrollers.
-- **No time stats in the stats row** (time appears only as the ledger's per-day total
-  when it exists), and the page is mouse-first: no focus-grammar wiring (free-mode `j`/`k`
+- **No time stats in the stats row** (time appears only per task inside a day detail),
+  and the page is mouse-first: no focus-grammar wiring (free-mode `j`/`k`
   scrolling still works, like every view). The one keyboard path is the filter
   dropdowns themselves — `#` opens the Projects menu (capture phase, inputs
   skipped), ↑/↓ walk the highlight, Enter toggles, Esc closes; still not an
   addressable surface.
 
 - Derivation lives in `src-tauri/src/dashboard.rs` (`journal_dashboard` +
-  `journal_day_detail`, behind commands of the same names); the UI is `AnalyticsView.tsx`
-  (self-contained, the Notes/Goals pattern). No caching: every render re-folds the
+  `journal_day_detail` + `journal_tasks`, behind commands of the same names). The
+  UI is the `src/analytics/` folder — one focused file per surface, `AnalyticsView.tsx`
+  the shell: it owns every state the page derives from (subject, range + viewed
+  month, scope selections, picked day) and the fetches that follow them, and renders
+  nothing itself but composition. The pattern, so new analytics surfaces land in
+  the right file and the shell stays thin:
+  - `FilterBar.tsx` — the whole toolbar; owns its floating-surface state (open
+    menu, the from–to popover, the keyboard walk, outside-click close), renders
+    and toggles the shell's axis selections through the `AxisFilterHandle`.
+  - `HeatmapCard.tsx` — the calendar ⇄ day-detail card; owns the month-paging
+    render, the picked-day follow, the day-detail body, the scroll-into-view.
+  - `TasksCard.tsx` — the paginated list; self-contained (its own fetch + page
+    state, the Notes pattern).
+  - `cards.tsx` — the small distribution cards (hero stat, Projects roster with
+    its own expand state, Priority + Delegation bars); present-only, numbers via
+    props, hide rules stay in the shell.
+  - `calendar.ts` — the pure helpers (month grid, intensity levels, colors);
+    no state, no fetches.
+  - `types.ts` / `Chevron.tsx` — shared prop shapes and the one chevron glyph.
+  The one-way rule: a card never fetches the dashboard (the shell feeds it), a
+  self-contained surface (TasksCard) never reaches into the shell's state, and
+  the shell never grows render logic for a surface that has a file.
+  No caching: every render re-folds the
   whole log — sub-millisecond at hundreds of rows; only revisit if the log ever grows
-  six figures (noted 2026-09-14, Faraz's efficiency question). The CLI's `--journal`
+  six figures (noted 2026-09-14, Faraz's efficiency question). The CLI's `--analytics`
   prints the same
   summary block ahead of the full raw log — the read surface mirrors the GUI, plus the
   log the GUI no longer shows.
@@ -1721,10 +1791,10 @@ Journal / Quotes icons):**
 - No billable hours, no report exports, no charts product. The Analytics view (2026-08-25)
   is the sanctioned summary layer — pure synthesis of the log, single accent, intensity
   steps only, no time stats in the stats row (the timer's payoff stays the per-row
-  cumulative + the per-day ledger total; `--journal` keeps the per-task breakdown).
+  cumulative + the day detail's per-task time; `--analytics` keeps the per-task breakdown).
   Don't grow it toward an analytics-surface product.
 - No blank-page daily-note journaling surface. The activity journal IS the `actions` log
-  (Analytics synthesizes it, `--journal` prints it); the *written* journal is `##j`
+  (Analytics synthesizes it, `--analytics` prints it); the *written* journal is `##j`
   entries captured through the notes bus and rendered by the Journal view — never a
   dedicated editor, prompts, or a per-day template. Don't grow the Journal view toward a
   journaling product.

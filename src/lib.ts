@@ -292,9 +292,10 @@ export interface DashboardFilter {
 /** The unfiltered scope — what the CLI and pre-filter callers see. */
 export const NO_SCOPE: DashboardFilter = { projects: null, priorities: null, agent: null };
 
-/** What the analytics page counts: effective completions (done) or the
- *  tasks that entered the list (created). Session-only, like the range. */
-export type DashboardSubject = "done" | "created";
+/** What the analytics page counts: effective completions (done), the tasks
+ *  that entered the list (created), or the miss verdicts themselves (missed).
+ *  Session-only, like the range. */
+export type DashboardSubject = "done" | "created" | "missed";
 
 export interface DayStat {
   date: string; // YYYY-MM-DD
@@ -351,10 +352,21 @@ export const journalApi = {
       filter: opts.filter ?? null,
       subject: opts.subject,
     }),
-  /** One day at task level — what the ledger's expanded row renders, scoped
+  /** One day at task level — what the calendar card's detail renders, scoped
    *  by the same filter as the dashboard and lensed to the subject. */
   dayDetail: (date: string, subject: DashboardSubject, filter: DashboardFilter = NO_SCOPE) =>
     invoke<DayDetail>("journal_day_detail", { date, filter, subject }),
+  /** The subject's tasks across the whole window, flattened newest-first —
+   *  what the Tasks card paginates client-side. */
+  tasks: (
+    opts: { since?: string; until?: string; filter?: DashboardFilter; subject: DashboardSubject },
+  ) =>
+    invoke<RangeTask[]>("journal_tasks", {
+      since: opts.since ?? null,
+      until: opts.until ?? null,
+      filter: opts.filter ?? null,
+      subject: opts.subject,
+    }),
 };
 
 /** A task in the picked day's card — a completion (Done mode, with the day's
@@ -377,22 +389,38 @@ export interface FellTaskDetail {
   priority: 1 | 2 | 3 | null;
 }
 
-/** A habit the day ended without, with the axes the scope filter saw. */
+/** A habit the day ended without, with the axes the scope filter saw (the
+ *  delegation flag is the habit's current one — assignments are unlogged). */
 export interface MissedHabit {
   text: string;
   project: string | null;
   priority: 1 | 2 | 3 | null;
+  agent: boolean;
 }
 
 export interface DayDetail {
   date: string;
   /** The subject's rows (Done lens: effective completions; Created lens:
-   *  tasks created that day). */
+   *  tasks created that day; Missed lens: empty). */
   tasks: TaskDetail[];
   fell: FellTaskDetail[];
   /** Habits the day ended without (empty for the live today; empty in created
    *  mode). */
   dailyMissed: MissedHabit[];
+}
+
+/** A row of the analytics page's paginated task list — one task's slice of
+ *  the window, with its axes. `time` is HH:MM (empty for missed habits, whose
+ *  verdict has no moment); `kind` is the row's mark: ✓ done, + created,
+ *  ↓ fell, ○ missed. */
+export interface RangeTask {
+  date: string; // YYYY-MM-DD, the logical day
+  time: string;
+  text: string;
+  project: string | null;
+  priority: 1 | 2 | 3 | null;
+  agent: boolean;
+  kind: "done" | "created" | "fell" | "missed";
 }
 
 // ---- Mobile sync ----------------------------------------------------------

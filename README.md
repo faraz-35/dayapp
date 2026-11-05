@@ -51,7 +51,7 @@ The day runs 6am to 6am. Work past midnight and it's still yesterday: nothing re
 
 ## Analytics
 
-A dashboard built from the log: done / streak / missed stats, a month heatmap, project and priority splits, and a day-by-day ledger — click any day (ledger row, calendar cell, or date field) to open it as its own card. Filter by project or priority. A Done / Created toggle switches what it counts — what you finished, or what you took on.
+A dashboard built from the log: done / streak / missed stats, a month heatmap, project and priority splits, and a paginated task list. Click any calendar day to open it as its own card. Filter by project, priority, or who executes. Done / Created / Missed tabs switch what it counts — what you finished, what you took on, or what slipped.
 
 ## Journal & quotes
 
@@ -104,7 +104,7 @@ The same binary reads and writes the list over SSH:
 ```bash
 dayapp --list            # tasks (🤖 marks agent-delegable rows)
 dayapp --task "query"    # one task in full, its details included
-dayapp --journal week    # analytics summary + the raw action log
+dayapp --analytics week  # analytics summary + the raw action log
 dayapp --add "call bank #money !1" --to backlog
 dayapp --complete "call bank"
 ```

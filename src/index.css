@@ -828,8 +828,7 @@ button {
 .cal-cell.l3 .c, .cal-cell.l4 .c { color: var(--text); }
 .cal-cell.today { box-shadow: inset 0 0 0 1px var(--text-dim); }
 .cal-cell.today .n { color: var(--accent); font-weight: 600; }
-.cal-cell.picked { box-shadow: inset 0 0 0 1.5px var(--accent); }
-.cal-cell:not(.blank):not(.future):not(.picked):not(.today):hover {
+.cal-cell:not(.blank):not(.future):not(.today):hover {
   box-shadow: inset 0 0 0 1px var(--text-dim);
 }
 /* The intensity legend, GitHub-style. */
@@ -973,58 +972,12 @@ button {
 .an-proj-less:hover { color: var(--text); }
 .an-proj-less .dd-chev { opacity: 1; }
 
-/* Day ledger and the day card it opens. The list is counts only, never the
-   raw action rows (the log's textual home is the CLI's --journal); clicking
-   a row — or a calendar cell, the date field, or the Today pill — swaps the
-   whole section for that one day's card with a back button. */
-.an-day {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  padding: 6px 8px;
-  border: none;
-  border-radius: 8px;
-  background: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.08s ease;
-}
-.an-day:hover { background: var(--bg-hover); }
-.an-day .d {
-  font-size: 13px;
-  font-weight: 550;
-  color: var(--text);
-  white-space: nowrap;
-}
-.an-day.picked .d { color: var(--accent); }
-.an-day .s {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
-}
-.an-day .s .done { color: var(--text); }
-.an-day .s .time { color: var(--accent); }
-/* The ledger's pager: ten days a page, the minimal ‹ n/m › strip centered
-   under the rows. */
-.an-pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding-top: 6px;
-  font-size: 11px;
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
-/* The picked day's card: the ledger row's expansion promoted to a card. The
-   back chevron sits before the day label in the title row, the counts read
-   in the hint, and the rows sit flush with the card's padding. */
+/* The day detail — the calendar card's picked-day state (the calendar is the
+   day index; opening a day swaps the same card in place, the back chevron
+   returning to the month). Counts only, never the raw action rows (the
+   log's textual home is the CLI's --journal). The back chevron sits before
+   the day label in the title row, the counts read in the hint, and the rows
+   sit flush with the card's padding. */
 .an-daycard .an-card-title { align-items: center; }
 .an-daycard-head {
   display: inline-flex;
@@ -1038,6 +991,7 @@ button {
   font-variant-numeric: tabular-nums;
 }
 .an-daycard .an-day-detail { padding: 0; }
+.an-tasks .an-day-detail { padding: 0; }
 .an-day-detail {
   display: flex;
   flex-direction: column;
@@ -1062,6 +1016,30 @@ button {
 .dd-time {
   width: 36px;
   flex-shrink: 0;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+/* The task list's day chip — which day the row belongs to (the paginated
+   list crosses days; "Today" reads as the word). Same metadata language as
+   the time column beside it. */
+.dd-day {
+  width: 46px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The task list's pager: ten rows a page, the minimal ‹ n/m › strip
+   centered under the rows. */
+.an-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 6px;
+  font-size: 11px;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
@@ -1114,15 +1092,13 @@ button {
   flex-shrink: 0;
   transition: opacity 0.08s ease, transform 0.08s ease;
 }
-.an-day:hover .dd-chev { opacity: 1; }
 .dd-chev.open { transform: rotate(90deg); }
 .dd-chev.left { transform: rotate(180deg); }
 /* Dropdown-trigger orientations: closed points down, open points up. */
 .dd-chev.down { transform: rotate(90deg); }
 .dd-chev.up { transform: rotate(270deg); }
 /* Card-head icon buttons — the inner action button language carrying an
-   always-on chevron: the day card's back arrow, the month pagers, the
-   ledger's pager. */
+   always-on chevron: the day detail's back arrow, the month pagers. */
 .an-back {
   display: inline-flex;
   align-items: center;
@@ -1274,6 +1250,30 @@ button {
   align-items: center;
   gap: 2px;
 }
+/* The subject tabs — what the page counts (Done / Created / Missed),
+   centered between the range fields and the axis dropdowns by two equal
+   flex springs. The pill language: dim at rest, hover tint, accent text
+   when active. */
+.bar-spring { flex: 1 1 0; min-width: 8px; }
+.anf-tabs {
+  display: inline-flex;
+  gap: 2px;
+}
+.anf-tab {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.08s ease, background 0.08s ease;
+}
+.anf-tab:hover { color: var(--text); background: var(--bg-hover); }
+.anf-tab.active { color: var(--accent); }
 .anf-wrap { position: relative; display: inline-flex; }
 .anf-dd {
   display: inline-flex;

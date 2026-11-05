@@ -23,9 +23,14 @@
 //
 // Two subjects share every shape: Done (the set above, with the miss
 // verdicts) and Created — the tasks that entered the list, one `created`
-// action each, nothing to fold. The GUI's toggle swaps what every surface
+// action each, nothing to fold. The GUI's tabs swap what every surface
 // counts; under Created the done-only verdicts (streak, both misses) stay
-// zero and the frontend hides their cards.
+// zero and the frontend hides their cards. Missed is the third lens over the
+// same shapes: the two miss verdicts BECOME the subject — the replay's
+// per-day counts drive the heatmap and the splits, the day detail shows the
+// fell + missed rows, and streak stays zero. Every subject answers to the
+// same scope filter, and `journal_tasks` flattens any subject into one
+// paginated range list (the frontend's Tasks card).
 
 use crate::db::{day_key_of_ts, day_start_prefix, today_iso, Db};
 use rusqlite::{params, OptionalExtension};
@@ -156,14 +161,16 @@ fn push_axis_pred<T: rusqlite::ToSql + Clone + Eq + std::hash::Hash + 'static>(
 }
 
 /// What the dashboard counts. Done is the effective completion set with the
-/// miss verdicts; Created is the tasks that entered the list. The toggle is
-/// display-only — same shapes, same scope filter (creations snapshot their
-/// axes at birth like every action).
+/// miss verdicts; Created is the tasks that entered the list; Missed makes
+/// the two miss verdicts the subject itself. The tab is display-only — same
+/// shapes, same scope filter (creations snapshot their axes at birth like
+/// every action).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Subject {
     Done,
     Created,
+    Missed,
 }
 
 /// One day's row across the requested range — the subject's count, plus the
@@ -270,13 +277,17 @@ pub struct FellTaskDetail {
 
 /// A habit the day ended without — its text plus the axes the scope filter
 /// saw (the live row's current axes when it still exists, else the folded
-/// life-event snapshot), so the day card can show them beside the text.
+/// life-event snapshot), so the day card can show them beside the text. The
+/// delegation flag is the habit's current one (assignments are unlogged —
+/// the same "currently" rule as the population itself); the Missed
+/// dashboard's Agent-vs-Mine split reads it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MissedHabit {
     pub text: String,
     pub project: Option<String>,
     pub priority: Option<i64>,
+    pub agent: bool,
 }
 
 /// A single day at task level — what the analytics day card renders: the
@@ -296,11 +307,10 @@ pub struct DayDetail {
 
 /// An item's standing on one day, folded from that day's completed/
 /// uncompleted events in id order: `done` is true only when the last such
-/// event is a completion. The snapshot fields ride the last completion.
+/// event is a completion (and was admitted by the scope).
 #[derive(Default)]
 struct Effective {
     done: bool,
-    from_section: Option<String>,
     project: Option<String>,
     priority: Option<i64>,
     /// Current-axis read (assignments are unlogged) — the Agent vs Mine split.
@@ -435,7 +445,9 @@ fn apply_life_event(live: &mut HashMap<String, LiveItem>, ev: &LifeEv) {
 /// filter saw. Under a scope filter, only habits whose axes match are in the
 /// population — a habit outside the filter is neither expected nor missed.
 /// Axes come from the live row when it still exists, else the folded
-/// life-event snapshot.
+/// life-event snapshot. `agent_flags` is the current delegation read (the
+/// one axis the replay always carries — the Missed dashboard's split and the
+/// agent scope test both read it).
 fn missed_habits(
     live: &HashMap<String, LiveItem>,
     done_daily: &HashSet<String>,
@@ -449,13 +461,14 @@ fn missed_habits(
                 .get(id.as_str())
                 .cloned()
                 .unwrap_or_else(|| (it.project.clone(), it.priority));
+            let agent = *agent_flags.get(id.as_str()).unwrap_or(&false);
             (it.alive
                 && it.section.as_deref() == Some("daily")
                 && !it.paused
                 && !done_daily.contains(id.as_str())
                 && scope.allows(&project, &priority)
-                && scope.allows_agent(*agent_flags.get(id.as_str()).unwrap_or(&false)))
-                .then(|| MissedHabit { text: it.text.clone(), project, priority })
+                && scope.allows_agent(agent))
+                .then(|| MissedHabit { text: it.text.clone(), project, priority, agent })
         })
         .collect()
 }
@@ -465,6 +478,169 @@ pub fn next_day(date: &str) -> anyhow::Result<String> {
     use chrono::NaiveDate;
     let d = NaiveDate::parse_from_str(date, "%Y-%m-%d")?;
     Ok((d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string())
+}
+
+/// The habits completed as daily per day across a wall-clock window — the
+/// replay's done-check input. The UNSCOPED effective fold (last event wins):
+/// a habit completed as daily that day is done, whatever axes the completion
+/// carried, so a habit reassigned mid-history never reads as a phantom miss.
+/// The one fold every replay caller passes, so the check reads identically
+/// everywhere.
+fn daily_done_by_day(
+    conn: &rusqlite::Connection, lo: &str, hi: &str,
+) -> anyhow::Result<HashMap<String, HashSet<String>>> {
+    let mut stmt = conn.prepare(
+        "SELECT timestamp, item_id, action, from_section FROM actions
+         WHERE item_id IS NOT NULL AND action IN ('completed','uncompleted')
+           AND timestamp >= ?1 AND timestamp < ?2
+         ORDER BY id",
+    )?;
+    let rows = stmt.query_map(params![lo, hi], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, Option<String>>(3)?,
+        ))
+    })?;
+    // day → item → (done, was daily); the fold in id order.
+    let mut fold: HashMap<String, HashMap<String, (bool, bool)>> = HashMap::new();
+    for row in rows {
+        let (ts, item, action, from_section) = row?;
+        let Some(day) = day_key_of_ts(&ts) else { continue };
+        let slot = fold
+            .entry(day)
+            .or_default()
+            .entry(item)
+            .or_default();
+        slot.0 = action == "completed";
+        if slot.0 {
+            slot.1 = from_section.as_deref() == Some("daily");
+        }
+    }
+    Ok(fold
+        .into_iter()
+        .map(|(day, items)| {
+            (
+                day,
+                items
+                    .into_iter()
+                    .filter(|(_, (done, daily))| *done && *daily)
+                    .map(|(id, _)| id)
+                    .collect(),
+            )
+        })
+        .collect())
+}
+
+/// The daily-miss replay across a day span — the ONE walk every miss number
+/// reads (the Done dashboard's verdicts, the Missed dashboard's rows, the
+/// day detail's single-day freeze). For each day in `[start_d, end_d]`: the
+/// habits the day ended without. The live today gets an empty verdict —
+/// misses are a day-end verdict. Section membership folds from the log
+/// itself, so habits deleted long ago still count for the days they existed.
+fn replay_daily_misses(
+    conn: &rusqlite::Connection,
+    start_d: chrono::NaiveDate,
+    end_d: chrono::NaiveDate,
+    today: &str,
+    scope: &Scope,
+    done_daily_by_day: &HashMap<String, HashSet<String>>,
+) -> anyhow::Result<BTreeMap<String, Vec<MissedHabit>>> {
+    let events = fetch_life_events(conn)?;
+    // The scope's project/priority test reads the habits' current axes (the
+    // population is who the habit IS now); the delegation flag is fetched
+    // always — the rows carry it.
+    let axes = if scope.is_empty() {
+        HashMap::new()
+    } else {
+        fetch_item_axes(conn)?
+    };
+    let agent_flags = fetch_agent_flags(conn)?;
+
+    let mut out = BTreeMap::new();
+    // item → standing as of the day being processed.
+    let mut live: HashMap<String, LiveItem> = HashMap::new();
+    let mut idx = 0usize;
+    let empty = HashSet::new();
+    let mut d = start_d;
+    while d <= end_d {
+        let day = d.format("%Y-%m-%d").to_string();
+        // The day ends where the next logical day begins — 06:00 the
+        // following wall-clock morning.
+        let day_end =
+            day_start_prefix(&(d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string());
+        while idx < events.len() && events[idx].ts < day_end {
+            apply_life_event(&mut live, &events[idx]);
+            idx += 1;
+        }
+        let missed = if day == today {
+            Vec::new()
+        } else {
+            missed_habits(
+                &live,
+                done_daily_by_day.get(&day).unwrap_or(&empty),
+                &axes,
+                &agent_flags,
+                scope,
+            )
+        };
+        out.insert(day, missed);
+        d += chrono::Duration::days(1);
+    }
+    Ok(out)
+}
+
+/// A fell_to_backlog row with everything its consumers need: the logical day
+/// and wall-clock time it fell under, the text, and the axes it carried at
+/// the fall (the write-time snapshots, agent included). The sweep's own
+/// record of a today task the day ended without — nothing to derive.
+#[derive(Debug, Clone)]
+struct FellRow {
+    day: String,
+    time: String,
+    text: String,
+    project: Option<String>,
+    priority: Option<i64>,
+    agent: bool,
+}
+
+/// The fell rows in a wall-clock window, scoped by the snapshot axes. One
+/// fetch projected by every consumer (the day detail's fell list, the Missed
+/// dashboard, the range task list).
+fn fell_rows(
+    conn: &rusqlite::Connection, lo: &str, hi: &str, scope: &Scope,
+) -> anyhow::Result<Vec<FellRow>> {
+    let mut sql = String::from(
+        "SELECT timestamp, substr(timestamp,12,5), item_text, project, priority,
+                COALESCE(agent, 0)
+         FROM actions
+         WHERE item_id IS NOT NULL AND action = 'fell_to_backlog'
+           AND timestamp >= ? AND timestamp < ?",
+    );
+    let mut pv: Vec<Box<dyn rusqlite::ToSql>> =
+        vec![Box::new(lo.to_string()), Box::new(hi.to_string())];
+    scope.push_sql(&mut sql, &mut pv);
+    sql.push_str(" ORDER BY id");
+    let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(refs.as_slice(), |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, Option<String>>(3)?,
+            r.get::<_, Option<i64>>(4)?,
+            r.get::<_, i64>(5)?,
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (ts, time, text, project, priority, agent) = row?;
+        let day = day_key_of_ts(&ts).ok_or_else(|| anyhow::anyhow!("fell row off the calendar"))?;
+        out.push(FellRow { day, time, text, project, priority, agent: agent != 0 });
+    }
+    Ok(out)
 }
 
 /// The range's day span: honor `since` exactly when given; unbounded starts
@@ -491,6 +667,27 @@ fn day_span(
         None => today_d,
     };
     Ok((start, end))
+}
+
+/// The dashboard scan window as wall-clock prefixes. THE heatmap invariant:
+/// the calendar must cover its whole lookback window no matter how narrow
+/// the range is — a calendar page outside the range still has cells to
+/// click, and the month pager walks the data — so the scan starts at
+/// min(since, the heatmap window) (or the beginning, unbounded) and ends
+/// past today. Everything range-bounded (day rows, totals, splits) filters
+/// to the range on its own.
+fn scan_window(
+    since: Option<&str>, until: Option<&str>, heat_start: &str, today_d: chrono::NaiveDate,
+) -> anyhow::Result<(String, String)> {
+    let lo = match since {
+        Some(s) => day_start_prefix(s.min(heat_start)),
+        None => String::new(),
+    };
+    let tomorrow = day_start_prefix(
+        &(today_d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string(),
+    );
+    let hi = tomorrow.max(day_start_prefix(until.unwrap_or("9999-12-31")));
+    Ok((lo, hi))
 }
 
 /// The heatmap window: the nonzero per-day counts inside `[heat_start, today]`.
@@ -538,9 +735,35 @@ fn finish_priorities(tier_counts: HashMap<Option<i64>, i64>) -> Vec<TierCount> {
     ]
 }
 
+/// One flattened task row of the range task list. `kind` is the row's mark:
+/// ✓ done, + created, ↓ fell, ○ missed.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RangeTask {
+    /// The logical day the row belongs to.
+    pub date: String,
+    /// HH:MM of the event; empty for missed habits.
+    pub time: String,
+    pub text: String,
+    pub project: Option<String>,
+    pub priority: Option<i64>,
+    pub agent: bool,
+    pub kind: TaskKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskKind {
+    Done,
+    Created,
+    Fell,
+    Missed,
+}
+
 impl Db {
     /// The dashboard for a subject — Done (effective completions, with the
-    /// miss verdicts) or Created (the tasks that entered the list).
+    /// miss verdicts), Created (the tasks that entered the list), or Missed
+    /// (the verdicts as the subject).
     /// `since`/`until` are a half-open logical-day range (either bound
     /// optional; bounds translate to `T06:00:00` wall-clock prefixes — the
     /// same convention list_actions uses — and every action keys to its day
@@ -552,6 +775,7 @@ impl Db {
         match subject {
             Subject::Done => self.done_dashboard(since, until, filter),
             Subject::Created => self.created_dashboard(since, until, filter),
+            Subject::Missed => self.missed_dashboard(since, until, filter),
         }
     }
 
@@ -569,28 +793,16 @@ impl Db {
         let heat_start = (today_d - chrono::Duration::days(HEATMAP_LOOKBACK_DAYS))
             .format("%Y-%m-%d")
             .to_string();
-        let scan_end = day_start_prefix(until.unwrap_or("9999-12-31"));
+        let (scan_lo, scan_end) = scan_window(since, until, &heat_start, today_d)?;
 
         // ---- Effective completions ------------------------------------------
-        // day → item → standing, folded twice: the scoped fold drives every
-        // number on the page (day counts, heatmap, streak, splits), the
-        // unscoped fold is the miss replay's done-check (a habit completed
-        // that day is done, whatever axes the completion carried — the
-        // habit's own axes decide whether it's in the population). Scanned
-        // from the earlier of the range start and the heatmap window ("" =
-        // from the beginning, so the unbounded "all" range still sees full
-        // history for its splits).
+        // day → item → standing, folded in id order: the scoped fold drives
+        // every number on the page (day counts, heatmap, streak, splits).
+        // The scan window is the heatmap invariant's (see scan_window) — the
+        // wide start is also the streak's, which walks back through up to
+        // the window's months of per-day counts.
         let mut done_by_day: BTreeMap<String, BTreeMap<String, Effective>> = BTreeMap::new();
-        let mut done_all_by_day: BTreeMap<String, BTreeMap<String, Effective>> = BTreeMap::new();
         {
-            // The scan window: the earlier of the range start and the heatmap
-            // window, as a wall-clock bound ("" = from the beginning, so the
-            // unbounded "all" range still sees full history for its splits).
-            let scan_start = match since {
-                Some(s) => s.min(heat_start.as_str()).to_string(),
-                None => String::new(),
-            };
-            let scan_lo = if scan_start.is_empty() { scan_start } else { day_start_prefix(&scan_start) };
             let mut stmt = conn.prepare(
                 "SELECT timestamp, item_id, action, from_section, project, priority,
                         COALESCE(agent, 0)
@@ -611,92 +823,44 @@ impl Db {
                 ))
             })?;
             for row in rows {
-                let (ts, item, action, from_section, project, priority, agent) = row?;
+                let (ts, item, action, _from_section, project, priority, agent) = row?;
                 let Some(day) = day_key_of_ts(&ts) else { continue };
-                let slot = done_all_by_day
-                    .entry(day.clone())
-                    .or_default()
-                    .entry(item.clone())
-                    .or_default();
-                if action == "completed" {
-                    slot.done = true;
-                    slot.from_section = from_section.clone();
-                    slot.project = project.clone();
+                // Only completions whose snapshot axes — and whose item's
+                // current delegation flag — match enter; uncompletions always
+                // flip any existing entry false, so the effective
+                // (last-event-wins) semantics survive.
+                let admit = action == "completed"
+                    && scope.allows(&project, &priority)
+                    && scope.allows_agent(agent != 0);
+                let slot = done_by_day.entry(day).or_default().entry(item).or_default();
+                slot.done = admit;
+                if admit {
+                    slot.project = project;
                     slot.priority = priority;
                     slot.agent = agent != 0;
-                } else {
-                    slot.done = false;
-                }
-                // The scoped fold: only completions whose snapshot axes — and
-                // whose item's current delegation flag — match enter;
-                // uncompletions always flip any existing entry false, so the
-                // effective (last-event-wins) semantics survive.
-                if action == "completed" {
-                    if scope.allows(&project, &priority) && scope.allows_agent(agent != 0) {
-                        let slot = done_by_day
-                            .entry(day)
-                            .or_default()
-                            .entry(item)
-                            .or_default();
-                        slot.done = true;
-                        slot.from_section = from_section;
-                        slot.project = project;
-                        slot.priority = priority;
-                        slot.agent = agent != 0;
-                    }
-                } else {
-                    let slot = done_by_day
-                        .entry(day)
-                        .or_default()
-                        .entry(item)
-                        .or_default();
-                    slot.done = false;
                 }
             }
         }
 
         // ---- Today misses -----------------------------------------------------
         // fell_to_backlog is the sweep's own record of a today task the day
-        // ended without — nothing to derive. Scoped by the snapshot axes.
-        let mut fell_by_day: HashMap<String, i64> = HashMap::new();
-        {
-            // Counted in Rust: the logical day key shifts the wall-clock date
-            // back past the 6am boundary, which SQL can't express over the
-            // text timestamps.
-            let lo = since.map(day_start_prefix).unwrap_or_default();
-            let mut sql = String::from(
-                "SELECT timestamp FROM actions
-                 WHERE item_id IS NOT NULL AND action = 'fell_to_backlog'
-                   AND timestamp >= ? AND timestamp < ?",
-            );
-            let mut pv: Vec<Box<dyn rusqlite::ToSql>> =
-                vec![Box::new(lo), Box::new(scan_end)];
-            scope.push_sql(&mut sql, &mut pv);
-            let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
-            let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt.query_map(refs.as_slice(), |r| r.get::<_, String>(0))?;
-            for row in rows {
-                if let Some(day) = day_key_of_ts(&row?) {
-                    *fell_by_day.entry(day).or_insert(0) += 1;
-                }
-            }
-        }
+        // ended without — nothing to derive. Scoped by the snapshot axes;
+        // the counts fold from the shared row fetch (the scan window keeps
+        // the day rows range-bounded).
+        let fell_by_day: HashMap<String, i64> = fell_rows(&conn, &scan_lo, &scan_end, &scope)?
+        .into_iter()
+        .fold(HashMap::new(), |mut m, f| {
+            *m.entry(f.day).or_insert(0) += 1;
+            m
+        });
 
         // ---- Daily-miss replay ------------------------------------------------
-        // The shared helpers above (see their docs for the semantics).
-        let events = fetch_life_events(&conn)?;
-        let axes = if scope.is_empty() {
-            HashMap::new()
-        } else {
-            fetch_item_axes(&conn)?
-        };
-        let agent_flags = if scope.agent.is_some() {
-            fetch_agent_flags(&conn)?
-        } else {
-            HashMap::new()
-        };
-
+        // The shared walk (see replay_daily_misses); its per-day lists feed
+        // the verdicts here.
         let (start_d, end_d) = day_span(&conn, since, until, today_d)?;
+        let done_daily_by_day = daily_done_by_day(&conn, &scan_lo, &scan_end)?;
+        let missed_by_day =
+            replay_daily_misses(&conn, start_d, end_d, &today, &scope, &done_daily_by_day)?;
 
         // The subject's per-day counts — the day rows, the streak, and the
         // heatmap all read these.
@@ -707,42 +871,14 @@ impl Db {
 
         let mut days: Vec<DayStat> = Vec::new();
         let mut totals = Totals::default();
-        let mut idx = 0usize;
-        // item → standing as of the day being processed.
-        let mut live: HashMap<String, LiveItem> = HashMap::new();
-        let mut d = start_d;
-        while d <= end_d {
-            let day = d.format("%Y-%m-%d").to_string();
-            // The day ends where the next logical day begins — 06:00 the
-            // following wall-clock morning.
-            let day_end = day_start_prefix(&(d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string());
-            while idx < events.len() && events[idx].ts < day_end {
-                apply_life_event(&mut live, &events[idx]);
-                idx += 1;
-            }
-
-            let count = per_day.get(&day).copied().unwrap_or(0);
-
-            // The current day's habits aren't "missed" — the day is still
-            // live; misses are a day-end verdict.
-            let mut daily_missed = 0i64;
-            if day != today {
-                let done_daily: HashSet<String> = done_all_by_day.get(&day).map_or_else(HashSet::new, |m| {
-                    m.iter()
-                        .filter(|(_, e)| e.done && e.from_section.as_deref() == Some("daily"))
-                        .map(|(id, _)| id.clone())
-                        .collect()
-                });
-                daily_missed =
-                    missed_habits(&live, &done_daily, &axes, &agent_flags, &scope).len() as i64;
-            }
-            let today_missed = fell_by_day.get(&day).copied().unwrap_or(0);
-
+        for (day, missed) in &missed_by_day {
+            let count = per_day.get(day).copied().unwrap_or(0);
+            let daily_missed = missed.len() as i64;
+            let today_missed = fell_by_day.get(day).copied().unwrap_or(0);
             totals.count += count;
             totals.daily_missed += daily_missed;
             totals.today_missed += today_missed;
-            days.push(DayStat { date: day, count, daily_missed, today_missed });
-            d += chrono::Duration::days(1);
+            days.push(DayStat { date: day.clone(), count, daily_missed, today_missed });
         }
 
         // Current streak: consecutive days with ≥1 effective completion,
@@ -809,7 +945,7 @@ impl Db {
         let heat_start = (today_d - chrono::Duration::days(HEATMAP_LOOKBACK_DAYS))
             .format("%Y-%m-%d")
             .to_string();
-        let scan_end = day_start_prefix(until.unwrap_or("9999-12-31"));
+        let (scan_lo, scan_end) = scan_window(since, until, &heat_start, today_d)?;
         let (start_d, end_d) = day_span(&conn, since, until, today_d)?;
         let range_start = start_d.format("%Y-%m-%d").to_string();
         let range_end = end_d.format("%Y-%m-%d").to_string();
@@ -829,7 +965,7 @@ impl Db {
                    AND timestamp >= ? AND timestamp < ?",
             );
             let mut pv: Vec<Box<dyn rusqlite::ToSql>> =
-                vec![Box::new(since.map(day_start_prefix).unwrap_or_default()), Box::new(scan_end)];
+                vec![Box::new(scan_lo), Box::new(scan_end)];
             scope.push_sql(&mut sql, &mut pv);
             let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
             let mut stmt = conn.prepare(&sql)?;
@@ -870,8 +1006,106 @@ impl Db {
         Ok(DashboardStats { days, heatmap, projects, priorities, agents: agent_counts, totals })
     }
 
-    /// One day at task level — what the ledger's expanded row renders, for
-    /// either subject. `filter` scopes it exactly like journal_dashboard.
+    /// The Missed dashboard: the two miss verdicts as the subject. The
+    /// shared replay supplies the per-day missed habits (their axes drive
+    /// the splits), the scoped fell rows the rest; the day's count is the
+    /// two summed. Streak stays 0 — a done-only idea.
+    fn missed_dashboard(
+        &self, since: Option<&str>, until: Option<&str>, filter: &ScopeFilter,
+    ) -> anyhow::Result<DashboardStats> {
+        use chrono::NaiveDate;
+        let scope = filter.scope();
+        let conn = self.conn.lock().unwrap();
+        let today = today_iso();
+        let today_d = NaiveDate::parse_from_str(&today, "%Y-%m-%d")?;
+        let heat_start = (today_d - chrono::Duration::days(HEATMAP_LOOKBACK_DAYS))
+            .format("%Y-%m-%d")
+            .to_string();
+        let (scan_lo, scan_end) = scan_window(since, until, &heat_start, today_d)?;
+        let (start_d, end_d) = day_span(&conn, since, until, today_d)?;
+        let range_start = start_d.format("%Y-%m-%d").to_string();
+        let range_end = end_d.format("%Y-%m-%d").to_string();
+
+        // The replay walks the heatmap's whole window (the calendar's misses
+        // must exist outside the range too), so its done-check fold covers
+        // the same span.
+        let heat_start_d = NaiveDate::parse_from_str(&heat_start, "%Y-%m-%d")?;
+        let done_daily_by_day = daily_done_by_day(&conn, &scan_lo, &scan_end)?;
+        let missed_by_day = replay_daily_misses(
+            &conn,
+            start_d.min(heat_start_d),
+            today_d.max(end_d),
+            &today,
+            &scope,
+            &done_daily_by_day,
+        )?;
+        let fell = fell_rows(&conn, &scan_lo, &scan_end, &scope)?;
+        let fell_by_day: HashMap<String, i64> = fell.iter().fold(HashMap::new(), |mut m, f| {
+            *m.entry(f.day.clone()).or_insert(0) += 1;
+            m
+        });
+
+        // Per-day counts over the whole walk — the heatmap reads it all.
+        let mut per_day: BTreeMap<String, i64> = BTreeMap::new();
+        for (day, habits) in &missed_by_day {
+            *per_day.entry(day.clone()).or_insert(0) += habits.len() as i64;
+        }
+        for f in &fell {
+            *per_day.entry(f.day.clone()).or_insert(0) += 1;
+        }
+
+        // The splits read the range's miss rows only: fell rows carry their
+        // at-the-fall snapshots, missed habits the axes the replay saw.
+        let mut proj_counts: HashMap<Option<String>, i64> = HashMap::new();
+        let mut tier_counts: HashMap<Option<i64>, i64> = HashMap::new();
+        let mut agent_counts = AgentCounts { agent: 0, mine: 0 };
+        let mut split =
+            |day: &str, project: &Option<String>, priority: &Option<i64>, agent: bool| {
+                if day < range_start.as_str() || day > range_end.as_str() {
+                    return;
+                }
+                *proj_counts.entry(project.clone()).or_insert(0) += 1;
+                *tier_counts.entry(*priority).or_insert(0) += 1;
+                if agent {
+                    agent_counts.agent += 1;
+                } else {
+                    agent_counts.mine += 1;
+                }
+            };
+        for f in &fell {
+            split(&f.day, &f.project, &f.priority, f.agent);
+        }
+        for (day, habits) in &missed_by_day {
+            for h in habits {
+                split(day, &h.project, &h.priority, h.agent);
+            }
+        }
+
+        // The day rows and the totals: the range slice of the walk.
+        let mut days: Vec<DayStat> = Vec::new();
+        let mut totals = Totals::default();
+        let mut d = start_d;
+        while d <= end_d {
+            let day = d.format("%Y-%m-%d").to_string();
+            let daily_missed =
+                missed_by_day.get(&day).map_or(0, |h| h.len() as i64);
+            let today_missed = fell_by_day.get(&day).copied().unwrap_or(0);
+            let count = daily_missed + today_missed;
+            totals.count += count;
+            totals.daily_missed += daily_missed;
+            totals.today_missed += today_missed;
+            days.push(DayStat { date: day, count, daily_missed, today_missed });
+            d += chrono::Duration::days(1);
+        }
+
+        let heatmap = heat_days(&per_day, &heat_start, &today);
+        let projects = finish_projects(&conn, proj_counts)?;
+        let priorities = finish_priorities(tier_counts);
+        Ok(DashboardStats { days, heatmap, projects, priorities, agents: agent_counts, totals })
+    }
+
+    /// One day at task level — what the analytics day detail renders, for
+    /// any subject. `filter` scopes it exactly like journal_dashboard.
     /// `secs` is layered on by the command wrapper in Done mode from
     /// `session_time_by_day` (unscoped — time doesn't follow the filter).
     pub fn day_detail(
@@ -880,6 +1114,7 @@ impl Db {
         match subject {
             Subject::Done => self.done_day_detail(date, filter),
             Subject::Created => self.created_day_detail(date, filter),
+            Subject::Missed => self.missed_day_detail(date, filter),
         }
     }
 
@@ -895,10 +1130,7 @@ impl Db {
         // uncompleted event counts (an unchecked-never-redone completion
         // doesn't; a re-completed misclick counts once, at its final time).
         // Folded in id order; survivors sorted by their last completion time.
-        // `slots` is the scoped fold (what renders); `done_sections` is the
-        // unscoped fold (the miss replay's done-check — see journal_dashboard).
         let mut slots: HashMap<String, TaskDetail> = HashMap::new();
-        let mut done_sections: HashMap<String, Option<String>> = HashMap::new();
         {
             let mut stmt = conn.prepare(
                 "SELECT item_id, item_text, action, timestamp, from_section, project, priority,
@@ -921,14 +1153,13 @@ impl Db {
                 ))
             })?;
             for row in rows {
-                let (item, text, action, ts, from_section, project, priority, agent) = row?;
+                let (item, text, action, ts, _from_section, project, priority, agent) = row?;
                 if action == "completed" {
-                    done_sections.insert(item.clone(), from_section);
                     if scope.allows(&project, &priority) && scope.allows_agent(agent != 0) {
                         slots.insert(
                             item.clone(),
                             TaskDetail {
-                                item_id: item.clone(),
+                                item_id: item,
                                 time: ts[11..16].to_string(),
                                 text,
                                 project,
@@ -939,7 +1170,6 @@ impl Db {
                     }
                 } else {
                     slots.remove(&item);
-                    done_sections.remove(&item);
                 }
             }
         }
@@ -948,63 +1178,23 @@ impl Db {
 
         // The sweep's record of today tasks the day ended without, scoped by
         // the snapshot axes like everything else.
-        let mut fell: Vec<FellTaskDetail> = Vec::new();
-        {
-            let mut sql = String::from(
-                "SELECT substr(timestamp,12,5), item_text, project, priority FROM actions
-                 WHERE item_id IS NOT NULL AND action = 'fell_to_backlog'
-                   AND timestamp >= ? AND timestamp < ?",
-            );
-            let mut pv: Vec<Box<dyn rusqlite::ToSql>> =
-                vec![Box::new(day_start_prefix(date)), Box::new(day_start_prefix(&next))];
-            scope.push_sql(&mut sql, &mut pv);
-            sql.push_str(" ORDER BY id");
-            let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
-            let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt.query_map(refs.as_slice(), |r| {
-                Ok(FellTaskDetail {
-                    time: r.get(0)?,
-                    text: r.get(1)?,
-                    project: r.get(2)?,
-                    priority: r.get(3)?,
-                })
-            })?;
-            for row in rows {
-                fell.push(row?);
-            }
-        }
+        let fell: Vec<FellTaskDetail> = fell_rows(&conn, &day_start_prefix(date), &day_start_prefix(&next), &scope)?
+            .into_iter()
+            .map(|f| FellTaskDetail { time: f.time, text: f.text, project: f.project, priority: f.priority })
+            .collect();
 
-        // Missed habits: the replay frozen at this day's end. The live today
-        // has no verdict yet.
-        let mut daily_missed: Vec<MissedHabit> = Vec::new();
-        if date != today_iso() {
-            // The replay frozen at this day's end — 06:00 the next wall-clock
-            // morning. The live today has no verdict yet.
-            let day_end = day_start_prefix(&next);
-            let mut live: HashMap<String, LiveItem> = HashMap::new();
-            for ev in &fetch_life_events(&conn)? {
-                if ev.ts > day_end {
-                    break;
-                }
-                apply_life_event(&mut live, ev);
-            }
-            let axes = if scope.is_empty() {
-                HashMap::new()
-            } else {
-                fetch_item_axes(&conn)?
-            };
-            let agent_flags = if scope.agent.is_some() {
-                fetch_agent_flags(&conn)?
-            } else {
-                HashMap::new()
-            };
-            let done_daily: HashSet<String> = done_sections
-                .iter()
-                .filter(|(_, sec)| sec.as_deref() == Some("daily"))
-                .map(|(id, _)| id.clone())
-                .collect();
-            daily_missed = missed_habits(&live, &done_daily, &axes, &agent_flags, &scope);
-        }
+        // Missed habits: the shared replay frozen at this day's end. The
+        // live today has no verdict yet.
+        let daily_missed = if date == today_iso() {
+            Vec::new()
+        } else {
+            let day = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")?;
+            let done_daily =
+                daily_done_by_day(&conn, &day_start_prefix(date), &day_start_prefix(&next))?;
+            replay_daily_misses(&conn, day, day, &today_iso(), &scope, &done_daily)?
+                .remove(date)
+                .unwrap_or_default()
+        };
 
         Ok(DayDetail { date: date.to_string(), tasks, fell, daily_missed })
     }
@@ -1041,6 +1231,209 @@ impl Db {
             .collect::<Result<_, _>>()?;
         tasks.sort_by(|a, b| a.time.cmp(&b.time));
         Ok(DayDetail { date: date.to_string(), tasks, fell: Vec::new(), daily_missed: Vec::new() })
+    }
+
+    /// The Missed lens: the day's fell rows and its frozen slice of the
+    /// shared replay — no completions, so `tasks` stays empty. The live
+    /// today has no daily verdict yet; its fell rows are real.
+    fn missed_day_detail(&self, date: &str, filter: &ScopeFilter) -> anyhow::Result<DayDetail> {
+        let scope = filter.scope();
+        let conn = self.conn.lock().unwrap();
+        let next = next_day(date)?;
+        let fell: Vec<FellTaskDetail> =
+            fell_rows(&conn, &day_start_prefix(date), &day_start_prefix(&next), &scope)?
+                .into_iter()
+                .map(|f| FellTaskDetail {
+                    time: f.time,
+                    text: f.text,
+                    project: f.project,
+                    priority: f.priority,
+                })
+                .collect();
+        let daily_missed = if date == today_iso() {
+            Vec::new()
+        } else {
+            let day = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")?;
+            let done_daily =
+                daily_done_by_day(&conn, &day_start_prefix(date), &day_start_prefix(&next))?;
+            replay_daily_misses(&conn, day, day, &today_iso(), &scope, &done_daily)?
+                .remove(date)
+                .unwrap_or_default()
+        };
+        Ok(DayDetail { date: date.to_string(), tasks: Vec::new(), fell, daily_missed })
+    }
+
+    // ---- The range task list ---------------------------------------------------
+    //
+    // The same derivations the dashboards run, keeping rows instead of
+    // counts: the subject's tasks across the whole window, flattened for the
+    // frontend's paginated list. Newest day first, newest within a day;
+    // missed habits (which have no moment — a day-end verdict) close their
+    // day. The frontend paginates client-side.
+
+    /// The window's tasks for a subject — see the block above.
+    pub fn journal_tasks(
+        &self, since: Option<&str>, until: Option<&str>, filter: &ScopeFilter, subject: Subject,
+    ) -> anyhow::Result<Vec<RangeTask>> {
+        let mut tasks = match subject {
+            Subject::Done => self.done_tasks(since, until, filter)?,
+            Subject::Created => self.created_tasks(since, until, filter)?,
+            Subject::Missed => self.missed_tasks(since, until, filter)?,
+        };
+        tasks.sort_by(|a, b| {
+            b.date
+                .cmp(&a.date)
+                .then_with(|| b.time.cmp(&a.time)) // "" (missed habits) lands last in its day
+                .then_with(|| a.text.cmp(&b.text)) // deterministic within the same minute
+        });
+        Ok(tasks)
+    }
+
+    /// The window's effective completions as rows — the same scoped fold the
+    /// dashboard runs, keeping the row (an uncompletion removes it).
+    fn done_tasks(
+        &self, since: Option<&str>, until: Option<&str>, filter: &ScopeFilter,
+    ) -> anyhow::Result<Vec<RangeTask>> {
+        let scope = filter.scope();
+        let conn = self.conn.lock().unwrap();
+        let lo = since.map(day_start_prefix).unwrap_or_default();
+        let hi = day_start_prefix(until.unwrap_or("9999-12-31"));
+        let mut stmt = conn.prepare(
+            "SELECT timestamp, item_id, item_text, action, project, priority, COALESCE(agent, 0)
+             FROM actions
+             WHERE item_id IS NOT NULL AND action IN ('completed','uncompleted')
+               AND timestamp >= ?1 AND timestamp < ?2
+             ORDER BY id",
+        )?;
+        let rows = stmt.query_map(params![lo, hi], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, Option<String>>(4)?,
+                r.get::<_, Option<i64>>(5)?,
+                r.get::<_, i64>(6)?,
+            ))
+        })?;
+        // (day, item) → row, folded in id order; only completions whose
+        // snapshot axes match enter, uncompletions always remove.
+        let mut slots: HashMap<(String, String), RangeTask> = HashMap::new();
+        for row in rows {
+            let (ts, item, text, action, project, priority, agent) = row?;
+            let Some(day) = day_key_of_ts(&ts) else { continue };
+            if action == "completed" {
+                if scope.allows(&project, &priority) && scope.allows_agent(agent != 0) {
+                    slots.insert(
+                        (day.clone(), item.clone()),
+                        RangeTask {
+                            date: day,
+                            time: ts[11..16].to_string(),
+                            text,
+                            project,
+                            priority,
+                            agent: agent != 0,
+                            kind: TaskKind::Done,
+                        },
+                    );
+                }
+            } else {
+                slots.remove(&(day, item));
+            }
+        }
+        Ok(slots.into_values().collect())
+    }
+
+    /// The window's creations as rows — one scoped pass, birth-time
+    /// snapshots, no fold (a creation is never undone).
+    fn created_tasks(
+        &self, since: Option<&str>, until: Option<&str>, filter: &ScopeFilter,
+    ) -> anyhow::Result<Vec<RangeTask>> {
+        let scope = filter.scope();
+        let conn = self.conn.lock().unwrap();
+        let lo = since.map(day_start_prefix).unwrap_or_default();
+        let hi = day_start_prefix(until.unwrap_or("9999-12-31"));
+        let mut sql = String::from(
+            "SELECT timestamp, item_text, project, priority, COALESCE(agent, 0) FROM actions
+             WHERE item_id IS NOT NULL AND action = 'created'
+               AND timestamp >= ? AND timestamp < ?",
+        );
+        let mut pv: Vec<Box<dyn rusqlite::ToSql>> =
+            vec![Box::new(lo), Box::new(hi)];
+        scope.push_sql(&mut sql, &mut pv);
+        let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(refs.as_slice(), |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, Option<i64>>(3)?,
+                r.get::<_, i64>(4)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (ts, text, project, priority, agent) = row?;
+            let Some(day) = day_key_of_ts(&ts) else { continue };
+            out.push(RangeTask {
+                date: day,
+                time: ts[11..16].to_string(),
+                text,
+                project,
+                priority,
+                agent: agent != 0,
+                kind: TaskKind::Created,
+            });
+        }
+        Ok(out)
+    }
+
+    /// The window's misses as rows — the shared replay's habits (○) plus the
+    /// fell rows (↓), each carrying its day.
+    fn missed_tasks(
+        &self, since: Option<&str>, until: Option<&str>, filter: &ScopeFilter,
+    ) -> anyhow::Result<Vec<RangeTask>> {
+        use chrono::NaiveDate;
+        let scope = filter.scope();
+        let conn = self.conn.lock().unwrap();
+        let today = today_iso();
+        let today_d = NaiveDate::parse_from_str(&today, "%Y-%m-%d")?;
+        let lo = since.map(day_start_prefix).unwrap_or_default();
+        let hi = day_start_prefix(until.unwrap_or("9999-12-31"));
+        let (start_d, end_d) = day_span(&conn, since, until, today_d)?;
+
+        let done_daily = daily_done_by_day(&conn, &lo, &hi)?;
+        let missed_by_day =
+            replay_daily_misses(&conn, start_d, end_d, &today, &scope, &done_daily)?;
+        let fell = fell_rows(&conn, &lo, &hi, &scope)?;
+
+        let mut out: Vec<RangeTask> = fell
+            .into_iter()
+            .map(|f| RangeTask {
+                date: f.day,
+                time: f.time,
+                text: f.text,
+                project: f.project,
+                priority: f.priority,
+                agent: f.agent,
+                kind: TaskKind::Fell,
+            })
+            .collect();
+        for (day, habits) in missed_by_day {
+            for h in habits {
+                out.push(RangeTask {
+                    date: day.clone(),
+                    time: String::new(),
+                    text: h.text,
+                    project: h.project,
+                    priority: h.priority,
+                    agent: h.agent,
+                    kind: TaskKind::Missed,
+                });
+            }
+        }
+        Ok(out)
     }
 }
 
@@ -1502,6 +1895,146 @@ mod tests {
         let d = db.day_detail(&today_iso(), &ScopeFilter::default(), Subject::Created).unwrap();
         assert_eq!(d.tasks[0].project.as_deref(), Some("meridian"));
         assert_eq!(d.tasks[0].priority, Some(2));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The Missed subject: the two verdicts become the count — the replay's
+    /// daily habits plus the fell rows drive the day rows, the heatmap, and
+    /// the splits (fell rows carry their at-the-fall snapshots, missed habits
+    /// the axes the replay saw). The day detail freezes the same replay; the
+    /// range task list flattens both kinds, newest day first.
+    #[test]
+    fn missed_subject_counts_the_verdicts() {
+        let (db, dir) = tmp_db();
+        {
+            let conn = db.conn.lock().unwrap();
+            // A is done daily (meridian P1); B skips Jan 2 (growth P2).
+            act(&conn, "A", "created", None, Some("daily"), Some("meridian"), Some(1), "2026-01-01T09:00:00");
+            act(&conn, "B", "created", None, Some("daily"), Some("growth"), Some(2), "2026-01-01T09:00:00");
+            act(&conn, "A", "completed", Some("daily"), Some("daily"), Some("meridian"), Some(1),
+                "2026-01-02T08:00:00");
+            act(&conn, "A", "completed", Some("daily"), Some("daily"), Some("meridian"), Some(1),
+                "2026-01-03T08:00:00");
+            // C falls on Jan 3 (growth, unmarked).
+            act(&conn, "C", "created", None, Some("today"), Some("growth"), None, "2026-01-02T09:00:00");
+            act(&conn, "C", "fell_to_backlog", Some("today"), Some("backlog"), Some("growth"), None,
+                "2026-01-03T06:01:00");
+        }
+        let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-04"), &ScopeFilter::default(), Subject::Missed).unwrap();
+        let by = by_date(&s);
+        assert_eq!(by["2026-01-02"].count, 1); // B missed
+        assert_eq!(by["2026-01-03"].count, 2); // B missed + C fell
+        assert_eq!(s.totals.count, 3);
+        assert_eq!(s.totals.streak, 0);
+        // The heatmap counts misses.
+        assert_eq!(s.heatmap.iter().find(|h| h.date == "2026-01-03").map(|h| h.count), Some(2));
+        // Splits read the miss rows: growth 3 (B's two misses + C's fall);
+        // A's meridian completions contribute nothing here, and no live
+        // roster exists to zero-fill.
+        let names: Vec<(Option<&str>, i64)> =
+            s.projects.iter().map(|p| (p.name.as_deref(), p.count)).collect();
+        assert_eq!(names, [(Some("growth"), 3)]);
+        let tiers: Vec<(Option<i64>, i64)> =
+            s.priorities.iter().map(|t| (t.tier, t.count)).collect();
+        assert_eq!(tiers, [(Some(1), 0), (Some(2), 2), (Some(3), 0), (None, 1)]); // B P2 ×2 + C unmarked
+
+        // The day detail: B + C on Jan 3, no done tasks.
+        let d = db.day_detail("2026-01-03", &ScopeFilter::default(), Subject::Missed).unwrap();
+        assert!(d.tasks.is_empty());
+        let fell: Vec<&str> = d.fell.iter().map(|f| f.text.as_str()).collect();
+        assert_eq!(fell, ["C"]);
+        let missed: Vec<&str> = d.daily_missed.iter().map(|m| m.text.as_str()).collect();
+        assert_eq!(missed, ["B"]);
+
+        // The range task list: Jan 3's fell row first (it has a time), then
+        // the day's missed habit, then Jan 2's.
+        let t = db.journal_tasks(Some("2026-01-02"), Some("2026-01-04"), &ScopeFilter::default(), Subject::Missed).unwrap();
+        assert_eq!(
+            t.iter().map(|r| (r.date.as_str(), r.text.as_str(), r.kind)).collect::<Vec<_>>(),
+            [
+                ("2026-01-03", "C", TaskKind::Fell),
+                ("2026-01-03", "B", TaskKind::Missed),
+                ("2026-01-02", "B", TaskKind::Missed),
+            ]
+        );
+        assert_eq!(t[1].time, ""); // a day-end verdict has no moment
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+
+    /// THE heatmap invariant: the calendar window covers its whole lookback
+    /// no matter how narrow the range is — a month outside the range still
+    /// has lit cells to click (a range-bounded scan would show empty months
+    /// whose day details then disagree, and freeze the month pager at the
+    /// range's own edges). The day rows, totals, and splits stay
+    /// range-bounded.
+    #[test]
+    fn the_heatmap_window_is_range_independent() {
+        let (db, dir) = tmp_db();
+        let today = chrono::NaiveDate::parse_from_str(&today_iso(), "%Y-%m-%d").unwrap();
+        // A mid-window day ~90 days back — far outside the January range.
+        let mid = (today - chrono::Duration::days(90)).format("%Y-%m-%d").to_string();
+        {
+            let conn = db.conn.lock().unwrap();
+            // A creation in January and one in the mid window; a habit born
+            // in January that is never done — missed on every day of its life.
+            act(&conn, "C1", "created", None, Some("today"), Some("meridian"), None, "2026-01-05T09:00:00");
+            act(&conn, "C2", "created", None, Some("today"), Some("meridian"), None, &format!("{mid}T09:00:00"));
+            act(&conn, "H", "created", None, Some("daily"), Some("growth"), None, "2026-01-05T09:00:00");
+        }
+
+        // Created: the mid-window creation lights the heatmap even though the
+        // range is January.
+        let s = db.journal_dashboard(Some("2026-01-05"), Some("2026-01-06"), &ScopeFilter::default(), Subject::Created).unwrap();
+        assert_eq!(s.heatmap.iter().find(|h| h.date == mid).map(|h| h.count), Some(1));
+        // C1 + the habit's birth row (every `created` action is a creation).
+        assert_eq!(s.totals.count, 2);
+        assert_eq!(s.days.len(), 1); // the range's day rows only
+
+        // Missed: the habit misses the mid-window day too; totals stay
+        // range-bounded (Jan 5's verdict only).
+        let s = db.journal_dashboard(Some("2026-01-05"), Some("2026-01-06"), &ScopeFilter::default(), Subject::Missed).unwrap();
+        assert_eq!(s.heatmap.iter().find(|h| h.date == mid).map(|h| h.count), Some(1));
+        assert_eq!(s.totals.count, 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The range task list for Done and Created: the effective fold (an
+    /// unchecked completion drops out), newest day first, scoped by the
+    /// snapshot axes.
+    #[test]
+    fn task_list_flattens_done_and_created() {
+        let (db, dir) = tmp_db();
+        {
+            let conn = db.conn.lock().unwrap();
+            act(&conn, "D", "created", None, Some("today"), Some("meridian"), Some(1), "2026-01-01T09:00:00");
+            act(&conn, "E", "created", None, Some("today"), None, None, "2026-01-02T10:00:00");
+            act(&conn, "D", "completed", Some("today"), Some("today"), Some("meridian"), Some(1),
+                "2026-01-02T12:00:00");
+            act(&conn, "E", "completed", Some("today"), Some("today"), None, None, "2026-01-02T13:00:00");
+            act(&conn, "E", "uncompleted", Some("today"), Some("today"), None, None, "2026-01-02T14:00:00");
+        }
+        // Done: only D (E was unchecked), newest first.
+        let t = db.journal_tasks(Some("2026-01-01"), Some("2026-01-03"), &ScopeFilter::default(), Subject::Done).unwrap();
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].text, "D");
+        assert_eq!(t[0].time, "12:00");
+        // Created: both, newest day first.
+        let t = db.journal_tasks(Some("2026-01-01"), Some("2026-01-03"), &ScopeFilter::default(), Subject::Created).unwrap();
+        assert_eq!(
+            t.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(),
+            ["E", "D"]
+        );
+        // Scoped: meridian only.
+        let filter = ScopeFilter {
+            projects: Some(vec![Some("meridian".into())]),
+            priorities: None,
+            agent: None,
+        };
+        let t = db.journal_tasks(Some("2026-01-01"), Some("2026-01-03"), &filter, Subject::Done).unwrap();
+        assert_eq!(t.len(), 1);
+        let t = db.journal_tasks(Some("2026-01-01"), Some("2026-01-03"), &filter, Subject::Created).unwrap();
+        assert_eq!(t[0].text, "D");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
