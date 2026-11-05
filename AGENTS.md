@@ -1610,8 +1610,9 @@ Journal / Quotes icons):**
   Created is the tasks that entered the list (one `created` action each, nothing to
   fold — no uncomplete inverse exists); Missed makes the two verdicts the subject
   itself — the heatmap counts misses per day, the splits read the miss rows, the
-  hero shows Missed/Daily missed/Today missed (streak is a done-only stat; the
-  verdict stats show for done AND missed). Same shapes, same scope filter
+  hero shows Missed/Daily missed/Today missed (each lens shows its own numbers: Done →
+  done/streak, Created → creations, Missed → the verdicts; the miss stats never ride
+  the Done tab). Same shapes, same scope filter
   (creations snapshot their axes at birth like every action); the day detail
   surfaces the subject's rows (creations with a `+`; under Missed, no ✓ rows at
   all — just ↓ and ○). The dashboard fields are neutral (`count`/`tasks`) for
@@ -1655,16 +1656,19 @@ Journal / Quotes icons):**
   rendered-sibling state because WKWebView
   doesn't re-resolve its aspect-ratio cells when the grid track re-widens on unfilter
   (the "heatmap didn't shrink back" bug, 2026-08-25).
-- **Stats**: Done (effective completions — a complete→uncheck→never-again arc doesn't
-  count, a re-completed misclick counts once), Avg/day (when the range spans >1 day),
-  Streak (consecutive days with ≥1 completion; a live today with nothing yet doesn't
-  break it), **Daily missed** (habits the day ended without — replayed from the log
+- **Stats**: each lens shows its own numbers — Done → **Done** (effective
+  completions — a complete→uncheck→never-again arc doesn't
+  count, a re-completed misclick counts once) + **Streak** (consecutive days with ≥1
+  completion, walking back from today; a live today with nothing yet doesn't
+  break it — today-anchored, so it doesn't follow the range); Created → **Created**;
+  Missed → **Missed**, **Daily missed** (habits the day ended without — replayed from the log
   itself, so deleted habits count for the days they existed; pauses fold in with the
   habit: a `paused`/`unpaused` window's days are never missed, the days before the
   pause keep their verdicts — visible even while the habit is paused now; the current
   day never shows
-  daily misses — a live day has no verdict), and **Today missed** (`fell_to_backlog` —
-  the sweep's own record of a today task the day ended without).
+  daily misses — a live day has no verdict) and **Today missed** (`fell_to_backlog` —
+  the sweep's own record of a today task the day ended without). Avg/day shows
+  whenever the range spans >1 day.
 - **Activity**: a Monday-first calendar heatmap, paged by ‹ › arrows in the card
   title — back through past months (bounded by the heatmap's data window), forward
   disabled on the current month (2026-10-05). The current month as the default view: — one square per

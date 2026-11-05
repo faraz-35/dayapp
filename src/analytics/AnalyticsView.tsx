@@ -250,13 +250,14 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
       <div className="analytics">
         {dash && (
           <>
-            {/* Hero stats — one card, evenly spread. The streak is a done-only
-                idea; the miss verdicts show for done AND missed. */}
+            {/* Hero stats — one card, evenly spread. Each lens shows its own
+                numbers: Done → done/streak; Created → creations; Missed →
+                the two miss verdicts. */}
             <section className="an-card an-hero">
               <StatCard value={dash.totals.count} label={cap(noun)} accent />
               {avg != null && <StatCard value={avg} label="Avg / day" />}
               {subject === "done" && <StatCard value={dash.totals.streak} label="Day streak" />}
-              {subject !== "created" && (
+              {subject === "missed" && (
                 <>
                   <StatCard value={dash.totals.dailyMissed} label="Daily missed" />
                   <StatCard value={dash.totals.todayMissed} label="Today missed" />
