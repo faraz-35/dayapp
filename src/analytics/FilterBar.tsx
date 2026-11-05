@@ -196,8 +196,9 @@ export default function FilterBar({
 
   return (
     <div className="filter-bar" ref={barRef}>
-      {/* The range — a dropdown of the presets (Custom is reached through
-          the from–to fields, never a menu row). */}
+      {/* The left cluster — the range preset and the from–to fields (one
+          wrap/grid unit, so they stay together at every width). */}
+      <span className="anf-left">
       <span className="anf-wrap">
         <button className="pill anf-dd" onClick={() => openMenuOr("range")} title="The range">
           {range === "custom" ? "Custom" : RANGES.find((r) => r.id === range)?.label}
@@ -289,12 +290,14 @@ export default function FilterBar({
                 Clear
               </button>
             )}
-          </div>
-        )}
+            </div>
+          )}
+        </span>
       </span>
       {/* The two springs center the subject tabs between the range fields
           and the axis dropdowns (equal flex both sides); on a wrapped line
-          they collapse to a minimum gap. */}
+          they collapse to a minimum gap. At ≥900px the bar is a three-column
+          grid instead and the springs sit out. */}
       <span className="bar-spring" />
       {/* The subject — three tabs centered in the bar. Every card follows
           the pick; the done-only stats hide in the other lenses (the backend

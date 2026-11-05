@@ -417,7 +417,7 @@ travels in the binary; git tracks it for reviewable history — never commit the
 generated `.db`). All timestamps in it are relative to seed day. The seed is
 deliberately small (2026-10-24, the first-minute-is-the-product pass — his
 brother called the old persona "too complex"): one daily done for today (its
-created row anchors a 4-day streak in the log), one backlog row carrying a
+created row anchors a 4-day run of done days in the log), one backlog row carrying a
 pending reminder + priority + project link dormant until their Settings
 switches turn on, one plain note — Today empty, capture first. Count was cut,
 not capability.
@@ -487,7 +487,7 @@ the CLI renders as text — so a remote session can access any information in an
 axis — bare `#` lists projects, `#name` lists that project's rows — and `@agent`/`@my`
 flip to the delegation axis), `--analytics [today|week|month|all|YYYY-MM-DD]` is the
 Analytics view's data plus the raw action log (the dashboard summary block — done/missed
-totals, streak, project/priority splits — then actions grouped newest-first by day with
+totals, project/priority splits — then actions grouped newest-first by day with
 the per-day done/missed verdict, the per-task ⏱ breakdown and day total; the log's
 textual home is here, the GUI renders aggregates plus the paginated task list;
 default `today`; further scoped
@@ -802,7 +802,7 @@ dayapp/
     │   ├── journal.rs              ← the ##j/##q typed capture: entries table (journal lines + quotes), day-stamped (methods on Db)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
     │   ├── goals.rs                ← goals DB logic: horizons, achieve/unachieve, project link (methods on Db)
-    │   ├── dashboard.rs            ← the analytics derivation: done/missed per day, daily-miss replay, streak, project/priority splits, heatmap window (method on Db)
+    │   ├── dashboard.rs            ← the analytics derivation: done/missed per day, daily-miss replay, project/priority splits, heatmap window (method on Db)
     │   ├── timers.rs               ← timer sessions: start/stop/discard/totals/per-day (methods on Db)
     │   ├── backup.rs               ← db backups: VACUUM INTO snapshot into backups/ + reveal (--backup; demo-gated)
     │   ├── sync.rs                 ← mobile sync: tasks.json export/deploy + captures.json pull/drain (GitHub Contents API; demo-gated)
@@ -1611,7 +1611,7 @@ Journal / Quotes icons):**
   fold — no uncomplete inverse exists); Missed makes the two verdicts the subject
   itself — the heatmap counts misses per day, the splits read the miss rows, the
   hero shows Missed/Daily missed/Today missed (each lens shows its own numbers: Done →
-  done/streak, Created → creations, Missed → the verdicts; the miss stats never ride
+  done/avg, Created → creations/avg, Missed → the verdicts/avg; the miss stats never ride
   the Done tab). Same shapes, same scope filter
   (creations snapshot their axes at birth like every action); the day detail
   surfaces the subject's rows (creations with a `+`; under Missed, no ✓ rows at
@@ -1642,7 +1642,7 @@ Journal / Quotes icons):**
   selection stands. OR within an axis, AND across the axes. Every derivation follows (`journal_dashboard` /
   `journal_day_detail` take a `ScopeFilter` over the `actions` write-time snapshots —
   project, priority, and (2026-10-12) agent — so
-  filtered history stays deletion-proof): done/streak/avg, heatmap intensities, splits,
+  filtered history stays deletion-proof): done counts, heatmap intensities, splits,
   day-detail rows, and the miss replay — a habit outside the filter is
   neither expected nor missed (population = the habit's current axes — the one
   remaining "currently" call; the done-check
@@ -1656,11 +1656,10 @@ Journal / Quotes icons):**
   rendered-sibling state because WKWebView
   doesn't re-resolve its aspect-ratio cells when the grid track re-widens on unfilter
   (the "heatmap didn't shrink back" bug, 2026-08-25).
-- **Stats**: each lens shows its own numbers — Done → **Done** (effective
+- **Stats**: each lens shows its own numbers, centered in its hero column — Done →
+  **Done** (effective
   completions — a complete→uncheck→never-again arc doesn't
-  count, a re-completed misclick counts once) + **Streak** (consecutive days with ≥1
-  completion, walking back from today; a live today with nothing yet doesn't
-  break it — today-anchored, so it doesn't follow the range); Created → **Created**;
+  count, a re-completed misclick counts once); Created → **Created**;
   Missed → **Missed**, **Daily missed** (habits the day ended without — replayed from the log
   itself, so deleted habits count for the days they existed; pauses fold in with the
   habit: a `paused`/`unpaused` window's days are never missed, the days before the

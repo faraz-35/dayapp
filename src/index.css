@@ -739,6 +739,8 @@ button {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  align-items: center;
+  text-align: center;
 }
 .an-stat .v {
   font-size: 26px;
@@ -1332,9 +1334,10 @@ button {
 .anf-clear:hover { color: var(--text); }
 
 /* Wide window (a fullscreened laptop): the hero spans the top, Activity ·
-   Projects · Priority share one row, and the ledger takes its own full-width
-   row — the .an-row3 auto-fit grid does the column work; this just widens
-   the page's rhythm. */
+   Projects · Priority share one row, and the toolbar becomes a three-column
+   grid — range left, subject tabs EXACTLY centered on the bar, axes right
+   (the flex springs' centering is only between uneven clusters). Below the
+   breakpoint the bar wraps as before. */
 @media (min-width: 900px) {
   .analytics-view .filter-bar { padding: 10px 28px; }
   .analytics {
@@ -1343,6 +1346,15 @@ button {
   }
   .an-row3 { gap: 16px; }
   .an-stat .v { font-size: 30px; }
+  .analytics-view .filter-bar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+  }
+  .analytics-view .filter-bar > .anf-left { justify-self: start; }
+  .analytics-view .filter-bar > .anf-tabs { justify-self: center; }
+  .analytics-view .filter-bar > .anf { justify-self: end; margin-left: 0; }
+  .analytics-view .filter-bar > .bar-spring { display: none; }
 }
 
 /* Scrollbars — hidden. The single .scroll container (and modal lists) still

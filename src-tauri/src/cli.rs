@@ -873,9 +873,6 @@ fn analytics(db: &Db, rest: &[String]) -> anyhow::Result<()> {
         dash.totals.count,
         dash.totals.count as f64 / days as f64,
     );
-    if subject == crate::dashboard::Subject::Done {
-        stats.push_str(&format!(" · streak {}", dash.totals.streak));
-    }
     if subject != crate::dashboard::Subject::Created {
         stats.push_str(&format!(
             " · daily missed {} · today missed {}",

@@ -335,10 +335,6 @@ export interface DashboardStats {
     count: number;
     dailyMissed: number;
     todayMissed: number;
-    /** Consecutive days with ≥1 completion, counting back from today; a live
-     *  today with nothing yet doesn't break it. Done-only (0 in created mode,
-     *  where the card hides). */
-    streak: number;
   };
 }
 

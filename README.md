@@ -51,7 +51,7 @@ The day runs 6am to 6am. Work past midnight and it's still yesterday: nothing re
 
 ## Analytics
 
-A dashboard built from the log: done / streak / missed stats, a month heatmap, project and priority splits, and a paginated task list. Click any calendar day to open it as its own card. Filter by project, priority, or who executes. Done / Created / Missed tabs switch what it counts — what you finished, what you took on, or what slipped.
+A dashboard built from the log: done / missed stats, a month heatmap, project and priority splits, and a paginated task list. Click any calendar day to open it as its own card. Filter by project, priority, or who executes. Done / Created / Missed tabs switch what it counts — what you finished, what you took on, or what slipped.
 
 ## Journal & quotes
 

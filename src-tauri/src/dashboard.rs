@@ -24,11 +24,11 @@
 // Two subjects share every shape: Done (the set above, with the miss
 // verdicts) and Created — the tasks that entered the list, one `created`
 // action each, nothing to fold. The GUI's tabs swap what every surface
-// counts; under Created the done-only verdicts (streak, both misses) stay
+// counts; under Created the done-only verdicts (both misses) stay
 // zero and the frontend hides their cards. Missed is the third lens over the
 // same shapes: the two miss verdicts BECOME the subject — the replay's
 // per-day counts drive the heatmap and the splits, the day detail shows the
-// fell + missed rows, and streak stays zero. Every subject answers to the
+// fell + missed rows. Every subject answers to the
 // same scope filter, and `journal_tasks` flattens any subject into one
 // paginated range list (the frontend's Tasks card).
 
@@ -219,11 +219,6 @@ pub struct Totals {
     pub count: i64,
     pub daily_missed: i64,
     pub today_missed: i64,
-    /// Consecutive days with ≥1 effective completion, counting back from
-    /// today. A live today with nothing yet doesn't break it (the day isn't
-    /// over); 0 when yesterday had nothing. Done-only — always 0 under
-    /// Created.
-    pub streak: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -780,7 +775,7 @@ impl Db {
     }
 
     /// The Done dashboard: the effective-completion fold drives every number
-    /// (day counts, heatmap, streak, splits); the two miss replays ride the
+    /// (day counts, heatmap, splits); the two miss replays ride the
     /// same walk.
     fn done_dashboard(
         &self, since: Option<&str>, until: Option<&str>, filter: &ScopeFilter,
@@ -797,10 +792,8 @@ impl Db {
 
         // ---- Effective completions ------------------------------------------
         // day → item → standing, folded in id order: the scoped fold drives
-        // every number on the page (day counts, heatmap, streak, splits).
-        // The scan window is the heatmap invariant's (see scan_window) — the
-        // wide start is also the streak's, which walks back through up to
-        // the window's months of per-day counts.
+        // every number on the page (day counts, heatmap, splits). The scan
+        // window is the heatmap invariant's (see scan_window).
         let mut done_by_day: BTreeMap<String, BTreeMap<String, Effective>> = BTreeMap::new();
         {
             let mut stmt = conn.prepare(
@@ -862,8 +855,8 @@ impl Db {
         let missed_by_day =
             replay_daily_misses(&conn, start_d, end_d, &today, &scope, &done_daily_by_day)?;
 
-        // The subject's per-day counts — the day rows, the streak, and the
-        // heatmap all read these.
+        // The subject's per-day counts — the day rows and the heatmap both
+        // read these.
         let per_day: BTreeMap<String, i64> = done_by_day
             .iter()
             .map(|(day, m)| (day.clone(), m.values().filter(|e| e.done).count() as i64))
@@ -879,25 +872,6 @@ impl Db {
             totals.daily_missed += daily_missed;
             totals.today_missed += today_missed;
             days.push(DayStat { date: day.clone(), count, daily_missed, today_missed });
-        }
-
-        // Current streak: consecutive days with ≥1 effective completion,
-        // walking back from today. A zero today is skipped (the day is still
-        // live), but every earlier day must have one. The scan window is at
-        // least the heatmap's ~7 months, which bounds any realistic streak.
-        let has_done = |d: NaiveDate| -> bool {
-            let day = d.format("%Y-%m-%d").to_string();
-            per_day.get(&day).map_or(false, |&c| c > 0)
-        };
-        {
-            let mut d = today_d;
-            if !has_done(d) {
-                d -= chrono::Duration::days(1); // today still live — don't break it
-            }
-            while has_done(d) {
-                totals.streak += 1;
-                d -= chrono::Duration::days(1);
-            }
         }
 
         // ---- Heatmap window ----------------------------------------------------
@@ -931,7 +905,7 @@ impl Db {
     /// The Created dashboard: one pass over `created` actions — each row is
     /// a task that entered the list, carrying its axes at birth. No
     /// effective-set folding (a creation is never undone), no replay, no
-    /// streak: the done-only verdicts stay zero and the frontend hides their
+    /// misses: the done-only verdicts stay zero and the frontend hides their
     /// cards. Day keys follow the same 6am boundary, so a 1am capture
     /// belongs to yesterday.
     fn created_dashboard(
@@ -1637,32 +1611,6 @@ mod tests {
     }
 
     #[test]
-    fn streak_tolerates_a_live_today() {
-        let (db, dir) = tmp_db();
-        // Anchor on the logical today, the same day the dashboard keys off.
-        let today = chrono::NaiveDate::parse_from_str(&today_iso(), "%Y-%m-%d").unwrap();
-        let day = |back: i64| (today - chrono::Duration::days(back)).format("%Y-%m-%d").to_string();
-        {
-            let conn = db.conn.lock().unwrap();
-            // Done yesterday and the two days before; today still empty.
-            for back in [1, 2, 3] {
-                act(&conn, "S", "completed", Some("today"), Some("today"), None, None,
-                    &format!("{}T09:00:00", day(back)));
-            }
-        }
-        let s = db.journal_dashboard(None, None, &ScopeFilter::default(), Subject::Done).unwrap();
-        assert_eq!(s.totals.streak, 3, "an empty live today must not break the streak");
-        {
-            let conn = db.conn.lock().unwrap();
-            act(&conn, "S", "completed", Some("today"), Some("today"), None, None,
-                &format!("{}T10:00:00", day(0)));
-        }
-        let s = db.journal_dashboard(None, None, &ScopeFilter::default(), Subject::Done).unwrap();
-        assert_eq!(s.totals.streak, 4);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
     fn pauses_shape_the_miss_replay() {
         let (db, dir) = tmp_db();
         let a = db.create_item("habit a", "daily", None, None).unwrap();
@@ -1848,7 +1796,6 @@ mod tests {
         assert_eq!(s.totals.count, 4);
         assert_eq!(s.days.iter().find(|d| d.date == "2026-01-01").map(|d| d.count), Some(1));
         assert_eq!(s.days.iter().find(|d| d.date == "2026-01-02").map(|d| d.count), Some(3));
-        assert_eq!(s.totals.streak, 0);
         assert_eq!(s.totals.daily_missed, 0);
         assert_eq!(s.totals.today_missed, 0);
         // Splits read the birth-time snapshots.
@@ -1925,7 +1872,6 @@ mod tests {
         assert_eq!(by["2026-01-02"].count, 1); // B missed
         assert_eq!(by["2026-01-03"].count, 2); // B missed + C fell
         assert_eq!(s.totals.count, 3);
-        assert_eq!(s.totals.streak, 0);
         // The heatmap counts misses.
         assert_eq!(s.heatmap.iter().find(|h| h.date == "2026-01-03").map(|h| h.count), Some(2));
         // Splits read the miss rows: growth 3 (B's two misses + C's fall);

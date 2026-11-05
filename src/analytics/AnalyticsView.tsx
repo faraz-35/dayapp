@@ -250,13 +250,13 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
       <div className="analytics">
         {dash && (
           <>
-            {/* Hero stats — one card, evenly spread. Each lens shows its own
-                numbers: Done → done/streak; Created → creations; Missed →
-                the two miss verdicts. */}
+            {/* Hero stats — one card, evenly spread, each metric centered in
+                its column. Each lens shows its own numbers: Done → done;
+                Created → creations; Missed → the two miss verdicts. The
+                streak is gone — the heatmap's lit cells already say it. */}
             <section className="an-card an-hero">
               <StatCard value={dash.totals.count} label={cap(noun)} accent />
               {avg != null && <StatCard value={avg} label="Avg / day" />}
-              {subject === "done" && <StatCard value={dash.totals.streak} label="Day streak" />}
               {subject === "missed" && (
                 <>
                   <StatCard value={dash.totals.dailyMissed} label="Daily missed" />
