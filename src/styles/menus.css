@@ -1,0 +1,68 @@
+/* ---- Hide menu (shared by item rows + notes) -------------------------- */
+
+.hide-menu-wrap {
+  position: relative;
+  display: flex;
+}
+
+.hide-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 168px;
+  max-height: 240px;
+  overflow-y: auto;
+  /* A long roster (many projects) scrolls inside the card — no scrollbar
+     chrome; the wheel and the moving highlight are the affordances. */
+  scrollbar-width: none;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.hide-menu::-webkit-scrollbar { display: none; }
+
+/* Flip the menu open upward when opening downward would overflow the viewport
+   (rows near the bottom). Prevents .scroll's scrollable region from growing
+   every time a menu opens — opening a menu must be a no-op on layout. */
+.hide-menu.flip {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.hide-menu-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  text-align: left;
+  transition: background 0.08s ease;
+}
+/* The open menu holds keyboard focus (usePopoverKeys) — the moving .hi
+   highlight is the indicator; the container itself never rings. */
+.hide-menu:focus { outline: none; }
+.hide-menu-item:hover, .hide-menu-item.hi { background: var(--bg-hover); }
+.hide-menu-label { font-size: 12px; color: var(--text); }
+.hide-menu-sub { font-size: 10px; color: var(--text-faint); }
+/* Inline input + divider used by the project/reminder popovers. */
+.hide-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.menu-input {
+  font: inherit;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 8px;
+  color: var(--text);
+  outline: none;
+  color-scheme: dark;
+}
+.menu-input:focus { border-color: var(--accent); }
+.menu-input::placeholder { color: var(--text-faint); }

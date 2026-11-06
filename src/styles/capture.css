@@ -1,0 +1,158 @@
+/* ---- Capture input (the notes bar + the one task bus) ------------------ */
+/* Minimal: just a bottom border that goes accent on focus. No fill, no box,
+   no placeholder — the line is the affordance. */
+
+.capture {
+  margin: 0 8px 6px;
+  padding: 4px 0 5px;
+  border-bottom: 1px solid var(--border);
+  transition: border-color 0.1s ease;
+}
+.capture:focus-within { border-color: var(--accent); }
+
+/* Capture lines sit on the chrome edge — the text and its underline
+   together, with the heads and the circles. Contained captures
+   (notes/goals/entries) are inset by their section's own 8px. */
+.capture.task-capture { margin: 2px 8px 8px var(--row-x); }
+.notes .capture,
+.goals .capture,
+.entry-page .capture { margin-left: calc(var(--row-x) - 8px); }
+
+/* The task capture rides above the section stack (outside .sections' own
+   padding), so its left margin is the whole inset — one notes-gap above
+   the Today head. One input for all three destinations — ##t/##d/##b
+   route. */
+.capture input,
+.capture textarea {
+  width: 100%;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  resize: none;
+  overflow: hidden;
+  min-height: 18px;
+  display: block;
+}
+
+/* Notes capture is a multiline field (unlike the single-line section inputs):
+   3 lines tall, scrolls internally once the draft grows past that. Type +
+   Enter still commits the note; Shift+Enter adds a line within the draft. */
+.notes .capture textarea {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+/* The notes draft's scrollbar is an overlay affair: hiding it keeps the
+   textarea's content width (and so its wrap points) identical to the token
+   mirror's under it — scrolling still works via caret and wheel. */
+.notes .capture textarea::-webkit-scrollbar { display: none; }
+
+/* ---- Token coloring in capture fields (TokenField) --------------------- */
+/* The field's real text renders transparent; a mirror div underneath paints
+   the same text with the typed tokens (##j/##q, #tag, !N, @) in their colors
+   — the note find-bar's mirror technique applied to the capture surfaces.
+   Both layers sit inside .capture, so they share its font rules; the mirror
+   re-states the input's own metrics so each colored token lands exactly
+   under its glyphs. caret stays visible through caret-color; selection is a
+   translucent accent so the mirrored glyphs read through it. */
+
+.token-field {
+  position: relative;
+  display: block;
+}
+.token-field > :is(input, textarea) {
+  position: relative;
+  z-index: 1;
+  color: transparent;
+  /* The native caret and selection track the RAW value, but the mirror
+     renders the SUBSTITUTED tokens (##q → quote, !2 → bars) — wider than the
+     sigils, so the native pair would drift off the visible words. TokenField
+     draws its own over the display layout; both of these stay transparent. */
+  caret-color: transparent;
+}
+.token-field > :is(input, textarea)::selection {
+  background: transparent;
+}
+.token-mirror {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre;
+}
+/* Multiline (the notes capture): wrap exactly like the textarea does, so
+   token colors stay on their glyphs across soft line breaks. */
+.token-field.multiline .token-mirror {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* Every token family in the one accent — a token reads as "this processes",
+   and only the real content stays plain text. */
+.token-mirror .tok { color: var(--accent); }
+
+/* Demo mode's rotating capture hint (TokenField's demoExamples): an example
+   line under the empty field — prose in the quietest shade, the raw sigils
+   (`##t`, `!1`, `$2`) in the dull accent. Same metrics as the mirror, so it
+   sits exactly where typed text would land. Each swap remounts the layer
+   (keyed) and the new line fades in over ~0.8s with a 2px rise — slow and
+   soft, a breath, not a blink. */
+.token-ph {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre;
+  animation: ph-in 0.8s ease-out;
+}
+@keyframes ph-in {
+  from { opacity: 0; transform: translateY(2px); }
+}
+.token-field.multiline .token-ph {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.token-ph .tok { color: rgba(var(--accent-rgb), 0.5); }
+/* TokenField's own caret + selection, drawn over the mirror's substituted
+   layout (the native pair tracks the raw value — see the field rules above).
+   Both position at the mirror's content origin and move with transform into
+   place; living inside the scrolling mirror, they ride its scroll sync for
+   free. The caret is the hairline the field used to show; the selection the
+   same translucent accent, one rect per wrapped line. */
+.tok-caret {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1.5px;
+  background: var(--text);
+  animation: tok-blink 1.1s step-end infinite;
+}
+@keyframes tok-blink {
+  50% { opacity: 0; }
+}
+.tok-sel { position: absolute; top: 0; left: 0; }
+.tok-sel-rect {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: rgba(var(--accent-rgb), 0.3);
+  border-radius: 1px;
+}
+
+.empty {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-style: italic;
+}

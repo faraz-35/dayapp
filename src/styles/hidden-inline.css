@@ -1,0 +1,26 @@
+/* ---- Hidden entries inline (⌘P → Show All / Show Hidden Only) --------- */
+/* Hidden entries render inline in their sections: dimmed text, a ◐ chip
+   carrying the hide's expiry, an inert checkbox, no drag; hover reveals
+   only ↺ unhide + × delete. */
+
+.unhide-btn:hover { color: var(--accent); }
+
+.item.hidden .item-text { color: var(--text-faint); }
+.item.hidden .item-check,
+/* .selected mirrors :hover for the focus grammar — and keeps the same
+   "inert" treatment on hidden rows (faint checkbox, no grip) either way. */
+.item.hidden:hover .item-check,
+.item.hidden.selected .item-check {
+  border-color: var(--text-faint);
+  opacity: 0.6;
+  cursor: default;
+}
+.item.hidden:hover .grip,
+.item.hidden.selected .grip { opacity: 0; }
+.hidden-chip {
+  font-size: 11px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.note.hidden .note-textarea { color: var(--text-faint); }
+.note.hidden .note-textarea:focus { color: var(--text); }

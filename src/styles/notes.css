@@ -1,0 +1,257 @@
+/* ---- Notes ------------------------------------------------------------ */
+/* Free-form multiline text. Sits above the item sections so there's minimum
+   inertia to write or paste. Deliberately its own visual block. */
+
+.notes {
+  padding: 8px 8px 8px;
+  /* No independent scroll — .scroll owns it. Notes is an in-flow block above
+     the sections. Separated by bg alone, no divider. */
+}
+
+/* Collapsed note: the same card shrunk in place to its first line — no layout
+   swap, just less height. The card itself is the expand control (click →
+   textarea focused, caret at end); its hover actions (⌄ ◐ ×) stay available. */
+.note.collapsed { cursor: pointer; }
+.note.collapsed:hover { background: var(--bg-hover); }
+/* Collapsed note: the same card shrunk in place to its first prose line — no
+   layout swap, just less height. The card itself is the expand control (click →
+   textarea focused, caret at end); its hover actions (⌄ ◐ ×) stay available.
+   The line carries one piece of metadata chrome: the note's project label
+   (right-aligned, same hue-per-project as item rows) when a `#tag` footer links
+   one. Priority never shows here — the tier groups/dividers are the notes'
+   tier signal. The text span owns the ellipsis so the label stays whole.
+   The hover/focus action cluster floats at the card's top-right corner, so
+   while it's revealed the line yields it room — the same reveal-and-make-room
+   language rows use; at rest the label sits flush right over nothing. */
+.note-preview {
+  min-height: 28px;            /* matches .note-textarea — single-line notes keep their height */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  padding-right: 2px;
+  transition: padding-right 0.08s ease;
+}
+:is(.note.hovered, .note.focused, .note:has(.hide-menu)) .note-preview {
+  padding-right: 100px;        /* the ⌄ ⬇ ◐ × cluster (~94px incl. its corner offset) */
+}
+.note-preview-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.note-preview .project-label { flex-shrink: 0; }
+.note.hidden .note-preview { color: var(--text-faint); }
+
+.note {
+  position: relative;
+  margin: 4px 0;
+  /* Body text on the content column; the card box (fill, focus underline)
+     stays at the section's edge — text moves, chrome doesn't. */
+  padding: 8px 48px 8px calc(var(--text-col) - 8px);
+  /* No radius: the focus underline is the capture-input language, and a
+     rounded corner would bend it up at both ends. */
+  background: var(--bg-soft);
+  transition: box-shadow 0.1s ease;
+}
+/* Being edited reads like a capture line, not a ringed card: the accent is a
+   bottom underline only (inset, so the card's bounds and the textarea's layout
+   never shift — a real border would move the text). */
+.note:focus-within { box-shadow: inset 0 -1px 0 var(--accent); }
+
+/* UI option (Settings → UI): the notes surface without the card fill — the
+   row language. Bare at rest; the hover tint keys off the JS-tracked
+   .hovered class, never :hover — the textareas resize under a stationary
+   pointer (see the reveal rules). Focus underline, reveals, tier dividers:
+   all unchanged. */
+.notes-bare .note { background: none; }
+.notes-bare .note.hovered, .notes-bare .note:has(.hide-menu) { background: var(--bg-hover); }
+
+/* Keyboard-focused note (the grammar's `n1-9` + digits target) — the same
+   resting tint a selected row gets, so every focusable surface reads alike.
+   :focus-within still adds the accent underline while it's being edited. */
+.note.focused { background: var(--bg-hover); }
+
+.note-textarea {
+  width: 100%;
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;              /* height is driven by autosize() */
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;          /* no scrollbar; grows with content */
+  min-height: 28px;
+  user-select: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.note-textarea::placeholder { color: var(--text-faint); }
+
+/* ---- Find in note (⌘F while editing a note) ---------------------------- */
+/* A slim bar at the top of the card, in-flow while it lasts — inline chrome
+   that belongs to the note, not a page-level floating surface. While it's
+   open the matches paint through a transparent-text mirror under the textarea
+   (a textarea can't tint ranges itself). */
+
+.note-find {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+.note-find-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 8px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.1s ease;
+}
+.note-find-input:focus { border-color: var(--accent); }
+.note-find-input::placeholder { color: var(--text-faint); }
+.note-find-count {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.note-find-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background 0.08s ease, color 0.08s ease;
+}
+.note-find-btn:hover { background: var(--bg-hover); color: var(--text); }
+/* While the bar is open it owns the card's top row, so the hover-action
+   cluster (⌃ ⬇ ◐ ×, absolute at the top-right corner) steps down a row to sit
+   beside the first text line instead of on top of the bar's buttons — exactly
+   where it lives relative to the text when the bar is closed. */
+.note.finding .note-actions { top: 36px; }
+
+/* The mirror: absolutely under the textarea, laying out the same text with
+   the same metrics — .note-textarea's font, size, line-height, zero padding,
+   pre-wrap + break-word — so each mark lands exactly under its matched
+   glyphs. The textarea's own glyphs render transparent (caret stays via
+   caret-color); the mirror is the visible text, and it carries both layers:
+   the find marks' background tints and the pending footer's accent tokens.
+   pointer-events: none, so it never intercepts the editor. */
+.note-body-wrap { position: relative; }
+.note-body-wrap .note-textarea {
+  position: relative;
+  z-index: 1;
+  color: transparent;
+  caret-color: var(--text);
+}
+.note-body-wrap .note-textarea::selection {
+  background: rgba(var(--accent-rgb), 0.3);
+}
+.note-mirror {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 0;
+  margin: 0;
+  min-height: 28px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+}
+/* Alpha tints of --accent ride --accent-rgb (the triplet applyTheme derives
+   from the accent hex), so find marks follow every theme. */
+.note-mirror mark {
+  background: rgba(var(--accent-rgb), 0.25);
+  border-radius: 2px;
+}
+.note-mirror mark.note-find-cur { background: rgba(var(--accent-rgb), 0.55); }
+.note-mirror .tok { color: var(--accent); }
+/* The note body keeps its NATIVE caret (no overlay to redraw it), so a
+   substituted footer token must occupy its raw sigil's exact advance or the
+   caret would drift off the visible line: the bars sit in an inline-block
+   width-matched to the raw "!N" by baseTextWidth. */
+.note-mirror .tok-fitted { display: inline-block; }
+
+.note-delete {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: var(--text-faint);
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.08s ease, background 0.08s ease, color 0.08s ease;
+}
+/* The reveal keys off a JS-tracked .hovered class (set by the pointer effect
+   in Notes.tsx), not :hover — WKWebKit's :hover chain goes stale when the
+   auto-growing textareas resize under a stationary pointer, leaving buttons
+   stuck on a note the pointer already left. */
+/* Focused reveals like hovered (the digits' targets must be visible). */
+:is(.note.hovered, .note.focused, .note:has(.hide-menu)) .note-delete { opacity: 1; }
+.note-delete:hover { background: var(--bg-hover); color: var(--danger); }
+
+/* Two corner buttons (hide + delete) sit side by side. */
+.note-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  /* Above the textarea's z-index: 1 (the mirror flip hoisted it over this
+     cluster, so its transparent pixels ate the clicks on the half of the
+     cluster that overlaps the first text line — buttons visible, unclickable).
+     Level 2 also lifts the ◐ menu over the following notes' textareas. */
+  z-index: 2;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+}
+/* The HideMenu trigger inherits .item-action's hover-reveal, but a note isn't an
+   .item, so reveal it on .note hover explicitly. */
+.note-actions .item-action { opacity: 0; }
+:is(.note.hovered, .note.focused, .note:has(.hide-menu)) .note-actions .item-action { opacity: 1; }
+
+/* Bars-in-rows mode (Settings → Appearance): the card carries its tier in
+   the top-right corner — the slot the action cluster owns in the default
+   divider treatment — so the cluster reveals LEFT of it and the collapsed
+   preview's label clears the corner. The bars sit in the same 22px box as
+   the buttons, so the two states align on one row; the card's 48px right
+   padding already clears them on expanded cards. */
+.notes-bars .note-priority {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  z-index: 2;                    /* over the textarea, like the cluster */
+}
+.notes-bars .note-actions { right: 23px; }  /* the cluster sits left of the bars */
+.notes-bars .note-preview { padding-right: 26px; }  /* the label clears the bars */
+:is(.note.hovered, .note.focused, .note:has(.hide-menu)) .notes-bars .note-preview {
+  padding-right: 124px;          /* the shifted cluster (~100px) + the bars */
+}

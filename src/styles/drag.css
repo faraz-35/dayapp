@@ -1,0 +1,13 @@
+/* ---- Drag overlay ------------------------------------------------------ */
+
+.drag-overlay {
+  opacity: 0.9;
+  box-shadow: var(--shadow-md);
+  background: var(--bg-elev);
+  border-radius: 6px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 320px;
+}

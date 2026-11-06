@@ -1,0 +1,107 @@
+/* ---- Quote modal (the screensaver's moment) --- */
+/* The ##q moment: one quote on a dim backdrop, nothing else — no card, no
+   close button, no countdown chrome. The backdrop is what creates the pause
+   (it dims the task list the way an inline line never could); the quote
+   itself keeps the line's old voice — serif italic, --text (bright),
+   ~75% width, centered, multi-line as long as it needs to be (never
+   ellipsized — clipping a quote mid-sentence defeats it). No animation on
+   the fixed backdrop itself: WKWebView's compositor left an animated
+   full-screen fixed layer at the `from { opacity: 0 }` frame — it never
+   painted (the "modal never appears" bug's second half). The quote text
+   fades in instead; dismissal is instant. */
+
+.quote-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim-strong);   /* deeper than the palette's 0.4 — the dim is the point */
+  -webkit-backdrop-filter: blur(12px);  /* erase what sat beneath, both surfaces */
+  backdrop-filter: blur(12px);
+  z-index: 105;                     /* above search (90), below update (110) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.quote-text {
+  width: 75%;
+  font-family: ui-serif, "New York", Didot, Georgia, serif;
+  font-style: italic;
+  /* Whole-screen moment: scales with the window — compact in the 480px
+     frame, pull-quote sized when Faraz fullscreens it via AeroSpace. */
+  font-size: clamp(19px, 2.5vw, 22px);
+  line-height: 1.75;
+  color: var(--text);
+  text-align: center;
+  overflow-wrap: break-word;
+  /* A fleeting moment, not a copy source — selection would fight the
+     click-anywhere-to-dismiss contract. */
+  user-select: none;
+  animation: title-in 0.35s ease;
+}
+
+/* ---- Entry pages (Journal ¶ + Quotes ❝) ----------------------------------- */
+/* The written word's two views over `entries`, one per kind: days
+   newest-first, entries in capture order, single-click to edit inline, hover
+   reveals ×. In-flow blocks like .notes/.goals — .scroll owns scroll. Rows
+   are the .item language minus every axis an entry doesn't have (no grip, no
+   checkbox, no bars). */
+
+.entry-page {
+  padding: 8px 8px 0;
+}
+
+/* Day header — the section-name language, but marking a day, not a section.
+   A label, so it sits on the chrome edge with the heads; the entry lines
+   below it sit on the content column. */
+.entry-day {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 14px 8px 2px calc(var(--row-x) - 8px);
+}
+
+.entry-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px 4px calc(var(--text-col) - 8px);
+  border-radius: 6px;
+  cursor: default;
+  transition: background 0.08s ease;
+}
+.entry-row:hover { background: var(--bg-hover); }
+
+/* Primary content, full strength — entries ARE the page. pre-wrap so a
+   multi-line capture keeps its shape; word-break for long unbroken lines. */
+.entry-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+/* The × inherits .item-action's hover-reveal shape; entry rows aren't
+   .item, so the reveal rides this row's own hover. Baseline-aligned with the
+   text (align-items above), not centered — a one-line row reads cleaner. */
+.entry-row .item-action { opacity: 0; align-self: center; }
+.entry-row:hover .item-action { opacity: 1; }
+
+/* The inline editor takes the text's exact slot so the row doesn't shift. */
+.entry-row .item-edit { flex: 1; min-width: 0; }
+
+.entry-empty {
+  color: var(--text-faint);
+  font-size: 13px;
+  padding: 14px 8px;
+}
+.entry-empty code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+}

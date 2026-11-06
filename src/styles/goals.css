@@ -1,0 +1,46 @@
+/* ---- Goals (identity layer between Notes and the sections) -------------- */
+/* Horizon groups (Timeless / Long term / Short term, achieved last) separated
+   by the same hairline dividers the Backlog's tier groups use — the label is
+   text here instead of signal bars. Rows reuse the .item language minus the
+   grip: no DnD, goals are a calm static list. */
+
+.goals {
+  /* In-flow block like .notes — .scroll owns scroll. First block on the page,
+     so it carries the top padding the header doesn't. */
+  padding: 8px 8px 0;
+  margin-bottom: 16px;
+}
+
+/* Divider label — sub-header level: same shade and size as the section
+   names (one header treatment app-wide), hierarchy by centering alone. */
+.tier-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* The timeless slot where short/long rows carry their checkbox: ∞ marks a
+   direction that never completes. The check slot's width, so goal rows sit
+   on the same text column as task rows. */
+.goal-eternal {
+  width: var(--check-w);
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Goal rows mirror the task rows' leading grip slot so circle and text
+   columns line up across the two surfaces. Active rows drag, so the grip
+   reveals on hover/focus through the shared .item rules above; achieved
+   (.done) and paused (.hidden) rows sit out the drag — their spacer never
+   reveals. */
+.item.goal-row.done .grip,
+.item.goal-row.hidden .grip {
+  opacity: 0;
+  cursor: default;
+}

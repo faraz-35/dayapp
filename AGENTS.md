@@ -771,7 +771,7 @@ dayapp/
 │   ├── themes.ts                   ← the theme system: the eleven-shade ladder, the built-ins (Dark/Light/Nord/Rosé Pine), applyTheme — one paint over the tokens
 │   ├── features.tsx                ← the existence switches as context (the Features read every gated surface consumes)
 │   ├── main.tsx                    ← React entry
-│   ├── index.css                   ← the dark theme + all component styles
+│   ├── styles/                    ← the stylesheet, one file per surface (base tokens, header, search, sections, item, capture, drag, analytics, notes, menus, row-meta, timer-chip, hidden-inline, goals, entries, overlays, mobile, settings) — index.css is the ordered @import manifest; the files import in the original single-file order so the cascade never shifts
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← the ONE task capture (##t/##d/##b routing) + DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + sortable items + dropzone; Backlog tier dividers)
@@ -885,7 +885,7 @@ swap outranks everything).
 
 ### 4. Two left edges (`--row-x` and `--text-col`)
 
-The page aligns on two shared left edges, both defined in `index.css` from
+The page aligns on two shared left edges, both defined in `src/styles/base.css` from
 the task row's named slot widths (`--grip-w`/`--check-w`), so neither can
 drift from the rows:
 
@@ -951,7 +951,7 @@ keyboard-first.** Every choice below is intentional.
    There is always a ready textarea. (The quote moment is a summoned modal, not
    ambient chrome — see "Quote modal" under UI/UX.)
 
-### Colour tokens (from `index.css` — use these, do not hardcode hex)
+### Colour tokens (from `src/styles/base.css` — use these, do not hardcode hex)
 
 The table is the DARK theme's resting values — the runtime truth is whatever
 `applyTheme` last wrote onto `<html>` (System by default — the OS's side of the
@@ -1459,7 +1459,7 @@ into Notes or edit fields isn't hijacked.
   The bar is inline chrome at the top of the card while it lasts (not a floating
   surface — it belongs to the note). Matches paint through a transparent-text mirror
   div laid out under the textarea with identical metrics (`.note-mirror` in
-  `index.css` — a textarea can't tint ranges itself): all matches a faint accent
+  `styles/notes.css` — a textarea can't tint ranges itself): all matches a faint accent
   tint, the current one stronger. Enter / ↓ and ↑ / ⇧Enter step matches (wrapping;
   arrows only, never letters, in the field), the count reads `n/m`, and Esc closes
   the bar and refocuses the textarea with the current match selected — the find bar
@@ -1812,7 +1812,7 @@ was done — that's the house style:
    own handlers. Do not entangle with `App.tsx`'s item state.
 5. **Mount it in `App.tsx`** with a single line. If it's a text surface, mount it **outside**
    the `<DndContext>` so typing isn't a drag surface.
-6. **Styles in `index.css`** under a clearly named section header comment. Reuse tokens.
+6. **Styles in `src/styles/`** — a new surface gets its own file in the manifest; anything smaller lands in the owning surface's file under a clearly named section header comment. Reuse tokens.
 
 ---
 

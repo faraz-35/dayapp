@@ -1,0 +1,77 @@
+/* Minimal dark, Linear-flavoured. Dense rows, icon-only hover actions. */
+
+:root {
+  --bg: #0e0f11;
+  --bg-elev: #16181c;
+  --bg-soft: #121417;   /* --bg → --bg-elev midpoint: elevated, one step quieter */
+  --bg-hover: #1c1f24;
+  --border: #30343c;    /* hairlines, capture underlines — bright enough to read as lines */
+  --text: #d2d5da;      /* a pleasant white — full-strength but soft against #0e0f11 */
+  --text-dim: #a2a7b1;  /* secondary text + every section/tier header (one shade) */
+  --text-faint: #7b7f88; /* the quietest text: placeholders, hints, disabled */
+  --accent: #7b8cff;
+  --accent-rgb: 123, 140, 255;  /* the accent as a triplet — alphas spell rgba(var(--accent-rgb), a) */
+  --done: #3a3f48;
+  --danger: #e5484d;
+  /* Derived layer (themes.ts overwrites at runtime): scrims, card shadows,
+     and the analytics track tint — all luminance-aware. */
+  --scrim: var(--scrim);
+  --scrim-strong: var(--scrim-strong);
+  --track: var(--track);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  /* Two left edges, both derived from the task row's own slots so neither
+     can drift from the rows. --row-x is the chrome edge — where the row's
+     checkbox circle sits (.sections 8 + .item 8 + grip + gap 8), and where
+     every label and input line starts: surface heads, the four capture
+     lines (text + underline), day labels. --text-col is one checkbox
+     deeper — the content column where notes, task and goal text and the
+     entry lines sit. */
+  --check-w: 15px;  /* the done-circle slot (.item-check / .goal-eternal / .details-slot) */
+  --grip-w: 10px;   /* the ⠿ slot, fixed — the glyph's own advance is not deterministic */
+  --row-x: calc(8px + 8px + var(--grip-w) + 8px);
+  --text-col: calc(var(--row-x) + var(--check-w) + 8px);
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", system-ui, sans-serif;
+  font-size: 13px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* App shell: header (pinned) + a single scroll container for the whole body.
+   THE ONLY place scroll happens is .scroll — children must not set their own
+   overflow-y, or content splits into independent scroll areas (the recurring
+   bug documented in AGENTS.md "Layout architecture"). */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding-bottom: 30px;
+  box-sizing: border-box;
+}
+
+input, textarea { user-select: text; }
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}

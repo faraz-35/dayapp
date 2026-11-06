@@ -1,0 +1,103 @@
+/* ---- Header ------------------------------------------------------------ */
+
+.header {
+  position: relative;                   /* owns the absolutely centered masthead */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  -webkit-app-region: drag;             /* let the title bar area drag the window */
+}
+.header button { -webkit-app-region: no-drag; }
+
+/* The masthead — brand on the list view, "Analytics" in the analytics view. Truly
+   centered over the header (not flex-centered, which the varying right-side
+   controls would offset). The one serif surface in the app: New York (ui-serif)
+   italic, falling back to Didot/Georgia on systems without it. */
+.title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: ui-serif, "New York", Didot, Georgia, serif;
+  font-style: italic;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  white-space: nowrap;
+  animation: title-in 0.12s ease;
+}
+
+/* The masthead word is keyed in App.tsx (the Live @ brand rotation, or a view
+   switch), so every swap remounts and fades the new word in — a quiet ident,
+   not a jump. */
+@keyframes title-in {
+  from { opacity: 0; }
+}
+
+/* Below ~455px the trimmed timer chip and the centered masthead can't both
+   fit (minWidth is 360); the masthead steps aside. The 480px default is
+   unaffected. */
+@media (max-width: 455px) {
+  .title { display: none; }
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;   /* push right whether or not a .title sibling exists */
+}
+
+.icon-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 17px;
+  line-height: 1;
+  transition: background 0.08s ease, color 0.08s ease;
+}
+.icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+.icon-btn.active { color: var(--accent); }
+/* The theme cycle's subscript: the theme's slot within its mode's ladder,
+   tucked into the button's corner. */
+.theme-cycle { position: relative; }
+.theme-cycle svg { margin-top: -3px; }
+.theme-idx {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.theme-cycle:hover .theme-idx { color: var(--text); }
+/* The release-update door (mounts only while a newer release exists) — the
+   one accent icon at rest, since its whole job is to be noticed. */
+.icon-btn.update-ready { color: var(--accent); }
+
+/* Demo mode's Exit Demo button (first in .header-right, left of the icon
+   buttons): the one labeled header control — text, not a glyph — because it
+   IS the first-run tour's on-ramp. Calm bordered pill in the icon-btn's
+   radius and transition language. */
+.demo-exit {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  transition: background 0.08s ease, color 0.08s ease, border-color 0.08s ease;
+}
+.demo-exit:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--text-faint);
+}

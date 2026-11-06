@@ -1,0 +1,201 @@
+/* Right-aligned row metadata. Pushed to the far edge (margin-left:auto) so the
+   project name + reminder sit flush right. Priority + project label stay
+   visible on hover — they're the row's identity, wanted while its actions are
+   on screen — and so do time + reminder (2026-10-12: they used to fade with
+   the buttons' arrival, but they're facts worth reading while acting). Only
+   the hidden-status chip fades. Everything is opacity-only with reserved
+   slots, so nothing reflows on hover. */
+.item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.item-meta .hidden-chip { transition: opacity 0.08s ease; }
+:is(.item:hover, .item.selected, .item.focused, .item:has(.hide-menu)) .item-meta .hidden-chip { opacity: 0; }
+
+/* The identity columns (ItemRow): priority, then agent, then project, as
+   fixed-width slots right-anchored against the action buttons — an axis a
+   row lacks renders its EMPTY slot instead of collapsing (Backlog rows
+   never carry bars but keep priority's slot, so the columns hold across the
+   section seam), and the project column clips every name to 6 letters +
+   an ellipsis (clipProject in ItemRow — the tooltip carries the full name),
+   so the three axes read as aligned columns down the whole list at a
+   constant, narrow cost. Widths: the bars (3×3px + 2×2px gaps) and the
+   badge glyph are both 13px; the project slot fits the longest clamped
+   string (6 letters + the mark). */
+.meta-agent, .meta-priority {
+  width: 13px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.meta-project {
+  width: 7.5ch;
+  display: flex;
+  /* The column keeps its list-wide width; the name reads from its LEFT edge
+     (2026-10-27) — every label starts on the same x, the way English reads,
+     instead of ending on a shared right edge. */
+  justify-content: flex-start;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.meta-project .project-label { max-width: 100%; }
+
+/* Priority signal bars — the row's urgency tier, set via !1/!2/!3 tokens in
+   the text. Filled count = urgency (P1 = 3 filled … P3 = 1), filled in the one
+   accent, empty slots a faint track. On Today/Daily rows (stays visible on
+   hover, like the project label); in the Backlog the tier dividers below use
+   it as their label — rows there carry no bars. */
+.priority-bars {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.priority-bars .bar {
+  width: 3px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--border);
+}
+.priority-bars .bar.filled { background: var(--accent); }
+
+/* The agent badge — a tiny robot marking rows fully delegable to the AI agent
+   (set via a bare `@` token). Identity metadata like the project label: dim,
+   stays visible on hover, shown in every section. Fill is currentColor (the
+   dim metadata grey); the eyes punch through with the app bg so the glyph
+   stays monochrome. */
+.agent-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-dim);
+  fill: currentColor;
+}
+.agent-badge .agent-eye { fill: var(--bg); }
+
+/* SVG chevron inside an .item-action — block so the button's flex centering
+   owns both axes (text glyphs would ride the font's baseline instead). */
+.action-chevron { display: block; }
+
+/* The details body — the task's main content, opened under its headline row
+   (sibling position, like the tier dividers, so the drag transform only ever
+   owns the one-line row). It mirrors the row's own geometry — same padding,
+   gap, and leading slots (a real, invisible grip glyph + the 15px checkbox
+   slot) — so its text starts exactly under .item-text and its focus
+   background spans the exact box a hovered row's background does. Full
+   strength at base size: the expanded task reads as a small document
+   (headline + body). Auto-growing textarea with Notes' autosave pattern; the
+   faint focus tint is the only editing signal — the caret does the rest. For
+   agent-delegated rows the body is the prompt (dayapp --task). */
+.item-details {
+  display: flex;
+  gap: 8px;                 /* = .item's gap */
+  align-items: flex-start;
+  margin: 0 0 4px;          /* full width — same bounds as the row's bg */
+  padding: 6px 8px;         /* = .item's padding */
+  border-radius: 6px;       /* = .item's radius */
+  transition: background 0.08s ease;
+}
+.item-details:focus-within { background: var(--bg-hover); }
+/* The mirrored grip is a spacer only — never a drag handle. */
+.item-details .grip { cursor: default; }
+/* The checkbox's slot (.item-check is 15px wide). */
+.item-details .details-slot { width: var(--check-w); flex-shrink: 0; }
+.item-details textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 58px;         /* ~3 lines at 13px/1.5 — opens as a page, not a sliver */
+  resize: none;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  outline: none;
+  padding: 0;
+}
+.item-details textarea::placeholder { color: var(--text-faint); }
+
+/* Priority tier dividers (Backlog + Notes — every tier-grouped list). The
+   section sorts P1 → P3 → unmarked, and every tier group is introduced by a
+   hairline whose label is the group's signal bars — the unmarked group's label
+   is the empty track. The label keeps the divider from reading as a capture
+   input's underline. Sub-header level — quieter than the section heads; a
+   single-tier list renders undivided. */
+.tier-divider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 30%;
+  margin: 14px auto;
+}
+.tier-divider::before,
+.tier-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Goals' horizon labels read like the stack heads — centered text, no
+   hairline (the Backlog keeps its tier lines; goals don't). */
+.goals .tier-divider {
+  width: auto;
+  justify-content: center;
+}
+.goals .tier-divider::before,
+.goals .tier-divider::after { content: none; }
+
+/* Per-project label. Color is set inline per project (deterministic hue, or
+   the one metadata grey in single-color mode) so the eye can group items
+   across sections at a glance. */
+.project-label {
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-align: left;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Accent chip showing a set reminder (e.g. → Aug 12). */
+.reminder-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  white-space: nowrap;
+}
+
+/* Cumulative time tracked on an item, shown faint in .item-meta (resting only
+   — suppressed while timing, when the live elapsed takes over). */
+.time-label {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Live elapsed on the running row. Sits in the row's priority column (the
+   bars yield — the running timer is the row's salient fact), always visible
+   so the active timer is identifiable at a glance; the stop ⏸ is an ordinary
+   hover-revealed .item-action beside the header chip's mirror. */
+.timer-live {
+  font-size: 12px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+}
+/* The timing row's priority slot widens past its 13px bars width for the
+   digits — it's right-anchored, so the extra width extends leftward and the
+   agent/project columns keep their list-wide positions. */
+.meta-priority.timing { width: auto; }

@@ -1,0 +1,186 @@
+/* ---- Mobile (Android client) -------------------------------------------- */
+/* Same shell contract as desktop: header pinned, ONE scroll container
+   (.mobile-scroll), capture bar pinned at the bottom. Rows reuse the desktop
+   .item language read-only — no hover affordances exist on touch. */
+
+.mobile {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  /* Native bar safety: zero unless the platform lays out edge-to-edge and
+     reports insets (viewport-fit=cover); the Android build also pins
+     targetSdk 34 so the system manages the top gap natively. */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+.mobile-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 10px;
+}
+.mobile-brand {
+  font-family: ui-serif, "New York", Didot, Georgia, serif;
+  font-style: italic;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+.mobile-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mobile-synced {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.mobile-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 4px 10px 20px;
+}
+.mobile-section {
+  margin-bottom: 22px;
+}
+.mobile-section .section-name {
+  display: block;
+  padding: 0 8px 6px;
+}
+/* Read-only rows: slightly taller for fingers. */
+.mobile .item { min-height: 34px; }
+.mobile-error {
+  margin: 4px 8px 10px;
+  font-size: 12px;
+  color: var(--danger);
+  line-height: 1.45;
+}
+.mobile-hint {
+  padding: 24px 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-style: italic;
+  text-align: center;
+}
+
+/* Queued captures (written to the inbox, not yet ingested by the Mac). */
+.mobile-queued {
+  margin-bottom: 22px;
+}
+.mobile-queued .section-name {
+  display: block;
+  padding: 0 8px 6px;
+}
+.item.queued .item-text { color: var(--text-dim); font-style: italic; }
+.item-check.pending {
+  border-style: dashed;
+  border-color: var(--accent);
+  opacity: 0.7;
+}
+.mobile-queued-sec {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+/* Pinned capture bar. Today/Backlog segmented control + the line-input
+   language of the desktop capture field. */
+.mobile-capture {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border);
+}
+.mobile-seg {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.mobile-seg button {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 7px 10px;
+  color: var(--text-faint);
+}
+.mobile-seg button.on {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+.mobile-capture input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 2px 5px;
+}
+.mobile-capture input:focus { border-color: var(--accent); }
+.mobile-capture input::placeholder { color: var(--text-faint); }
+.mobile-send {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 15px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+.mobile-send:disabled { opacity: 0.4; }
+
+/* First-run setup: the same centered card language as the desktop modals. */
+.mobile-setup {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  padding-top: calc(24px + env(safe-area-inset-top, 0px));
+}
+.mobile-setup .mobile-brand { font-size: 18px; }
+.mobile-setup-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.mobile-setup .menu-input { width: 100%; max-width: 320px; }
+.mobile-setup-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  text-align: center;
+  max-width: 320px;
+}
+.mobile-connect {
+  margin-top: 8px;
+  padding: 8px 24px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 13px;
+}
+.mobile-connect:disabled { opacity: 0.5; }

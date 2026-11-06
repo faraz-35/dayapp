@@ -1,0 +1,119 @@
+/* ---- Item rows --------------------------------------------------------- */
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: background 0.08s ease;
+  cursor: default;
+}
+.item:hover, .item.selected { background: var(--bg-hover); }
+/* A row with an open popover stays lit: the pointer sits on the menu, so
+   :hover has ended — and the menu holds the keyboard instead of the row. */
+.item:has(.hide-menu) { background: var(--bg-hover); }
+/* UI option (Settings → UI): task rows with the notes-card fill. Hover keeps
+   its tint (rows don't resize, so :hover is safe here). */
+.sections-card .item { background: var(--bg-soft); }
+/* Keyboard-focused goal row (the grammar's `g1-9` + digits target) — same
+   tint as .item.selected: one focus language across rows, notes, goals. */
+.goal-row.focused { background: var(--bg-hover); }
+.item.done { color: var(--done); }
+
+.item-check {
+  width: var(--check-w);
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-faint);
+  flex-shrink: 0;
+  transition: all 0.12s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Hover OR keyboard focus reveals the actions: the grammar's digits target
+   those buttons, so the focused row/note/goal must show them (focus mirrors
+   hover exactly — same tint, same buttons, same metadata fades). */
+:is(.item:hover, .item.selected, .item.focused, .item:has(.hide-menu)) .item-check { border-color: var(--accent); }
+.item-check.checked {
+  border-color: var(--accent) !important;
+  background: var(--accent);
+}
+.item-check.checked::after {
+  content: "";
+  width: 7px;
+  height: 4px;
+  border-left: 1.5px solid var(--bg);
+  border-bottom: 1.5px solid var(--bg);
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.item-text {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.item.done .item-text { text-decoration: line-through; color: var(--text-faint); }
+
+.item-edit {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.45;
+  background: var(--bg-elev);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 2px 6px;
+  outline: none;
+  font-family: inherit;
+}
+/* TokenField mode (task/goal edits): the wrapper carries the .item-edit box,
+   and the field inside goes bare — the transparent-text + mirror layers share
+   the wrapper's content box, so metrics can't drift. The mirror repeats the
+   box padding because absolute inset:0 spans the wrapper's padding box. */
+.token-field.item-edit > :is(input, textarea) {
+  width: 100%;
+  display: block;
+  padding: 0;
+  background: none;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.token-field.item-edit .token-mirror {
+  padding: 2px 6px;
+}
+
+.item-action {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.08s ease, background 0.08s ease, color 0.08s ease;
+  line-height: 1;
+}
+:is(.item:hover, .item.selected, .item.focused, .item:has(.hide-menu)) .item-action { opacity: 1; }
+.item-action:hover { background: var(--bg-elev); color: var(--text); }
+.item-action.danger:hover { color: var(--danger); }
+
+.grip {
+  width: var(--grip-w);      /* fixed slot — keeps the text column deterministic */
+  text-align: center;
+  color: var(--text-faint);
+  opacity: 0;
+  cursor: grab;
+  font-size: 12px;
+  line-height: 1;
+}
+:is(.item:hover, .item.selected, .item.dragging, .item:has(.hide-menu)) .grip { opacity: 0.6; }
+.item.dragging { opacity: 0.3; }

@@ -1,0 +1,365 @@
+/* ---- Command palette (⌘P) --------------------------------------------- */
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  -webkit-app-region: no-drag;
+}
+
+.palette {
+  width: 90%;
+  max-width: 420px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.palette-input {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 12px 14px;
+}
+.palette-input::placeholder { color: var(--text-faint); }
+
+.palette-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.palette-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--text-dim);
+  transition: background 0.06s ease, color 0.06s ease;
+}
+.palette-row.active { background: var(--bg-hover); color: var(--text); }
+.palette-label { font-size: 13px; }
+.palette-hint { font-size: 11px; color: var(--text-faint); }
+
+.palette-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* ---- Name prompt (first-run ask / ⌘P → Set Your Name…) ----------------- */
+/* A floating surface in the palette's mold — the ask is transient, never
+   inline chrome. Deliberately modal: only Enter and Esc leave it. */
+
+.name-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.name-card {
+  width: 90%;
+  max-width: 320px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.name-label { font-size: 13px; color: var(--text); }
+.name-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 8px;
+  outline: none;
+  transition: border-color 0.08s ease;
+}
+.name-input:focus { border-color: var(--accent); }
+.name-input::placeholder { color: var(--text-faint); }
+.name-hint { font-size: 11px; color: var(--text-faint); }
+
+/* ---- Keyboard help (⌘P → Keyboard Shortcuts) ---------------------------- */
+/* Mirrors the palette's floating-surface pattern; z sits under the palette
+   (100) — the help opens after the palette closes, so they never stack. */
+
+.help-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 95;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  -webkit-app-region: no-drag;
+}
+
+.help {
+  width: 90%;
+  max-width: 420px;
+  max-height: 76vh;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  padding: 14px 16px 16px;
+}
+
+.help-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding-bottom: 12px;
+}
+
+.help-section {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+.help-section:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+
+.help-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.help-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 88px;
+}
+
+.help kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 3px 5px;
+  white-space: nowrap;
+}
+
+.help-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+/* ---- Update overlay --------------------------------------------------- */
+
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim-strong);
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+
+.overlay {
+  width: 90%;
+  max-width: 520px;
+  max-height: 70vh;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.overlay-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.overlay-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.overlay-elapsed {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.error-text { color: var(--danger); }
+
+.overlay-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 20px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.overlay-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 14px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.overlay-log-line { min-height: 1em; }
+
+.overlay-dismiss {
+  margin: 10px 14px 14px auto;
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text);
+  font-size: 12px;
+  border: 1px solid var(--border);
+}
+.overlay-dismiss:hover { border-color: var(--text-faint); }
+
+/* Spinning ring — pure CSS, used in overlay-head and overlay-message. */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Toast (transient feedback pill) ------------------------------------ */
+/* Shows deploy/pull results from palette commands. Fixed at the bottom,
+   auto-hides; purely informational, never blocks. */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text);
+  z-index: 120;                     /* above every floating surface */
+  box-shadow: var(--shadow-md);
+  max-width: 80%;
+  text-align: center;
+  animation: title-in 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+
+/* ---- Mobile sync settings (⌘P → Configure Sync…) ------------------------ */
+/* The same floating-surface pattern as the palette: dim backdrop + centered
+   card, mounted at the end of .app — never an inline sibling. */
+.sync-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 105;                     /* above search (90), below update (110) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+.sync-card {
+  width: 88%;
+  max-width: 380px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sync-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.sync-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sync-field span {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.sync-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+.sync-result { font-size: 12px; }
+.sync-result.ok { color: var(--accent); }
+.sync-result.err { color: var(--danger); }
+.sync-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+.sync-save {
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text);
+  font-size: 12px;
+  border: 1px solid var(--border);
+}
+.sync-save:hover { border-color: var(--accent); color: var(--accent); }
+.sync-save:disabled { opacity: 0.5; }

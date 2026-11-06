@@ -1,0 +1,21 @@
+/* index.css — the ordered manifest. Each file is one surface, sliced from
+   the original single stylesheet at its own section markers; imported in
+   the exact original order, so the cascade is byte-identical to before. */
+@import "./base.css";
+@import "./header.css";
+@import "./search.css";
+@import "./sections.css";
+@import "./item.css";
+@import "./capture.css";
+@import "./drag.css";
+@import "./analytics.css";
+@import "./notes.css";
+@import "./menus.css";
+@import "./row-meta.css";
+@import "./timer-chip.css";
+@import "./hidden-inline.css";
+@import "./goals.css";
+@import "./entries.css";
+@import "./overlays.css";
+@import "./mobile.css";
+@import "./settings.css";
