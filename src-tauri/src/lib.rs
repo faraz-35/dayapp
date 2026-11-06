@@ -1,15 +1,18 @@
 // Tauri app entry. Thin async command wrappers around the db layer.
 // DB work (rusqlite is sync) is dispatched to a blocking thread so the UI stays fluid.
 
+mod actions;
 mod backup;
 mod dashboard;
 mod db;
 mod demo;
 mod goals;
+mod items;
 mod journal;
 mod notes;
 mod projects;
 mod settings;
+mod sweep;
 mod sync;
 mod timers;
 pub mod cli;

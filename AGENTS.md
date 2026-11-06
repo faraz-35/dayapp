@@ -780,8 +780,11 @@ dayapp/
 │       └── SearchMenu.tsx          ← ⌘F floating search modal (↑/↓ + Enter to jump; leading # = project filter)
 └── src-tauri/
     ├── src/
-    │   ├── lib.rs                  ← Tauri commands + setup (sweeps, reminders, logging plugin) + self_update + owner name
-    │   ├── db.rs                   ← DB layer: items, actions, sweep, hide, reminders, completions + Db struct (conn swap, launch_sweeps)
+    │   ├── lib.rs                  ← the IPC surface: every #[tauri::command] (thin with_db wrappers) + setup (sweeps, reminders, logging plugin) + self_update + owner name
+    │   ├── db.rs                   ← the Db struct: open/pragmas/schema migrations (migrate, ensure_column), the meta table, launch_sweeps, the day helpers (today_iso/day_key_of_ts/day_start_prefix/hidden_until_for) — the connection + the calendar, nothing else
+    │   ├── items.rs                ← the task rows' CRUD + item_from_row (every write logs through actions.rs inside its transaction; invariants like stop-timer-on-complete live inside the methods)
+    │   ├── actions.rs              ← the action log: log_action (write-time snapshots) + list_actions
+    │   ├── sweep.rs                ← the no-cron engine: run_sweep (the 6am day-boundary fall + reminder promotion) + purge_completed_today + the free fns day_boundary_sweep/promote_due_reminders on &Connection
     │   ├── notes.rs                ← notes DB logic + setters + the stored-footer migration (methods on Db)
     │   ├── journal.rs              ← the ##j/##q typed capture: entries table (journal lines + quotes), day-stamped (methods on Db)
     │   ├── projects.rs             ← projects DB logic + item.project_id assignment (methods on Db)
