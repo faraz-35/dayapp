@@ -1,24 +1,10 @@
-// Notes API — separate from items. Notes are free-form content (quotes, scratch,
-// paste) and live in their own table. Intentionally not entangled with item logic.
+// The notes API — separate from items. Notes are free-form content (quotes,
+// scratch, paste) and live in their own table. Intentionally not entangled
+// with item logic.
 
 import { invoke } from "@tauri-apps/api/core";
-import { type HideDuration, type HiddenFilter } from "./lib";
-
-export interface Note {
-  id: string;
-  body: string;
-  sortOrder: number;
-  createdAt: string;
-  updatedAt: string;
-  hidden: boolean;
-  hiddenUntil: string | null;
-  /** Urgency tier set via the `!N` token (same axis as items' priority; notes
-   *  group by it Backlog-style). Housekeeping — not logged. */
-  priority: 1 | 2 | 3 | null;
-  /** Project set via the `#tag` token — the same projects table items/goals
-   *  use. Housekeeping — not logged. */
-  projectId: string | null;
-}
+import type { HideDuration, HiddenFilter } from "../types/item";
+import type { Note } from "../types/note";
 
 export const notesApi = {
   list: (hidden: HiddenFilter = "exclude") => invoke<Note[]>("list_notes", { hidden }),

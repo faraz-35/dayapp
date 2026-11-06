@@ -7,8 +7,8 @@
 import { useState } from "react";
 import { PriorityBars } from "../components/PriorityBars";
 import type { AgentCountsLike } from "./types";
-import type { ProjectCount, TierCount } from "../lib";
 import Chevron from "./Chevron";
+import { ProjectCount, TierCount } from "../types/analytics";
 
 /** The projects card shows this many roster rows until its chevron expands. */
 const MAX_PROJECT_ROWS = 10;

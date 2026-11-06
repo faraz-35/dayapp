@@ -39,19 +39,6 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  formatGoalAchieved,
-  formatReminder,
-  goalsApi,
-  hideExpiry,
-  parseGoalText,
-  projectColor,
-  type Goal,
-  type GoalHorizon,
-  type HiddenFilter,
-  type HideDuration,
-  type Project,
-} from "./lib";
 import { log } from "./log";
 import { clip, trace } from "./devlog";
 import { useFeatures } from "./features";
@@ -60,6 +47,14 @@ import ProjectMenu from "./ProjectMenu";
 import TokenField from "./TokenField";
 import { EditInput } from "./components/ItemRow";
 import { IconUndo, IconX } from "./components/icons";
+import { formatGoalAchieved, formatReminder } from "./lib/format";
+import { goalsApi } from "./api/goals";
+import { hideExpiry } from "./lib/dates";
+import { parseGoalText } from "./lib/tokens";
+import { projectColor } from "./lib/color";
+import type { Goal, GoalHorizon } from "./types/goal";
+import type { HiddenFilter, HideDuration } from "./types/item";
+import type { Project } from "./types/project";
 
 // Display order: constitution → career → now. A group with no goals renders
 // no divider (derived from the rendered list, like the Backlog's tier

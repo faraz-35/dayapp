@@ -9,9 +9,9 @@
 // it can't reach the keyring.
 
 import { useEffect, useState } from "react";
-import { syncApi } from "./lib";
 import { log } from "./log";
 import { trace } from "./devlog";
+import { syncApi } from "./api/sync";
 
 export default function MobileSyncSettings({ open, onClose }: {
   open: boolean;

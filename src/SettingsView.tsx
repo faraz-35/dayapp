@@ -20,10 +20,10 @@
 // scrolling works globally, Esc closes the page).
 
 import { useState } from "react";
-import { type Project } from "./lib";
 import { clip, trace } from "./devlog";
 import { BUILT_IN_THEMES, COLOR_FIELDS, DARK, LIGHT, applyTheme, systemTheme, type Theme, type ThemeColors } from "./themes";
 import { IconPencil, IconX } from "./components/icons";
+import type { Project } from "./types/project";
 
 export type FeatureKey =
   | "tasks" | "today" | "daily" | "backlog" | "notes" | "goals" | "journal" | "quotes"

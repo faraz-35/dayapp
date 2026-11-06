@@ -29,9 +29,10 @@
 // the leading route token. Typing the address IS typing the token.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type Ref } from "react";
-import { scanTokens, tokenDisplay, type TokenKind } from "./lib";
 import { PriorityBars } from "./components/PriorityBars";
 import { ROUTE_EVENT } from "./focusNav";
+import { scanTokens, tokenDisplay } from "./lib/tokens";
+import type { TokenKind } from "./types/token";
 
 type FieldElement = HTMLInputElement | HTMLTextAreaElement;
 

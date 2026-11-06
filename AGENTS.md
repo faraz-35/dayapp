@@ -17,7 +17,7 @@ The whole app is built on one insight: **several behaviours that sound like feat
 just queries over timestamped state.** No cron, no background jobs.
 
 **The day runs 6am→6am.** Faraz works past midnight, so "today" is the local date of
-(now − 6h) — one helper on each side (`today_iso()` in `db.rs`, `todayStr()` in `lib.ts`)
+(now − 6h) — one helper on each side (`today_iso()` in `db.rs`, `todayStr()` in `lib/dates.ts`)
 that every comparison goes through. Between midnight and 6am nothing resets, nothing
 promotes, and late-night completions stay in the day they belong to (analytics day keys
 and SQL range bounds shift the same way: `day_key_of_ts` / `day_start_prefix`). Change
@@ -124,7 +124,7 @@ meta    key, value           — currently holds last_sweep_date
   `Task projects` off leaves the label unparsed and unrendered here while Notes/Goals
   keep theirs.
 - `priority` ∈ `1..3` | NULL — urgency tier, set via a `!1`/`!2`/`!3` token in the capture or
-  edit text (`parseItemTags` in `lib.ts` strips it; composable with `#tag` in either order;
+  edit text (`parseItemTags` in `lib/tokens.ts` strips it; composable with `#tag` in either order;
   last token wins; no token on edit leaves the value alone; `!0` clears). The mouse
   door is the row's ▮ popover (`PriorityMenu.tsx` — the ProjectMenu pattern, one of the
   four identical row menus). Housekeeping —
@@ -142,7 +142,7 @@ meta    key, value           — currently holds last_sweep_date
   empty track (the unmarked divider's own dull bars), so "not triaged yet" still reads
   as a tier.
 - `assigned_to_agent` ∈ `0` | `1` — the delegation axis ("who executes"), set via a bare `@`
-  token in the capture or edit text (`parseItemTags` in `lib.ts` strips it; composable with
+  token in the capture or edit text (`parseItemTags` in `lib/tokens.ts` strips it; composable with
   `#tag`/`!N` in any order; `@0` clears, no token on edit leaves it alone; `@word` stays
   literal so mentions aren't eaten). Housekeeping — **not** logged. Shown as a small
   monochrome robot badge in the row's metadata (every section, kept on hover); filtered by
@@ -201,7 +201,7 @@ records a completed export, per the logging convention).
 
 Notes carry the items' priority/project axes through the **same token grammar**, generalized
 to multi-line bodies: in the capture field the tokens sit inline (exactly item capture —
-parsed and stripped by `parseNoteCapture` in `lib.ts`, `@` excepted because notes have no
+parsed and stripped by `parseNoteCapture` in `lib/tokens.ts`, `@` excepted because notes have no
 delegation axis), and in an existing note you type them on their own final line after a
 blank line ("after all the content"). Tokens are **input syntax, never stored or rendered**:
 on blur the line is caught (`flushAndCatch` in `Notes.tsx` → `splitNoteFooter`) — stripped
@@ -215,7 +215,7 @@ its inline create, `PriorityMenu.tsx` for `!N`), project before priority after e
 each gated on its own switch; the menu picks take the same optimistic paths the footer
 catch does.
 The tag resolves with exactly the items' trailing-`#tag` semantics (`resolveNoteTag` in
-`lib.ts`: case-insensitive exact, unique prefix, else create through App's
+`lib/tokens.ts`: case-insensitive exact, unique prefix, else create through App's
 handleCreateProject — so a tag whose project was deleted recreates it on the next catch;
 `#0` is the durable unlink). Notes
 group by tier exactly like the Backlog (`ORDER BY COALESCE(priority, 99), sort_order` —
@@ -251,13 +251,13 @@ cannot collide with the `#tag` project token (a lone `#` never starts a tag word
 The **task capture routes the same prefix over destinations**: one input above the
 section stack (SectionList) replaced the three per-section capture inputs — a leading
 `##t`/`##d`/`##b` sends the line to Today/Daily/Backlog via `parseTaskCapture` in
-`lib.ts`, no token = Today (the default working destination), a bare token is a no-op,
+`lib/tokens.ts`, no token = Today (the default working destination), a bare token is a no-op,
 and the item grammar (`#tag`/`!N`/`@`) composes after the route. The `nt`/`nd`/`nb`
 addresses focus it with the token pre-swapped (the `nj`/`nq` pattern). Routes are
 capture-only, like the entry routes: an edit never re-routes a row — the drag and the
 ↑ promote button are how a row moves.
 
-- `kind` ∈ `journal` (`##j`) | `quote` (`##q`). Parsed by `parseEntryCapture` in `lib.ts`
+- `kind` ∈ `journal` (`##j`) | `quote` (`##q`). Parsed by `parseEntryCapture` in `lib/tokens.ts`
   (leading position only — mid-line `##j` is prose; a bare token with no text is a no-op),
   routed in `Notes.tsx`'s `handleCapture` ahead of `parseNoteCapture`. The grammar's
   `nj`/`nq` addresses focus the notes capture with the route token pre-swapped-in
@@ -315,7 +315,7 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
   stack-head pattern: centered text, no hairline — 2026-10-25; the Backlog's
   tier dividers keep their lines). Set via a
   `$1/$2/$3` token in the capture/edit text ($1 short · $2 long · $3 timeless —
-  `parseGoalText` in `lib.ts` strips it, word-boundary-guarded so money like
+  `parseGoalText` in `lib/tokens.ts` strips it, word-boundary-guarded so money like
   "$100k" stays literal; default `short` on capture; no token on edit leaves
   the tier alone; last token wins); composes with `#tag` project tokens like
   item capture. (2026-10-16: replaced the old leading-horizon-word syntax.)
@@ -764,8 +764,9 @@ dayapp/
 │   │   ├── calendar.ts             ← pure helpers: month grid, intensity levels, colors
 │   │   ├── types.ts                ← shared prop shapes (AxisFilterHandle, AgentCountsLike)
 │   │   └── Chevron.tsx             ← the one chevron glyph
-│   ├── lib.ts                      ← items typed API wrapper + types + date helpers + projectsApi + timersApi + goalsApi/parseGoalText + projectColor/formatReminder/formatDuration
-│   ├── notesApi.ts                 ← notes typed API wrapper
+│   ├── api/                        ← the typed invoke layer, one file per domain (items/system/projects/entries/goals/timers/analytics/sync/notes/settings)
+│   ├── types/                      ← the shared vocabulary, one file per domain (item/project/entry/goal/timer/note/analytics/sync/token)
+│   ├── lib/                        ← pure helpers: dates.ts (todayStr/day logic), tokens.ts (the ONE token matcher + parsers), format.ts (durations, reminders), color.ts (projectColor), platform.ts (isMac)
 │   ├── themes.ts                   ← the theme system: the eleven-shade ladder, the built-ins (Dark/Light/Nord/Rosé Pine), applyTheme — one paint over the tokens
 │   ├── log.ts                      ← prefixed console logger (webview side)
 │   ├── devlog.ts                   ← the demo-mode interaction trace: trace()/clip(), recording lifecycle, 250ms JSONL batching
@@ -1036,13 +1037,13 @@ surfaces color the typed-token grammar live — the `##j`/`##q`/`##t`/`##d`/`##b
 `#tag`, `!N`, `$N`, and `@` all in the one accent (Faraz's call, 2026-08-29: same purple for
 every family — a token reads as "this processes", nothing more). Edit surfaces: task
 inline edits (`EditInput` with the full grammar), goal edits (`$N` + `#tag`), and a note body's
-**pending footer line** — `scanNoteFooterTokens` in `lib.ts` is `splitNoteFooter`'s
+**pending footer line** — `scanNoteFooterTokens` in `lib/tokens.ts` is `splitNoteFooter`'s
 live twin, coloring exactly the line the blur-catch will strip and apply. Mechanism:
 the field's real text is transparent and a mirror div underneath (`.token-mirror`)
 renders the same text with colored spans; scroll positions sync because the field
 scrolls its content while the mirror clips. The note body uses the same flip
 (transparent textarea, visible mirror) with ONE mirror carrying both find marks and
-footer tokens. The spans come from `scanTokens` in `lib.ts` — the ONE matcher the
+footer tokens. The spans come from `scanTokens` in `lib/tokens.ts` — the ONE matcher the
 capture parsers also strip through — so coloring can never drift from processing: a
 line the surface wouldn't parse (an `@` in the notes bar, a `#tag` in the Journal
 capture — plain prose there) stays uncolored, past a notes-bar route (`##j`/`##q`)
@@ -1058,7 +1059,7 @@ converts to what it means in the mirror: `##j`→journal, `##q`→quote, `##t`�
 `##d`→daily, `##b`→backlog, any `@`-token→agent, `$1/$2/$3`→short/long/timeless,
 and `!0..3`→the priority bars
 markup (`!0` the empty track); `#tag` stays verbatim (arbitrary names — nothing to
-convert). `tokenDisplay` in `lib.ts` owns the vocabulary beside the matcher, so a
+convert). `tokenDisplay` in `lib/tokens.ts` owns the vocabulary beside the matcher, so a
 token converts exactly when its surface colors it. Because the word is wider than
 the sigil, TokenField's fields hide the native caret/selection (they track the RAW
 value and would drift off the visible words) and draw their own over the
@@ -1284,7 +1285,7 @@ Persisted
 which icon buttons mount top-right:
 `Command palette` (first in the cluster — the mouse door for ⌘P; the glyph is
 per-platform, ⌘ on macOS and the prompt field on Windows/Linux, since Ctrl has
-no pictograph — `isMac` in `lib.ts` picks), `Hidden entries` (◐), `Analytics`,
+no pictograph — `isMac` in `lib/platform.ts` picks), `Hidden entries` (◐), `Analytics`,
 `Settings` (the gear), `Theme cycle` — Analytics/Settings/Theme default on,
 `Command palette` and `Hidden entries` default off (the minimal header: ⌘P
 needs no mouse door, the ◐ peek needs an archive axis, all off by default),

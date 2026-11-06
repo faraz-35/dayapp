@@ -20,7 +20,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { formatDuration, formatLiveDuration, formatReminder, projectColor, todayStr, type HideDuration, type Item, type Project, type TokenKind } from "../lib";
 import { clip, trace } from "../devlog";
 import HideMenu from "../HideMenu";
 import PriorityMenu from "../PriorityMenu";
@@ -32,6 +31,12 @@ import {
   IconArrowUp, IconChevron, IconDots, IconPause, IconPlay, IconUndo, IconX,
 } from "./icons";
 import { useFeatures } from "../features";
+import { formatDuration, formatLiveDuration, formatReminder } from "../lib/format";
+import { projectColor } from "../lib/color";
+import { todayStr } from "../lib/dates";
+import type { HideDuration, Item } from "../types/item";
+import type { Project } from "../types/project";
+import type { TokenKind } from "../types/token";
 
 export default function ItemRow({
   item, projects, barsInRows = false, selected, editing, detailsOpen,
@@ -118,7 +123,6 @@ export default function ItemRow({
       slots.delete = next();
     }
   }
-
 
   return (
     <div

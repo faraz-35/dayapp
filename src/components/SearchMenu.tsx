@@ -24,9 +24,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clip, trace } from "../devlog";
-import { projectColor, type Item, type Project, type Section } from "../lib";
 import { useFeatures } from "../features";
 import { IconPencil, IconX } from "./icons";
+import { projectColor } from "../lib/color";
+import type { Item, Section } from "../types/item";
+import type { Project } from "../types/project";
 
 export interface SearchHit {
   item: Item;

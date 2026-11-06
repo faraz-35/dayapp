@@ -40,8 +40,6 @@
 // the note owns its text, and both verbs are entirely about it.
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { notesApi, type Note } from "./notesApi";
-import { type EntryKind, type HideDuration, type HiddenFilter, baseTextWidth, entriesApi, parseEntryCapture, parseNoteCapture, projectColor, resolveNoteTag, scanNoteFooterTokens, splitNoteFooter, type Project } from "./lib";
 import { log } from "./log";
 import { clip, trace } from "./devlog";
 import HideMenu from "./HideMenu";
@@ -51,6 +49,14 @@ import TokenField from "./TokenField";
 import { PriorityBars } from "./components/PriorityBars";
 import { IconChevron, IconDownload, IconX } from "./components/icons";
 import { useFeatures } from "./features";
+import { notesApi } from "./api/notes";
+import type { Note } from "./types/note";
+import type { EntryKind } from "./types/entry";
+import type { HideDuration, HiddenFilter } from "./types/item";
+import { baseTextWidth, parseEntryCapture, parseNoteCapture, resolveNoteTag, scanNoteFooterTokens, splitNoteFooter } from "./lib/tokens";
+import { entriesApi } from "./api/entries";
+import { projectColor } from "./lib/color";
+import type { Project } from "./types/project";
 
 // Collapsed-note ids, persisted like the UI zoom — a display preference.
 // localStorage only: collapse is UI state, not content, so the notes table

@@ -1,8 +1,7 @@
+import { localDateStr, todayStr } from "../lib/dates";
 // calendar.ts — the analytics calendar's pure helpers: the month grid, the
 // intensity levels, and their shared colors. No state, no fetches — the
 // HeatmapCard and the FilterBar's date popover both build grids from these.
-
-import { localDateStr, todayStr } from "../lib";
 
 /** A cell of the month grid: a day with its count, or a blank lead slot. */
 export type HeatCell = {

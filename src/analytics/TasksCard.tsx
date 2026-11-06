@@ -8,12 +8,13 @@
 
 import { useEffect, useState } from "react";
 import { PriorityBars } from "../components/PriorityBars";
-import { journalApi, todayStr } from "../lib";
-import type { DashboardFilter, DashboardSubject, RangeTask } from "../lib";
 import { useFeatures } from "../features";
 import { log } from "../log";
 import Chevron from "./Chevron";
 import { fmtDay } from "./calendar";
+import { journalApi } from "../api/analytics";
+import { todayStr } from "../lib/dates";
+import { DashboardFilter, DashboardSubject, RangeTask } from "../types/analytics";
 
 /** The list's page size. */
 const TASKS_PER_PAGE = 10;

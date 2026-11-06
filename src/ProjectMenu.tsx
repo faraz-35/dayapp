@@ -20,12 +20,12 @@
 // row stays unlabeled for seconds.
 
 import { useEffect, useRef, useState } from "react";
-import { type Project } from "./lib";
 import { trace } from "./devlog";
 import { firePopoverPick } from "./focusNav";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
 import { IconHash } from "./components/icons";
+import type { Project } from "./types/project";
 
 export default function ProjectMenu({
   projects, projectId, onAssign, onCreateProject, kb,

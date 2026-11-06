@@ -20,11 +20,13 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { parseTaskCapture, type HideDuration, type Item, type Project, type Section } from "../lib";
 import { clip, trace } from "../devlog";
 import TokenField from "../TokenField";
 import SectionView from "./SectionView";
 import { useFeatures } from "../features";
+import { parseTaskCapture } from "../lib/tokens";
+import type { HideDuration, Item, Section } from "../types/item";
+import type { Project } from "../types/project";
 
 // The section definitions live here — they're presentation-only metadata the
 // list cares about, not state the shell needs to touch.

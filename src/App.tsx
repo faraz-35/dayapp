@@ -8,7 +8,6 @@
 // `overflow-y: auto` to a child — that's what caused the split-scroll bug.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, backupApi, demoApi, formatLiveDuration, hideExpiry, isMac, parseItemTags, projectsApi, setProjectColorMode, syncApi, timersApi, todayStr, type ActiveTimer, type EntryKind, type HideDuration, type Item, type Project, type Section } from "./lib";
 import { log } from "./log";
 import { clip, devlogActive, devlogStart, devlogStop, trace } from "./devlog";
 import Notes from "./Notes";
@@ -28,8 +27,23 @@ import NamePrompt from "./NamePrompt";
 import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, POPOVER_PICK_EVENT, popoverOpen, scrollIntoViewEl } from "./focusNav";
 import { BUILT_IN_THEMES, applyTheme, resolveTheme, systemTheme, themeIsLight, themeModeSlot, type Theme } from "./themes";
 import { IconCommandPalette, IconMoon, IconSun, IconX } from "./components/icons";
-import { MIGRATED_KEYS, externallyChanged, initSettings, sget, sset, ssetMany } from "./settings";
 import { FeaturesContext, type Features } from "./features";
+import { backupApi, demoApi } from "./api/system";
+import { formatLiveDuration } from "./lib/format";
+import { hideExpiry, todayStr } from "./lib/dates";
+import { isMac } from "./lib/platform";
+import { parseItemTags } from "./lib/tokens";
+import { projectsApi } from "./api/projects";
+import { setProjectColorMode } from "./lib/color";
+import { syncApi } from "./api/sync";
+import { timersApi } from "./api/timers";
+import type { ActiveTimer } from "./types/timer";
+import type { EntryKind } from "./types/entry";
+import type { HideDuration, Item, Section } from "./types/item";
+import type { Project } from "./types/project";
+import { MIGRATED_KEYS, externallyChanged, initSettings, sget, sset, ssetMany } from "./api/settings";
+import { itemsApi } from "./api/items";
+import { systemApi } from "./api/system";
 
 type View = "list" | "analytics" | "journal" | "quotes" | "settings";
 
@@ -699,9 +713,9 @@ function DayAppBody() {
       // Completed Today rows stay in the list — crossed out, like a done
       // daily — until the day-boundary sweep retires them, so only Today
       // asks for done rows.
-      api.listItems("today", true, hidden),
-      api.listItems("daily", false, hidden),
-      api.listItems("backlog", false, hidden),
+      itemsApi.listItems("today", true, hidden),
+      itemsApi.listItems("daily", false, hidden),
+      itemsApi.listItems("backlog", false, hidden),
       projectsApi.list(),
     ]);
     setItems({ today, daily, backlog });
@@ -724,7 +738,7 @@ function DayAppBody() {
     // walking lands within a minute of the Mac app being open — except in demo
     // mode, where the phone's inbox waits (its captures belong to the real db).
     const tick = setInterval(() => {
-      api.runSweep().then(refresh).catch((e) => log.warn("sweep tick failed", e));
+      systemApi.runSweep().then(refresh).catch((e) => log.warn("sweep tick failed", e));
       // An agent's settings writes land in the store file; a snapshot
       // mismatch means this webview is stale — reload to re-initialize
       // every settings-backed hook cleanly. The GUI's own writes refresh
@@ -787,7 +801,7 @@ function DayAppBody() {
         // fetch read the demo db, and the name ask opens off the real db's
         // answer).
         timersApi.active().then(setActiveTimer).catch((err) => log.warn("active timer load failed", err));
-        api.getOwnerName().then(setOwnerName).catch((err) => log.warn("owner name load failed", err));
+        systemApi.getOwnerName().then(setOwnerName).catch((err) => log.warn("owner name load failed", err));
       });
     })();
     return () => { unlisten?.(); };
@@ -909,7 +923,7 @@ function DayAppBody() {
   // Saving trims; Esc on the first-run ask stores "" so it never nags again —
   // ⌘P → Set Your Name… is the door back.
   useEffect(() => {
-    api.getOwnerName()
+    systemApi.getOwnerName()
       .then(setOwnerName)
       .catch((e) => { log.warn("owner name load failed", e); setOwnerName(null); });
   }, []);
@@ -920,7 +934,7 @@ function DayAppBody() {
 
   const saveOwnerName = useCallback((name: string) => {
     const trimmed = name.trim();
-    api.setOwnerName(trimmed).then(() => {
+    systemApi.setOwnerName(trimmed).then(() => {
       setOwnerName(trimmed);
       setNamePromptOpen(false);
     }).catch((e) => log.error("owner name save failed", e));
@@ -1131,7 +1145,7 @@ function DayAppBody() {
   const startUpdate = useCallback(() => {
     log.info("update: starting in-app self-update");
     setUpdateStatus({ phase: "building", lines: [], message: "" });
-    api.selfUpdate().catch((err) => {
+    systemApi.selfUpdate().catch((err) => {
       log.error("update: invoke failed", err);
       setUpdateStatus({ phase: "error", lines: [], message: String(err) });
     });
@@ -1148,14 +1162,14 @@ function DayAppBody() {
   const [releaseUpdate, setReleaseUpdate] = useState<string | null>(null);
 
   useEffect(() => {
-    api.updateSourceAvailable().then(setLocalRepo).catch(() => setLocalRepo(null));
+    systemApi.updateSourceAvailable().then(setLocalRepo).catch(() => setLocalRepo(null));
   }, []);
 
   useEffect(() => {
     if (localRepo !== false) return;
     let stopped = false;
     const check = () =>
-      api.updateCheck()
+      systemApi.updateCheck()
         .then((v) => { if (!stopped) setReleaseUpdate(v); })
         .catch((e) => log.warn("update: release check failed", String(e)));
     const t = setTimeout(() => {
@@ -1168,7 +1182,7 @@ function DayAppBody() {
   const startReleaseUpdate = useCallback(() => {
     log.info("update: starting release update");
     setUpdateStatus({ phase: "downloading", lines: [], message: "" });
-    api.updateInstall().catch((err) => {
+    systemApi.updateInstall().catch((err) => {
       log.error("update: release install invoke failed", err);
       setUpdateStatus({ phase: "error", lines: [], message: String(err) });
     });
@@ -1417,7 +1431,7 @@ function DayAppBody() {
             label: "CLI: Enable",
             hint: "`dayapp` command in your terminal",
             run: () =>
-              api.cliInstall()
+              systemApi.cliInstall()
                 .then((msg) => { log.info("cli: enabled"); showToast(msg); })
                 .catch((e) => { log.error("cli: enable failed", e); showToast(`CLI enable failed: ${e}`); }),
           },
@@ -1582,7 +1596,7 @@ function DayAppBody() {
     // !0 ("clear") is a no-op at capture — a fresh item has no priority yet.
     // Same for @0: fresh rows start unassigned.
     const tier = priority === 0 ? null : priority;
-    const item = await api.createItem(text, section, assignId, tier);
+    const item = await itemsApi.createItem(text, section, assignId, tier);
     const patch: Partial<Item> = {};
     if (assignId) patch.projectId = assignId;
     if (tier !== null) patch.priority = tier;
@@ -1596,7 +1610,7 @@ function DayAppBody() {
         ? sortBacklog([...s.backlog, { ...item, ...patch }])
         : [...s[section], { ...item, ...patch }],
     }));
-    if (agent === true) api.setItemAgent(item.id, true);
+    if (agent === true) itemsApi.setItemAgent(item.id, true);
   };
 
   // Drain the phone's capture inbox: each entry goes through handleCreate (so
@@ -1630,7 +1644,7 @@ function DayAppBody() {
           i.id === id ? { ...i, status: "active", lastCompletedDate: null } : i,
         ),
       }));
-      await api.uncompleteItem(id);
+      await itemsApi.uncompleteItem(id);
       return;
     }
     // Completing a running item stops its timer first — the session is kept.
@@ -1659,7 +1673,7 @@ function DayAppBody() {
         [section]: s[section].filter((i) => i.id !== id),
       }));
     }
-    await api.completeItem(id);
+    await itemsApi.completeItem(id);
   };
 
   const handleDelete = async (id: string, section: Section) => {
@@ -1672,7 +1686,7 @@ function DayAppBody() {
       timersApi.stop().catch((e) => log.warn("auto-stop on delete failed", e));
     }
     setItems((s) => ({ ...s, [section]: s[section].filter((i) => i.id !== id) }));
-    await api.deleteItem(id);
+    await itemsApi.deleteItem(id);
   };
 
   const handleCommitEdit = async (id: string, raw: string) => {
@@ -1700,10 +1714,10 @@ function DayAppBody() {
         backlog: sortBacklog(update(s.backlog)),
       };
     });
-    await api.editItem(id, text);
-    if (assignId) api.setItemProject(id, assignId);
-    if (priority !== null) api.setItemPriority(id, tier);
-    if (agent !== null) api.setItemAgent(id, agent);
+    await itemsApi.editItem(id, text);
+    if (assignId) itemsApi.setItemProject(id, assignId);
+    if (priority !== null) itemsApi.setItemPriority(id, tier);
+    if (agent !== null) itemsApi.setItemAgent(id, agent);
   };
 
   // Soft-archive a task. With Show Hidden Tasks on, the row stays put flipped
@@ -1717,7 +1731,7 @@ function DayAppBody() {
     } else {
       setItems((s) => ({ ...s, [section]: s[section].filter((i) => i.id !== id) }));
     }
-    await api.hideItem(id, duration);
+    await itemsApi.hideItem(id, duration);
   };
 
   // Restore a hidden row — it sheds its dimmed state and stays in place
@@ -1725,7 +1739,7 @@ function DayAppBody() {
   const handleUnhide = async (id: string) => {
     trace("unhide", { subject: "task" });
     updateItemField(id, { hidden: false });
-    await api.unhideItem(id);
+    await itemsApi.unhideItem(id);
   };
 
   // Assign (or clear) an item's project. Housekeeping — not journal activity.
@@ -1738,7 +1752,7 @@ function DayAppBody() {
 
   const handleSetProject = async (id: string, projectId: string | null) => {
     updateItemField(id, { projectId });
-    await api.setItemProject(id, projectId);
+    await itemsApi.setItemProject(id, projectId);
   };
 
   // Set (or clear) an item's priority tier. Housekeeping — not journal
@@ -1750,19 +1764,19 @@ function DayAppBody() {
       const upd = (list: Item[]) => list.map((i) => (i.id === id ? { ...i, priority } : i));
       return { today: upd(s.today), daily: upd(s.daily), backlog: sortBacklog(upd(s.backlog)) };
     });
-    await api.setItemPriority(id, priority);
+    await itemsApi.setItemPriority(id, priority);
   };
 
   const handleSetReminder = async (id: string, remindAt: string | null) => {
     updateItemField(id, { remindAt });
-    await api.setReminder(id, remindAt);
+    await itemsApi.setReminder(id, remindAt);
   };
 
   // Set the task's details body (the spec / agent prompt). Content like a
   // note save — optimistic patch + fire; the body debounces its own saves.
   const handleSetDetails = async (id: string, details: string) => {
     updateItemField(id, { details });
-    await api.setItemDetails(id, details);
+    await itemsApi.setItemDetails(id, details);
   };
 
   const handleToggleDetails = useCallback((id: string) => {
@@ -1853,7 +1867,7 @@ function DayAppBody() {
         [toSection]: toSection === "backlog" ? settleBacklogDrop(toList, id, fullIndex) : toList,
       };
     });
-    await api.moveItem(id, toSection, fullIndex);
+    await itemsApi.moveItem(id, toSection, fullIndex);
   };
 
   // Send a Backlog row to the end of Today — the deliberate "pull this into my
@@ -1991,7 +2005,7 @@ function DayAppBody() {
   // through the settings effect, the call reskins the frame immediately.
   const toggleWindowDecorations = useCallback((on: boolean) => {
     setWindowDecorations(on);
-    api.setWindowDecorations(on).catch((e) => log.warn("window decorations failed", e));
+    systemApi.setWindowDecorations(on).catch((e) => log.warn("window decorations failed", e));
   }, []);
   // An explicit theme pick: store the id (the apply effect skins the app),
   // leaving system mode. The one persist path — the apply effect never

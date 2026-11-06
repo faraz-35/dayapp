@@ -1,3 +1,4 @@
+import { isMac } from "../lib/platform";
 // icons.tsx — the app's ONE action-icon family, carried over from the header
 // buttons' language (the ones that read right): 16-box viewBox, stroked
 // currentColor at 1.7, round caps and joins, drawn at 14px. Every button
@@ -9,8 +10,6 @@
 //
 // Not here: the analytics card-nav chevrons (a smaller card chrome family)
 // and the agent badge (identity metadata, not an action).
-
-import { isMac } from "../lib";
 
 const base = {
   viewBox: "0 0 16 16",

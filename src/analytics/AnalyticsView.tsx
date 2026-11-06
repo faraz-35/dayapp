@@ -28,8 +28,6 @@
 // ride the filtered rows).
 
 import { useEffect, useMemo, useState } from "react";
-import { journalApi, localDateStr, projectsApi, todayOffset, todayStr } from "../lib";
-import type { DashboardFilter, DashboardStats, DashboardSubject, DayDetail, Project } from "../lib";
 import { useFeatures } from "../features";
 import { log } from "../log";
 import { trace } from "../devlog";
@@ -38,6 +36,11 @@ import HeatmapCard from "./HeatmapCard";
 import TasksCard from "./TasksCard";
 import { DelegationCard, PriorityCard, ProjectsCard, StatCard } from "./cards";
 import { currentMonth, shiftMonth as monthShift } from "./calendar";
+import { journalApi } from "../api/analytics";
+import { localDateStr, todayOffset, todayStr } from "../lib/dates";
+import { projectsApi } from "../api/projects";
+import { DashboardFilter, DashboardStats, DashboardSubject, DayDetail } from "../types/analytics";
+import { Project } from "../types/project";
 
 export default function AnalyticsView({ ownerName }: { ownerName?: string | null }) {
   const features = useFeatures();
