@@ -1,23 +1,10 @@
-// HideMenu — minimal popover for picking a hide duration. Shared by item rows
-// and notes. `verb` carries the surface's word ("Hide", or "Pause" on Daily
-// rows — same mechanism, different name for a recurring habit).
-//
-// A ◐ trigger button opens a small anchored menu with the four durations. The
-// menu closes on selection, Escape, or an outside click. All pointer events
-// stopPropagation so opening it never selects a row, starts a drag, or focuses
-// a note textarea.
-//
-// Keyboard (usePopoverKeys): the open menu holds focus — ↑/↓ move the
-// highlight, Enter hides. One Escape closes back onto the row/note, which
-// never lost its focus. A pick goes further: it fires POPOVER_PICK_EVENT so
-// the grammar stands down to nothing-focused — the keystroke after a pick
-// was aimed at the menu and must never fire the row.
+// HideMenu — the hide-duration rows: the four options of the soft-archive.
+// Shared by item rows and notes; `verb` carries the surface's word ("Hide",
+// or "Pause" on Daily rows — same mechanism, different name for a recurring
+// habit). The shell (RowMenu) owns the trigger, the anchoring, the close,
+// and the keyboard.
 
-import { useEffect, useRef, useState } from "react";
-import { trace } from "../../logging/devlog";
-import { firePopoverPick } from "../../keyboard/focusNav";
-import { usePopoverFlip } from "./usePopoverFlip";
-import { usePopoverKeys } from "./usePopoverKeys";
+import RowMenu from "./RowMenu";
 import { IconHalfMoon } from "../icons";
 import { HideDuration } from "../../types/item";
 
@@ -29,80 +16,37 @@ const OPTIONS: { id: HideDuration; label: string; sub: string }[] = [
 ];
 
 export default function HideMenu({ onHide, kb, verb = "Hide" }: { onHide: (duration: HideDuration) => void; kb?: string; verb?: "Hide" | "Pause" }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const flip = usePopoverFlip(open, ref, menuRef);
-
-  // Close on outside click or Escape (from anywhere inside).
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  const pick = (duration: HideDuration) => {
-    setOpen(false);
-    firePopoverPick();
+  const pick = (duration: HideDuration, close: () => void) => {
+    close();
     onHide(duration);
   };
 
-  const { hi, setHi, onKeyDown } = usePopoverKeys({
-    open,
-    menuRef,
-    count: OPTIONS.length,
-    initialIndex: () => 0,
-    onPick: (i) => pick(OPTIONS[i].id),
-  });
-
   return (
-    <div className="hide-menu-wrap" ref={ref}>
-      <button
-        className="item-action"
-        data-kb={kb}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!open) trace("popover.open", { menu: "hide" });
-          setOpen(!open);
-        }}
-        title={verb}
-        aria-label={verb}
-        aria-expanded={open}
-      ><IconHalfMoon /></button>
-      {open && (
-        <div
-          className={`hide-menu${flip ? " flip" : ""}`}
-          ref={menuRef}
-          tabIndex={-1}
-          onKeyDown={onKeyDown}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {OPTIONS.map((o, i) => (
-            <button
-              key={o.id}
-              className={`hide-menu-item${hi === i ? " hi" : ""}`}
-              onMouseEnter={() => setHi(i)}
-              onClick={(e) => {
-                e.stopPropagation();
-                pick(o.id);
-              }}
-            >
-              <span className="hide-menu-label">{o.label}</span>
-              <span className="hide-menu-sub">{o.id === "forever" && verb === "Pause" ? "until unpaused" : o.sub}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <RowMenu
+      kb={kb}
+      label={verb}
+      icon={<IconHalfMoon />}
+      traceName="hide"
+      count={OPTIONS.length}
+      initialIndex={() => 0}
+      onPick={(i, close) => pick(OPTIONS[i].id, close)}
+    >
+      {({ hi, setHi, close }) =>
+        OPTIONS.map((o, i) => (
+          <button
+            key={o.id}
+            className={`hide-menu-item${hi === i ? " hi" : ""}`}
+            onMouseEnter={() => setHi(i)}
+            onClick={(e) => {
+              e.stopPropagation();
+              pick(o.id, close);
+            }}
+          >
+            <span className="hide-menu-label">{o.label}</span>
+            <span className="hide-menu-sub">{o.id === "forever" && verb === "Pause" ? "until unpaused" : o.sub}</span>
+          </button>
+        ))
+      }
+    </RowMenu>
   );
 }

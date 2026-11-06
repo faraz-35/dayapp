@@ -126,8 +126,7 @@ meta    key, value           — currently holds last_sweep_date
 - `priority` ∈ `1..3` | NULL — urgency tier, set via a `!1`/`!2`/`!3` token in the capture or
   edit text (`parseItemTags` in `lib/tokens.ts` strips it; composable with `#tag` in either order;
   last token wins; no token on edit leaves the value alone; `!0` clears). The mouse
-  door is the row's ▮ popover (`PriorityMenu.tsx` — the ProjectMenu pattern, one of the
-  four identical row menus). Housekeeping —
+  door is the row's ▮ popover (`PriorityMenu.tsx` — rows inside the shared `RowMenu.tsx` shell, one of the four row menus). Housekeeping —
   **not** logged. Shown as signal bars (`▮▮▮` `▮▮▯` `▮▯▯` — filled count = urgency, so
   P1 carries the most visual mass; filled bars use the accent, empty slots a faint track)
   on Today/Daily rows only; Backlog rows are clean. The Backlog is sorted by it (priority
@@ -291,7 +290,7 @@ hide) — **never** logged to `actions`. `items.project_id` is the nullable FK (
 cascade; deleting a project runs `UPDATE items SET project_id = NULL` — and the same for
 `goals` and `notes`). Notes link through their `#tag` token (see "Notes" above); goals
 through the # popover. Logic lives in
-`src-tauri/src/projects.rs`; the popover is `src/components/menus/ProjectMenu.tsx`, and rename/delete are
+`src-tauri/src/projects.rs`; the popovers live in `src/components/menus/` (RowMenu.tsx is the shared shell the four identical row menus — Project/Priority/Reminder/Hide — render their rows inside), and rename/delete are
 managed in the ⌘F `#` picker (see "Project filter" under UI/UX guidance).
 
 ### Goals (the identity layer — logged like items)
