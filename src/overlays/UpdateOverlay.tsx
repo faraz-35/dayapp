@@ -11,7 +11,7 @@
 // presentational plus a couple of side-effects (auto-scroll, elapsed timer).
 
 import { useEffect, useRef, useState } from "react";
-import type { UpdateStatus } from "./App";
+import type { UpdateStatus } from "../App";
 
 export default function UpdateOverlay({
   status, onDismiss,

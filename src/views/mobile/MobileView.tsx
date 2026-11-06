@@ -14,9 +14,9 @@
 // offline open still shows the list.
 
 import { useEffect, useRef, useState } from "react";
-import { formatDuration, formatReminder } from "./lib/format";
-import { projectColor } from "./lib/color";
-import { todayStr } from "./lib/dates";
+import { formatDuration, formatReminder } from "../../lib/format";
+import { projectColor } from "../../lib/color";
+import { todayStr } from "../../lib/dates";
 
 interface MobileConfig {
   repo: string;

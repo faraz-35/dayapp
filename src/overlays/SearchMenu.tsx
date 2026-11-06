@@ -23,9 +23,9 @@
 // deletes rows; that contract lives in App's handler + `delete_project`.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { clip, trace } from "../devlog";
+import { clip, trace } from "../logging/devlog";
 import { useFeatures } from "../features";
-import { IconPencil, IconX } from "./icons";
+import { IconPencil, IconX } from "../components/icons";
 import { projectColor } from "../lib/color";
 import type { Item, Section } from "../types/item";
 import type { Project } from "../types/project";

@@ -16,12 +16,12 @@
 // input-targeted events alone).
 
 import { useEffect, useRef, useState } from "react";
-import { trace } from "./devlog";
-import { firePopoverPick } from "./focusNav";
+import { trace } from "../../logging/devlog";
+import { firePopoverPick } from "../../keyboard/focusNav";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
-import { IconClock } from "./components/icons";
-import { todayOffset } from "./lib/dates";
+import { IconClock } from "../icons";
+import { todayOffset } from "../../lib/dates";
 
 const PRESETS: { days: number; label: string }[] = [
   { days: 1, label: "Tomorrow" },

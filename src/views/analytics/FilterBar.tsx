@@ -8,16 +8,16 @@
 // the AxisFilterHandle. Every derivation on the page follows what lands here.
 
 import { useEffect, useRef, useState } from "react";
-import { PriorityBars } from "../components/PriorityBars";
-import { useFeatures } from "../features";
-import { trace } from "../devlog";
+import { PriorityBars } from "../../components/PriorityBars";
+import { useFeatures } from "../../features";
+import { trace } from "../../logging/devlog";
 import Chevron from "./Chevron";
 import { currentMonth, fmtDay, monthCalendar, shiftMonth, type ViewMonth } from "./calendar";
 import type { AxisFilterHandle } from "./types";
-import { projectColor } from "../lib/color";
-import { todayStr } from "../lib/dates";
-import { DashboardSubject } from "../types/analytics";
-import { Project } from "../types/project";
+import { projectColor } from "../../lib/color";
+import { todayStr } from "../../lib/dates";
+import { DashboardSubject } from "../../types/analytics";
+import { Project } from "../../types/project";
 
 /** The range presets — the range dropdown's options. Week/Month are the
  *  CURRENT calendar week/month (Month is also what the heatmap drives — see

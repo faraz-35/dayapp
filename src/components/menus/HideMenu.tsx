@@ -14,12 +14,12 @@
 // was aimed at the menu and must never fire the row.
 
 import { useEffect, useRef, useState } from "react";
-import { trace } from "./devlog";
-import { firePopoverPick } from "./focusNav";
+import { trace } from "../../logging/devlog";
+import { firePopoverPick } from "../../keyboard/focusNav";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
-import { IconHalfMoon } from "./components/icons";
-import { HideDuration } from "./types/item";
+import { IconHalfMoon } from "../icons";
+import { HideDuration } from "../../types/item";
 
 const OPTIONS: { id: HideDuration; label: string; sub: string }[] = [
   { id: "forever", label: "Forever", sub: "until unhidden" },

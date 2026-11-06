@@ -276,8 +276,8 @@ capture-only, like the entry routes: an edit never re-routes a row — the drag 
 - Entries are **content** (the notes/sessions call): never logged to `actions`, excluded
   from the phone export, read back over the CLI's `--journal [range]` (the entry pages
   are their editing home). Logic lives in
-  `src-tauri/src/journal.rs`; the UI is `src/EntriesPage.tsx` (the two views) +
-  `src/Quotes.tsx` (modal).
+  `src-tauri/src/journal.rs`; the UI is `src/views/entries/EntriesPage.tsx` (the two views) +
+  `src/views/entries/Quotes.tsx` (modal).
 
 ### Projects (a second organising axis — NOT logged)
 
@@ -291,7 +291,7 @@ hide) — **never** logged to `actions`. `items.project_id` is the nullable FK (
 cascade; deleting a project runs `UPDATE items SET project_id = NULL` — and the same for
 `goals` and `notes`). Notes link through their `#tag` token (see "Notes" above); goals
 through the # popover. Logic lives in
-`src-tauri/src/projects.rs`; the popover is `src/ProjectMenu.tsx`, and rename/delete are
+`src-tauri/src/projects.rs`; the popover is `src/components/menus/ProjectMenu.tsx`, and rename/delete are
 managed in the ⌘F `#` picker (see "Project filter" under UI/UX guidance).
 
 ### Goals (the identity layer — logged like items)
@@ -355,7 +355,7 @@ activity**: every create/achieve/unachieve/edit/delete appends to `actions`
   working view is the plain task list. Goals don't take part
   in the item visibility/priority/project filters; the horizons are drag targets like
   the task sections (see the Goals bullet under UI/UX).
-- Logic lives in `src-tauri/src/goals.rs`; the UI is `src/Goals.tsx`; the CLI
+- Logic lives in `src-tauri/src/goals.rs`; the UI is `src/views/goals/Goals.tsx`; the CLI
   prints them grouped by horizon via `dayapp --goals`.
 
 ### Reminders (scheduled promotion via sweep — logged as `moved`)
@@ -405,7 +405,7 @@ architecture — don't grow this one into it.
   distributed from the **public** `faraz-35/dayapp-mobile` repo's Releases (authless
   download — the binary carries no secrets); keep release uploads signed with the same
   debug keystore so they install as updates.
-- Logic lives in `src-tauri/src/sync.rs`; the phone UI is `src/MobileView.tsx`
+- Logic lives in `src-tauri/src/sync.rs`; the phone UI is `src/views/mobile/MobileView.tsx`
   (renders when the webview UA is Android — same bundle as desktop).
 
 ### Demo mode (a second disposable db, swapped under the connection lock)
@@ -681,7 +681,7 @@ a detached helper.
 - **Backend (Rust):** `tauri-plugin-log` writes to a rotating file in the app log dir
   (`~/Library/Logs/com.farazshah.dayapp/`) and to stdout (visible in the terminal when
   running `tauri dev`). Use the `log` crate macros (`log::info!`, `log::warn!`, etc.).
-- **Frontend (TS):** `src/log.ts` exports a `log` object (`log.info`, `log.warn`, …) that
+- **Frontend (TS):** `src/logging/log.ts` exports a `log` object (`log.info`, `log.warn`, …) that
   prefixes lines with `[dayapp]`. `debug` is gated on `import.meta.env.DEV`, so it's silent
   in production builds.
 
@@ -725,7 +725,7 @@ view / toggle / quote / analytics / demo / …).
   steps don't re-trace).
 - Not the rotating app log, not `actions` — a session-scoped debug artifact, safe to
   delete. The backend (`devlog_append` in lib.rs) is a dumb sink: the frontend
-  (`src/devlog.ts`) owns the event vocabulary, batches every 250ms, and `trace()` while not
+  (`src/logging/devlog.ts`) owns the event vocabulary, batches every 250ms, and `trace()` while not
   recording costs one boolean check — call sites trace unconditionally.
 - Text payloads ride `clip()` (160 chars) — the trace is a story, not a store. Notes and
   details **body** edits don't trace (content housekeeping); the caught footer token line
@@ -755,39 +755,23 @@ dayapp/
 │   └── appimage-strip.sh           ← strips libwayland-*, normalizes modes, repacks + verifies a built AppImage (linux.yml + release.yml's linux job)
 ├── src/
 │   ├── App.tsx                     ← shell only: state, effects, the focus grammar (key handler), header, view switching, timer chip
-│   ├── analytics/                  ← the analytics page — one folder, one surface per file (see the structure pattern under "Analytics view")
-│   │   ├── AnalyticsView.tsx       ← the shell: subject/range/month state, scope selections, fetches, composition
-│   │   ├── FilterBar.tsx           ← the toolbar: subject tabs centered, range presets, from–to popover, axis dropdowns
-│   │   ├── HeatmapCard.tsx         ← the calendar ⇄ day-detail card (month paging, back arrow)
-│   │   ├── TasksCard.tsx           ← the paginated task list (self-contained fetch + pager)
-│   │   ├── cards.tsx               ← StatCard, ProjectsCard, PriorityCard, DelegationCard
-│   │   ├── calendar.ts             ← pure helpers: month grid, intensity levels, colors
-│   │   ├── types.ts                ← shared prop shapes (AxisFilterHandle, AgentCountsLike)
-│   │   └── Chevron.tsx             ← the one chevron glyph
-│   ├── api/                        ← the typed invoke layer, one file per domain (items/system/projects/entries/goals/timers/analytics/sync/notes/settings)
-│   ├── types/                      ← the shared vocabulary, one file per domain (item/project/entry/goal/timer/note/analytics/sync/token)
-│   ├── lib/                        ← pure helpers: dates.ts (todayStr/day logic), tokens.ts (the ONE token matcher + parsers), format.ts (durations, reminders), color.ts (projectColor), platform.ts (isMac)
+│   ├── api/                        ← the typed invoke layer, one file per domain: items (task rows + the actions log), system (sweep/update/owner/cli/window + demo + backup), projects, entries, goals, timers, analytics (journalApi), sync, notes, settings (the settings.json store facade)
+│   ├── types/                      ← the shared vocabulary, one file per domain: item, project, entry, goal, timer, note, analytics, sync, token
+│   ├── lib/                        ← pure helpers: dates.ts (todayStr/day logic), tokens.ts (the ONE token matcher + every parser), format.ts (durations, reminders), color.ts (projectColor), views.ts (the CustomView lens model + seeds + summary), platform.ts (isMac)
+│   ├── logging/                    ← log.ts (prefixed console logger) + devlog.ts (the demo-mode interaction trace: trace()/clip(), recording lifecycle, 250ms JSONL batching)
+│   ├── keyboard/                   ← focusNav.ts (the grammar's DOM side: data-kb dispatch, capture focus, nth note/goal, popover check) + KeyboardHelp.tsx (⌘P keyboard reference card)
+│   ├── views/                      ← one folder per page, the analytics pattern
+│   │   ├── analytics/              ← the analytics page — one surface per file (see the structure pattern under "Analytics view"): AnalyticsView (shell), FilterBar, HeatmapCard, TasksCard, cards, calendar.ts, types.ts, Chevron
+│   │   ├── notes/Notes.tsx         ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + token-caught tier groups + the ##j/##q capture router)
+│   │   ├── goals/Goals.tsx         ← goals: horizon groups + capture + achieve (own state; between Notes and the sections)
+│   │   ├── entries/                ← EntriesPage.tsx (the two entry pages — Journal ¶ / Quotes ❝, parameterized by kind) + Quotes.tsx (the ##q moment, screensaver-summoned)
+│   │   ├── settings/               ← SettingsView.tsx (the shell + tab bar) over FeaturesPane / AppearancePane / HeaderPane / ViewsPane, with rows.tsx (the row primitives) and vocab.ts (feature keys, header buttons, gating map)
+│   │   └── mobile/MobileView.tsx   ← Android client: read-only list + capture bar (GitHub fetch, renders when UA is Android)
+│   ├── overlays/                   ← the floating surfaces: CommandPalette (⌘P), SearchMenu (⌘F), UpdateOverlay, MobileSyncSettings (⌘P sync-config modal), NamePrompt
 │   ├── themes.ts                   ← the theme system: the eleven-shade ladder, the built-ins (Dark/Light/Nord/Rosé Pine), applyTheme — one paint over the tokens
-│   ├── log.ts                      ← prefixed console logger (webview side)
-│   ├── devlog.ts                   ← the demo-mode interaction trace: trace()/clip(), recording lifecycle, 250ms JSONL batching
-│   ├── focusNav.ts                 ← the grammar's DOM side: data-kb button dispatch, capture focus, nth note/goal, popover check
+│   ├── features.tsx                ← the existence switches as context (the Features read every gated surface consumes)
 │   ├── main.tsx                    ← React entry
 │   ├── index.css                   ← the dark theme + all component styles
-│   ├── Notes.tsx                   ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + token-caught tier groups + the ##j/##q capture router)
-│   ├── Goals.tsx                   ← goals: horizon groups + capture + achieve (own state; between Notes and the sections)
-│   ├── EntriesPage.tsx             ← the two entry pages (Journal ¶ / Quotes ❝): day-grouped entries + capture + inline edit/delete, one component parameterized by kind
-│   ├── Quotes.tsx                  ← the ##q moment: one quote on a dim backdrop, screensaver-summoned (self-contained fetch + pick; `version` prop is the refresh trigger)
-│   ├── HideMenu.tsx                ← shared ◐ hide-duration popover (items + notes)
-│   ├── ProjectMenu.tsx             ← # assign/clear/create project popover (per item or note)
-│   ├── PriorityMenu.tsx            ← ▮ priority-tier popover (per item or note; the mouse door for !N)
-│   ├── ReminderMenu.tsx            ← ◷ reminder-date popover (per item); promotion via sweep
-│   ├── TokenField.tsx              ← capture/edit field with live token coloring + display forms (##q → quote, !N → bars; transparent text + mirror div + own caret/selection overlay; scanTokens is the one matcher; demoExamples = the rotating demo hints)
-│   ├── CommandPalette.tsx          ← ⌘P modal: filter + keyboard nav
-│   ├── KeyboardHelp.tsx            ← ⌘P keyboard reference card (the focus grammar, documented)
-│   ├── UpdateOverlay.tsx           ← self-update progress/restart/error modal
-│   ├── MobileView.tsx              ← Android client: read-only list + capture bar (GitHub fetch, renders when UA is Android)
-│   ├── MobileSyncSettings.tsx      ← ⌘P sync-config modal (repo/branch/token + validate-by-deploy)
-│   ├── SettingsView.tsx            ← the settings page (⌘P → Settings): tab bar over four panes — Features (Tasks/Notes/Goals three across), Appearance, Header, Views
 │   └── components/                 ← feature components, one per file (see "Component responsibilities")
 │       ├── SectionList.tsx         ← the ONE task capture (##t/##d/##b routing) + DndContext + drag handlers + maps the 3 sections
 │       ├── SectionView.tsx         ← one section (head + sortable items + dropzone; Backlog tier dividers)
@@ -830,15 +814,15 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 | File | Owns | Does NOT own |
 |---|---|---|
 | `App.tsx` | state (incl. the active timer + the one focused thing), effects, the focus grammar key handler, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
-| `Goals.tsx` | goals state + capture + horizon groups + horizon drag (cross-group = horizon change, within-group = reorder) + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
-| `Quotes.tsx` | the ##q moment: quote pool fetch, the modal's pick (no consecutive repeats); every open is screensaver-born and lingers until input — no self-timer | capture (Notes' router adds quotes; the entry pages' captures too), the idle watcher (App's), the pool's archive (EntriesPage's Quotes view) |
-| `EntriesPage.tsx` | both entry views (kind prop): entries state, day groups, capture (plain = that page's kind; the opposite token routes), inline edit/delete (self-contained; remounts per view switch) | the quote modal (Quotes.tsx), analytics (AnalyticsView) |
+| `views/goals/Goals.tsx` | goals state + capture + horizon groups + horizon drag (cross-group = horizon change, within-group = reorder) + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
+| `views/entries/Quotes.tsx` | the ##q moment: quote pool fetch, the modal's pick (no consecutive repeats); every open is screensaver-born and lingers until input — no self-timer | capture (Notes' router adds quotes; the entry pages' captures too), the idle watcher (App's), the pool's archive (EntriesPage's Quotes view) |
+| `views/entries/EntriesPage.tsx` | both entry views (kind prop): entries state, day groups, capture (plain = that page's kind; the opposite token routes), inline edit/delete (self-contained; remounts per view switch) | the quote modal (Quotes.tsx), analytics (AnalyticsView) |
 | `SectionList.tsx` | the task capture bus (##t/##d/##b route, default Today), `DndContext`, drag start/end, `DragOverlay`, the 3-section map | item state mutations (delegates via `onMoveItem`) |
 | `SectionView.tsx` | one section's header + sortable items + dropzone (+ Backlog tier dividers, + the open row's details body) | DnD sensors/handlers, capture (the bus above the stack owns it) |
 | `ItemRow.tsx` | one row's render + the ▶/⏸/↑ slot-1 control (timer, or send-to-Today on Backlog rows) + the shared `EditInput`/`PriorityBars`/`ItemDetailsBody` | DnD wiring (from `useSortable` via parent) |
-| `analytics/` (folder) | the analytics page — the shell (`AnalyticsView.tsx`) owns subject/range/month state, scope selections, the fetches, and composition; the surfaces live in focused files beside it (FilterBar / HeatmapCard / TasksCard / cards / calendar — the structure pattern under "Analytics view") | any derivation (all in `dashboard.rs`), item state |
-| `SettingsView.tsx` | the settings page: a tab bar (the seg's language) picks one of four panes — Features / Appearance / Header / Views (2026-10-16, the settings-look tabs mockup); Features lays the Tasks / Notes / Goals cards three across (`.set-grid3`, stacked below 760px) | the toggle/view state (App's — the palette reads it too) |
-| `SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
+| `views/analytics/` (folder) | the analytics page — the shell (`AnalyticsView.tsx`) owns subject/range/month state, scope selections, the fetches, and composition; the surfaces live in focused files beside it (FilterBar / HeatmapCard / TasksCard / cards / calendar — the structure pattern under "Analytics view") | any derivation (all in `dashboard.rs`), item state |
+| `views/settings/` (folder) | the settings page: `SettingsView.tsx` is the tab-bar shell (the seg's language) over Features / Appearance / Header / Views panes (2026-10-16, the settings-look tabs mockup); FeaturesPane lays the Tasks / Notes / Goals cards three across (`.set-grid3`, stacked below 760px); rows.tsx the shared row primitives, vocab.ts the feature/button/gating vocabulary | the toggle/view state (App's — the palette reads it too) |
+| `overlays/SearchMenu.tsx` | ⌘F modal state + keyboard nav + jump + `#` project picker | the hit/project lists (passed in from `App`) |
 
 ---
 

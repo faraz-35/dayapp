@@ -7,7 +7,7 @@
 // the first match.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { trace } from "./devlog";
+import { trace } from "../logging/devlog";
 
 export interface Command {
   id: string;

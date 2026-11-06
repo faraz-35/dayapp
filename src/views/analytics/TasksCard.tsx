@@ -7,14 +7,14 @@
 // toolbar through `filter`; tracked time stays out (the day detail owns it).
 
 import { useEffect, useState } from "react";
-import { PriorityBars } from "../components/PriorityBars";
-import { useFeatures } from "../features";
-import { log } from "../log";
+import { PriorityBars } from "../../components/PriorityBars";
+import { useFeatures } from "../../features";
+import { log } from "../../logging/log";
 import Chevron from "./Chevron";
 import { fmtDay } from "./calendar";
-import { journalApi } from "../api/analytics";
-import { todayStr } from "../lib/dates";
-import { DashboardFilter, DashboardSubject, RangeTask } from "../types/analytics";
+import { journalApi } from "../../api/analytics";
+import { todayStr } from "../../lib/dates";
+import { DashboardFilter, DashboardSubject, RangeTask } from "../../types/analytics";
 
 /** The list's page size. */
 const TASKS_PER_PAGE = 10;

@@ -8,7 +8,7 @@
 // priorities, n[1-9] without note priorities).
 
 import { useEffect } from "react";
-import { useFeatures } from "./features";
+import { useFeatures } from "../features";
 
 function Row({ keys, children }: { keys: string[]; children: React.ReactNode }) {
   return (

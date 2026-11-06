@@ -16,15 +16,15 @@
 // bars.
 
 import { useEffect, useMemo, useState } from "react";
-import { log } from "./log";
-import { clip, trace } from "./devlog";
-import TokenField from "./TokenField";
-import { EditInput } from "./components/ItemRow";
-import { IconX } from "./components/icons";
-import { entriesApi } from "./api/entries";
-import { parseEntryCapture } from "./lib/tokens";
-import { todayStr } from "./lib/dates";
-import type { Entry, EntryKind } from "./types/entry";
+import { log } from "../../logging/log";
+import { clip, trace } from "../../logging/devlog";
+import TokenField from "../../components/TokenField";
+import { EditInput } from "../../components/ItemRow";
+import { IconX } from "../../components/icons";
+import { entriesApi } from "../../api/entries";
+import { parseEntryCapture } from "../../lib/tokens";
+import { todayStr } from "../../lib/dates";
+import type { Entry, EntryKind } from "../../types/entry";
 
 // The display order, mirroring list_entries' ORDER BY (journal.rs): newest day
 // first, and within a day oldest → newest (ULID text order breaks same-second

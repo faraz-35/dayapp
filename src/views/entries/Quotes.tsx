@@ -20,9 +20,9 @@
 // archive lives on the Quotes page; this modal stays the moment, not the list.
 
 import { useEffect, useRef, useState } from "react";
-import { log } from "./log";
-import { trace } from "./devlog";
-import { entriesApi } from "./api/entries";
+import { log } from "../../logging/log";
+import { trace } from "../../logging/devlog";
+import { entriesApi } from "../../api/entries";
 
 // The pool's floor — one quote ships with the app (2026-10-25), so the
 // screensaver works before the first ##q lands. Chrome like the masthead

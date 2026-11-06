@@ -20,12 +20,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { clip, trace } from "../devlog";
-import HideMenu from "../HideMenu";
-import PriorityMenu from "../PriorityMenu";
-import ProjectMenu from "../ProjectMenu";
-import ReminderMenu from "../ReminderMenu";
-import TokenField from "../TokenField";
+import { clip, trace } from "../logging/devlog";
+import HideMenu from "./menus/HideMenu";
+import PriorityMenu from "./menus/PriorityMenu";
+import ProjectMenu from "./menus/ProjectMenu";
+import ReminderMenu from "./menus/ReminderMenu";
+import TokenField from "./TokenField";
 import { PriorityBars } from "./PriorityBars";
 import {
   IconArrowUp, IconChevron, IconDots, IconPause, IconPlay, IconUndo, IconX,

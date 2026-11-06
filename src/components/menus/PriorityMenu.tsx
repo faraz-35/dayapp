@@ -15,11 +15,11 @@
 // keystroke after a pick was aimed at the menu and must never fire the row.
 
 import { useEffect, useRef, useState } from "react";
-import { trace } from "./devlog";
-import { firePopoverPick } from "./focusNav";
+import { trace } from "../../logging/devlog";
+import { firePopoverPick } from "../../keyboard/focusNav";
 import { usePopoverFlip } from "./usePopoverFlip";
 import { usePopoverKeys } from "./usePopoverKeys";
-import { IconBars } from "./components/icons";
+import { IconBars } from "../icons";
 
 const TIERS: (1 | 2 | 3)[] = [1, 2, 3];
 

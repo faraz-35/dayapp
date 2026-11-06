@@ -20,8 +20,8 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { clip, trace } from "../devlog";
-import TokenField from "../TokenField";
+import { clip, trace } from "../logging/devlog";
+import TokenField from "./TokenField";
 import SectionView from "./SectionView";
 import { useFeatures } from "../features";
 import { parseTaskCapture } from "../lib/tokens";

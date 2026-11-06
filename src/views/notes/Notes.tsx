@@ -40,23 +40,23 @@
 // the note owns its text, and both verbs are entirely about it.
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { log } from "./log";
-import { clip, trace } from "./devlog";
-import HideMenu from "./HideMenu";
-import PriorityMenu from "./PriorityMenu";
-import ProjectMenu from "./ProjectMenu";
-import TokenField from "./TokenField";
-import { PriorityBars } from "./components/PriorityBars";
-import { IconChevron, IconDownload, IconX } from "./components/icons";
-import { useFeatures } from "./features";
-import { notesApi } from "./api/notes";
-import type { Note } from "./types/note";
-import type { EntryKind } from "./types/entry";
-import type { HideDuration, HiddenFilter } from "./types/item";
-import { baseTextWidth, parseEntryCapture, parseNoteCapture, resolveNoteTag, scanNoteFooterTokens, splitNoteFooter } from "./lib/tokens";
-import { entriesApi } from "./api/entries";
-import { projectColor } from "./lib/color";
-import type { Project } from "./types/project";
+import { log } from "../../logging/log";
+import { clip, trace } from "../../logging/devlog";
+import HideMenu from "../../components/menus/HideMenu";
+import PriorityMenu from "../../components/menus/PriorityMenu";
+import ProjectMenu from "../../components/menus/ProjectMenu";
+import TokenField from "../../components/TokenField";
+import { PriorityBars } from "../../components/PriorityBars";
+import { IconChevron, IconDownload, IconX } from "../../components/icons";
+import { useFeatures } from "../../features";
+import { notesApi } from "../../api/notes";
+import type { Note } from "../../types/note";
+import type { EntryKind } from "../../types/entry";
+import type { HideDuration, HiddenFilter } from "../../types/item";
+import { baseTextWidth, parseEntryCapture, parseNoteCapture, resolveNoteTag, scanNoteFooterTokens, splitNoteFooter } from "../../lib/tokens";
+import { entriesApi } from "../../api/entries";
+import { projectColor } from "../../lib/color";
+import type { Project } from "../../types/project";
 
 // Collapsed-note ids, persisted like the UI zoom — a display preference.
 // localStorage only: collapse is UI state, not content, so the notes table

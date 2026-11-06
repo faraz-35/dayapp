@@ -39,22 +39,22 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { log } from "./log";
-import { clip, trace } from "./devlog";
-import { useFeatures } from "./features";
-import HideMenu from "./HideMenu";
-import ProjectMenu from "./ProjectMenu";
-import TokenField from "./TokenField";
-import { EditInput } from "./components/ItemRow";
-import { IconUndo, IconX } from "./components/icons";
-import { formatGoalAchieved, formatReminder } from "./lib/format";
-import { goalsApi } from "./api/goals";
-import { hideExpiry } from "./lib/dates";
-import { parseGoalText } from "./lib/tokens";
-import { projectColor } from "./lib/color";
-import type { Goal, GoalHorizon } from "./types/goal";
-import type { HiddenFilter, HideDuration } from "./types/item";
-import type { Project } from "./types/project";
+import { log } from "../../logging/log";
+import { clip, trace } from "../../logging/devlog";
+import { useFeatures } from "../../features";
+import HideMenu from "../../components/menus/HideMenu";
+import ProjectMenu from "../../components/menus/ProjectMenu";
+import TokenField from "../../components/TokenField";
+import { EditInput } from "../../components/ItemRow";
+import { IconUndo, IconX } from "../../components/icons";
+import { formatGoalAchieved, formatReminder } from "../../lib/format";
+import { goalsApi } from "../../api/goals";
+import { hideExpiry } from "../../lib/dates";
+import { parseGoalText } from "../../lib/tokens";
+import { projectColor } from "../../lib/color";
+import type { Goal, GoalHorizon } from "../../types/goal";
+import type { HiddenFilter, HideDuration } from "../../types/item";
+import type { Project } from "../../types/project";
 
 // Display order: constitution → career → now. A group with no goals renders
 // no divider (derived from the rendered list, like the Backlog's tier
