@@ -1738,7 +1738,7 @@ Journal / Quotes icons):**
 
 - Derivation lives in `src-tauri/src/dashboard.rs` (`journal_dashboard` +
   `journal_day_detail` + `journal_tasks`, behind commands of the same names). The
-  UI is the `src/analytics/` folder — one focused file per surface, `AnalyticsView.tsx`
+  UI is the `src/views/analytics/` folder — one focused file per surface, `AnalyticsView.tsx`
   the shell: it owns every state the page derives from (subject, range + viewed
   month, scope selections, picked day) and the fetches that follow them, and renders
   nothing itself but composition. The pattern, so new analytics surfaces land in
