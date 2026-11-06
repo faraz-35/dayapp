@@ -172,3 +172,77 @@ export function IconCommandPalette() {
     </svg>
   );
 }
+
+// ---- The header's view doors + their glyphs ------------------------------
+//
+// The three header view doors + their shared close state, drawn as SVG rather
+// than the ≡ / ¶ / ❝ / ✕ unicode they replaced — those ride the font's metrics
+// (different baselines and optical sizes per glyph, the reason ItemRow's
+// chevron and arrow are drawn too). All share the family's 16-box and tint
+// through currentColor with .icon-btn. Analytics is the chart (vertical
+// bars), Journal the prose lines (last line short — text, not a list), Quotes
+// the filled serif comma pair (the one filled glyph of the set — the quote
+// mark is solid in every other surface).
+
+export function IconAnalytics() {
+  return (
+    <svg {...base}>
+      <path d="M4.2 12.5V8.6M8 12.5v-9M11.8 12.5V6.6" />
+    </svg>
+  );
+}
+
+export function IconJournal() {
+  return (
+    <svg {...base}>
+      <path d="M3 4.5h10M3 8h10M3 11.5h6.5" />
+    </svg>
+  );
+}
+
+export function IconQuotes() {
+  return (
+    <svg {...base}>
+      {/* filled — the quote mark is solid in every other surface */}
+      <path
+        d="M7 4.5C4 5.3 2.5 7.5 2.5 10.5v1h3.8V8.3H4.5C4.7 7.1 5.6 6.3 7 5.9ZM13.5 4.5c-3 .8-4.5 3-4.5 6v1h3.8V8.3H11c.2-1.2 1.1-2 2.5-2.4Z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </svg>
+  );
+}
+
+export function IconClose() {
+  return (
+    <svg {...base}>
+      <path d="m4.2 4.2 7.6 7.6M11.8 4.2l-7.6 7.6" />
+    </svg>
+  );
+}
+
+// The settings door's glyph: the classic cog (Lucide's settings outline,
+// MIT), scaled into the 16-box at the family's 1.7 visual stroke — teeth on
+// the silhouette and a big center hole, so beside the sun it reads gear,
+// never twin rays (the ray-ring attempt's failure).
+export function IconSettings() {
+  return (
+    <svg {...base}>
+      <g transform="scale(0.6667)" strokeWidth="2.55">
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+        <circle cx="12" cy="12" r="3" />
+      </g>
+    </svg>
+  );
+}
+
+// The release-update door's glyph: an arrow dropping into a tray — the one
+// header icon that isn't a view, so it reads as "something to receive", not
+// "somewhere to go".
+export function IconUpdate() {
+  return (
+    <svg {...base}>
+      <path d="M8 2.5v7.2M4.8 6.8 8 10l3.2-3.2M3 13h10" />
+    </svg>
+  );
+}

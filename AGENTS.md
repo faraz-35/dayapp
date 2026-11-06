@@ -557,7 +557,7 @@ logged to `actions` — the Analytics view surfaces time as a separate dimension
   The retirement sweep (`run_sweep`/`purge_completed_today`) finalizes any orphaned open
   session on the rows it deletes — self-heal for data written before the rule existed.
 - Logic lives in `src-tauri/src/timers.rs`; the row control is in `src/components/ItemRow.tsx`,
-  the header chip + digit `1` on the focused row in `src/App.tsx`. Live elapsed ticks once a second in the
+  the header chip (components/Header.tsx) + digit `1` on the focused row. Live elapsed ticks once a second in the
   frontend; the backend is stateless between ticks (it derives elapsed from `started_at`).
 
 ### Backups (point-in-time snapshots — capture-only)
@@ -754,12 +754,12 @@ dayapp/
 │   ├── update.sh                   ← build/swap/relaunch helper (called by in-app updater + npm run update)
 │   └── appimage-strip.sh           ← strips libwayland-*, normalizes modes, repacks + verifies a built AppImage (linux.yml + release.yml's linux job)
 ├── src/
-│   ├── App.tsx                     ← shell only: state, effects, the focus grammar (key handler), header, view switching, timer chip
+│   ├── App.tsx                     ← the shell: app-wide state, effects, the handlers, view switching (the grammar lives in keyboard/, the bar in components/Header.tsx)
 │   ├── api/                        ← the typed invoke layer, one file per domain: items (task rows + the actions log), system (sweep/update/owner/cli/window + demo + backup), projects, entries, goals, timers, analytics (journalApi), sync, notes, settings (the settings.json store facade)
 │   ├── types/                      ← the shared vocabulary, one file per domain: item, project, entry, goal, timer, note, analytics, sync, token
 │   ├── lib/                        ← pure helpers: dates.ts (todayStr/day logic), tokens.ts (the ONE token matcher + every parser), format.ts (durations, reminders), color.ts (projectColor), views.ts (the CustomView lens model + seeds + summary), platform.ts (isMac)
 │   ├── logging/                    ← log.ts (prefixed console logger) + devlog.ts (the demo-mode interaction trace: trace()/clip(), recording lifecycle, 250ms JSONL batching)
-│   ├── keyboard/                   ← focusNav.ts (the grammar's DOM side: data-kb dispatch, capture focus, nth note/goal, popover check) + KeyboardHelp.tsx (⌘P keyboard reference card)
+│   ├── keyboard/                   ← useFocusGrammar.ts (the grammar's key handler + pointer rules, fed App's state through one deps object) + focusNav.ts (the DOM side: data-kb dispatch, capture focus, nth note/goal, popover check) + KeyboardHelp.tsx (⌘P keyboard reference card)
 │   ├── views/                      ← one folder per page, the analytics pattern
 │   │   ├── analytics/              ← the analytics page — one surface per file (see the structure pattern under "Analytics view"): AnalyticsView (shell), FilterBar, HeatmapCard, TasksCard, cards, calendar.ts, types.ts, Chevron
 │   │   ├── notes/Notes.tsx         ← self-contained notes component (own state + persistence + ⌘F-in-note find + ⬇ .txt export + token-caught tier groups + the ##j/##q capture router)
@@ -813,7 +813,9 @@ single file it belongs in; do not grow `App.tsx` with new rendering logic.
 
 | File | Owns | Does NOT own |
 |---|---|---|
-| `App.tsx` | state (incl. the active timer + the one focused thing), effects, the focus grammar key handler, header + timer chip, view switching | rendering of items/rows, DnD logic, view internals |
+| `App.tsx` | state (incl. the active timer + the one focused thing), effects, the mutation handlers, view switching | rendering of items/rows, the key handler (keyboard/useFocusGrammar), the header (components/Header.tsx), DnD logic, view internals |
+| `components/Header.tsx` | the pinned bar: masthead, timer chip, the icon cluster (ViewDoor per view, the ◐ archive peek, theme cycle, release-update door) | the state any of it renders (App's — passed in as props) |
+| `keyboard/useFocusGrammar.ts` | the focus grammar's whole behavior: addresses, j/k walk, Esc ladder, digits, click-to-focus/outside-click rules | the focus ids (App's state — fed in via one deps object) |
 | `views/goals/Goals.tsx` | goals state + capture + horizon groups + horizon drag (cross-group = horizon change, within-group = reorder) + achieve/edit/delete + project link (self-contained, like `Notes.tsx`) | projects state (App's list is the single source, passed in), item state |
 | `views/entries/Quotes.tsx` | the ##q moment: quote pool fetch, the modal's pick (no consecutive repeats); every open is screensaver-born and lingers until input — no self-timer | capture (Notes' router adds quotes; the entry pages' captures too), the idle watcher (App's), the pool's archive (EntriesPage's Quotes view) |
 | `views/entries/EntriesPage.tsx` | both entry views (kind prop): entries state, day groups, capture (plain = that page's kind; the opposite token routes), inline edit/delete (self-contained; remounts per view switch) | the quote modal (Quotes.tsx), analytics (AnalyticsView) |

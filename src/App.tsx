@@ -26,14 +26,13 @@ import MobileView from "./views/mobile/MobileView";
 import MobileSyncSettings from "./overlays/MobileSyncSettings";
 import KeyboardHelp from "./keyboard/KeyboardHelp";
 import NamePrompt from "./overlays/NamePrompt";
-import { clickKbButton, focusCapture, focusGoalEditor, focusNoteEditor, goalIdAt, noteIdAt, POPOVER_PICK_EVENT, popoverOpen, scrollIntoViewEl } from "./keyboard/focusNav";
+import { useFocusGrammar } from "./keyboard/useFocusGrammar";
 import { BUILT_IN_THEMES, applyTheme, resolveTheme, systemTheme, themeIsLight, themeModeSlot, type Theme } from "./themes";
-import { IconCommandPalette, IconMoon, IconSun, IconX } from "./components/icons";
+import Header, { type View } from "./components/Header";
+import { sortBacklog, settleBacklogDrop } from "./lib/list";
 import { FeaturesContext, type Features } from "./features";
 import { backupApi, demoApi } from "./api/system";
-import { formatLiveDuration } from "./lib/format";
 import { hideExpiry, todayStr } from "./lib/dates";
-import { isMac } from "./lib/platform";
 import { parseItemTags } from "./lib/tokens";
 import { projectsApi } from "./api/projects";
 import { setProjectColorMode } from "./lib/color";
@@ -46,8 +45,6 @@ import type { Project } from "./types/project";
 import { MIGRATED_KEYS, externallyChanged, initSettings, sget, sset, ssetMany } from "./api/settings";
 import { itemsApi } from "./api/items";
 import { systemApi } from "./api/system";
-
-type View = "list" | "analytics" | "journal" | "quotes" | "settings";
 
 // Labels for the per-section ⌘P toggles (Show/Hide Today, …).
 const SECTION_LABELS: Record<Section, string> = {
@@ -66,157 +63,9 @@ const clampZoom = (z: number) =>
 // Masthead brand rotation: the "Live @ " words the header steps out to, one
 // picked at random every 2 minutes before returning to "Faraz" (home).
 const MASTHEAD_THEMES = ["growth", "money", "journey", "learn"] as const;
-// The address prefixes of the focus grammar: n (notes + captures), t/d
-// (Today/Daily rows), b (Backlog rows, two digits: tier then index), g
-// (goals). Typed directly, no mode — see the key handler below.
-const ADDRESS_KEYS = new Set(["n", "t", "d", "b", "g"]);
 
-// Free-mode scroll step (px) for j/k + ↑/↓ when nothing is focused. Read in
-// .scroll's local space, so zoom scales it with the content — the step is
-// always ~4 rows regardless of zoom level.
-const SCROLL_STEP = 120;
 
-// The Backlog's display order, mirroring the backend's ORDER BY (db.rs list):
-// priority first (unmarked last), then manual order. Optimistic updates that
-// touch priority or ordering must re-apply it — the tier dividers in
-// SectionView read the rendered order, so a row left out of tier splits one
-// tier group into two dividers until the next 60s refresh re-syncs. sortOrder
-// is kept truthful optimistically (settleBacklogDrop), so this comparator is exact
-// against what a refresh returns.
-const sortBacklog = (list: Item[]) =>
-  [...list].sort(
-    (a, b) =>
-      (a.priority ?? 99) - (b.priority ?? 99) ||
-      a.sortOrder - b.sortOrder ||
-      a.createdAt.localeCompare(b.createdAt),
-  );
 
-// Re-apply the Backlog's ordering after an optimistic drop. move_item
-// re-indexes sort_order 0..N across the section over the tier-sorted sequence
-// with the dropped row inserted at the target index — reproduce exactly that
-// indexing (and the display order it implies), so the optimistic list is what
-// the next refresh returns and sortBacklog's comparator stays truthful for
-// later creates/edits. `spliced` is the destination list with the moved row
-// already spliced in at `fullIndex`.
-const settleBacklogDrop = (spliced: Item[], movedId: string, fullIndex: number) => {
-  const moved = spliced.find((i) => i.id === movedId);
-  if (!moved) return spliced;
-  // The destination minus the moved row is still in its tier-sorted order
-  // (the invariant above), so re-inserting at fullIndex rebuilds the same
-  // sequence the backend indexes over.
-  const seq = spliced.filter((i) => i.id !== movedId);
-  seq.splice(Math.min(fullIndex, seq.length), 0, moved);
-  return sortBacklog(seq.map((i, idx) => (i.sortOrder === idx ? i : { ...i, sortOrder: idx })));
-};
-
-// The three header view doors + their shared close state, drawn as SVG rather
-// than the ≡ / ¶ / ❝ / ✕ unicode they replaced — those ride the font's metrics
-// (different baselines and optical sizes per glyph, the reason ItemRow's
-// chevron and arrow are drawn too). All four share one 16-box, stroke 1.7
-// round like ItemRow's glyphs, and tint through currentColor with .icon-btn.
-// Analytics is the chart (vertical bars), Journal the prose lines (last line
-// short — text, not a list), Quotes the filled serif comma pair (the one
-// filled glyph of the set — the quote mark is solid in every other surface).
-
-function AnalyticsIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <path
-        d="M4.2 12.5V8.6M8 12.5v-9M11.8 12.5V6.6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function JournalIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <path
-        d="M3 4.5h10M3 8h10M3 11.5h6.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function QuotesIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <path
-        d="M7 4.5C4 5.3 2.5 7.5 2.5 10.5v1h3.8V8.3H4.5C4.7 7.1 5.6 6.3 7 5.9ZM13.5 4.5c-3 .8-4.5 3-4.5 6v1h3.8V8.3H11c.2-1.2 1.1-2 2.5-2.4Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <path
-        d="m4.2 4.2 7.6 7.6M11.8 4.2l-7.6 7.6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-// The settings door's glyph: the classic cog (Lucide's settings outline,
-// MIT), scaled into the 16-box at the family's 1.7 visual stroke — teeth on
-// the silhouette and a big center hole, so beside the sun it reads gear,
-// never twin rays (the ray-ring attempt's failure).
-function SettingsIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <g
-        transform="scale(0.6667)"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.55"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-        <circle cx="12" cy="12" r="3" />
-      </g>
-    </svg>
-  );
-}
-
-// The theme cycle's glyph rides the shared family: dark wears the moon,
-// light the sun, and a custom theme the swatch card with its position
-// subscript (see the header button).
-
-// The release-update door's glyph: an arrow dropping into a tray — the one
-// header icon that isn't a view, so it reads as "something to receive", not
-// "somewhere to go". Same 16-box, stroke 1.7 round as the rest of the set.
-function UpdateIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <path
-        d="M8 2.5v7.2M4.8 6.8 8 10l3.2-3.2M3 13h10"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 // Self-update status, accumulated from "update-status" events emitted by the
 // backend's self_update (phase "building") and update_install (phase
@@ -2099,336 +1948,21 @@ function DayAppBody() {
     [renderItems],
   );
 
-  // The half-typed address. Nothing renders from it; the handler consumes
-  // exactly one following key (`b` re-arms once for its tier digit). Modifier
-  // combos and leaving the list view cancel it.
-  const pendingAddr = useRef("");
+  // The focus grammar — the whole keyboard/pointer behavior lives in the
+  // hook (see keyboard/useFocusGrammar.ts); App owns only the focused ids it
+  // renders the highlight from.
+  useFocusGrammar({
+    view, setView,
+    selectedId, focusNoteId, focusGoalId,
+    setSelectedId, setFocusNoteId, setFocusGoalId,
+    setEditingId, setQuoteOpen,
+    renderItems, allVisible,
+    handleComplete,
+    helpOpen, syncSettingsOpen, paletteOpen, searchOpen, updateStatus, quoteOpen,
+    journalEnabled, quotesEnabled, notePrioritiesEnabled, taskPrioritiesEnabled,
+    sectionsEnabled,
+  });
 
-  const clearFocus = useCallback(() => {
-    setSelectedId(null);
-    setFocusNoteId(null);
-    setFocusGoalId(null);
-  }, []);
-
-  // A popover pick stands the grammar down to nothing-focused: the menu that
-  // absorbed the keystrokes just unmounted, and the row underneath must not
-  // stay Enter-armed (see POPOVER_PICK_EVENT in focusNav.ts). Esc and
-  // outside-click are the walk-backs and keep the row focused.
-  useEffect(() => {
-    const onPopoverPick = () => {
-      trace("focus.clear", { via: "popover-pick" });
-      clearFocus();
-    };
-    document.addEventListener(POPOVER_PICK_EVENT, onPopoverPick);
-    return () => document.removeEventListener(POPOVER_PICK_EVENT, onPopoverPick);
-  }, [clearFocus]);
-
-  // Outside-click is the mouse's walk from focused to nothing: a press that
-  // lands outside every focusable surface (any row, note, or goal) clears
-  // grammar focus — clicking another row instead lands its own focus. The
-  // focused row's open details body counts as inside (digit 5 opens it; the
-  // row keeps focus while it writes). While a popover is open the press
-  // belongs to the menu's own walk-back — it closes onto the still-focused
-  // row — so this stands down for that press.
-  useEffect(() => {
-    const onMouseDown = (e: MouseEvent) => {
-      if (selectedId === null && focusNoteId === null && focusGoalId === null) return;
-      if (popoverOpen()) return;
-      const t = e.target;
-      if (!(t instanceof Element)) return;
-      if (t.closest("[data-item-id], [data-note-id], [data-goal-id]")) return;
-      if (selectedId !== null) {
-        const row = document.querySelector(`[data-item-id="${selectedId}"]`);
-        const body = row?.nextElementSibling;
-        if (body?.classList.contains("item-details") && body.contains(t)) return;
-      }
-      trace("focus.clear", { via: "outside-click" });
-      clearFocus();
-    };
-    document.addEventListener("mousedown", onMouseDown);
-    return () => document.removeEventListener("mousedown", onMouseDown);
-  }, [selectedId, focusNoteId, focusGoalId, clearFocus]);
-
-  const focusItem = useCallback((id: string) => {
-    setSelectedId(id);
-    setFocusNoteId(null);
-    setFocusGoalId(null);
-    scrollIntoViewEl(document.querySelector(`[data-item-id="${id}"]`));
-  }, []);
-
-  const focusNote = useCallback((id: string) => {
-    setSelectedId(null);
-    setFocusGoalId(null);
-    setFocusNoteId(id);
-    scrollIntoViewEl(document.querySelector(`[data-note-id="${id}"]`));
-  }, []);
-
-  const focusGoal = useCallback((id: string) => {
-    setSelectedId(null);
-    setFocusNoteId(null);
-    setFocusGoalId(id);
-    scrollIntoViewEl(document.querySelector(`[data-goal-id="${id}"]`));
-  }, []);
-
-  // Resolve a complete address sequence. Row indexes come from renderItems
-  // (filters and toggled-off sections compose for free); notes and goals come
-  // from the DOM (Notes/Goals own their lists — DOM order is visual order).
-  // An address that lands nowhere (t9 with three rows) is a silent no-op.
-  const resolveAddress = (seq: string) => {
-    const [p, a, b] = seq;
-    const n = Number(a);
-    if (p === "n") {
-      if (a === "n") { trace("capture.focus", { address: seq, target: "notes" }); focusCapture("notes"); }
-      // nj/nq only when the destination exists (Settings → Features) — an
-      // address into a switched-off surface is a silent no-op, like t9 into
-      // an empty section.
-      else if (a === "j" && journalEnabled) { trace("capture.focus", { address: seq, target: "notes", route: "##j" }); focusCapture("notes", "##j"); }
-      else if (a === "q" && quotesEnabled) { trace("capture.focus", { address: seq, target: "notes", route: "##q" }); focusCapture("notes", "##q"); }
-      else if (a === "t" && sectionsEnabled.today) { trace("capture.focus", { address: seq, target: "tasks", route: "##t" }); focusCapture("tasks", "##t"); }
-      else if (a === "d" && sectionsEnabled.daily) { trace("capture.focus", { address: seq, target: "tasks", route: "##d" }); focusCapture("tasks", "##d"); }
-      else if (a === "b" && sectionsEnabled.backlog) { trace("capture.focus", { address: seq, target: "tasks", route: "##b" }); focusCapture("tasks", "##b"); }
-      else if (n >= 1 && n <= 9) {
-        // Note priorities off → the flat n[1-9] scheme: the digit is the row.
-        // On → the tier-row scheme (tier digit 4 = unmarked, then the row).
-        if (!notePrioritiesEnabled) {
-          const id = noteIdAt(null, n);
-          if (id) { focusNote(id); trace("focus.note", { via: "address", address: seq, id }); }
-          else trace("focus.miss", { address: seq });
-          return;
-        }
-        const idx = Number(b);
-        if (!(idx >= 1 && idx <= 9)) {
-          // Tier digit in, index still coming — hold the sequence open.
-          pendingAddr.current = seq;
-          return;
-        }
-        const tier = n === 4 ? null : (n as 1 | 2 | 3);
-        const id = noteIdAt(tier, idx);
-        if (id) { focusNote(id); trace("focus.note", { via: "address", address: seq, id }); }
-        else trace("focus.miss", { address: seq });
-      }
-    } else if ((p === "t" || p === "d") && n >= 1 && n <= 9) {
-      const item = renderItems[p === "t" ? "today" : "daily"][n - 1];
-      if (item) { focusItem(item.id); trace("focus.task", { via: "address", address: seq, id: item.id }); }
-      else trace("focus.miss", { address: seq });
-    } else if (p === "g" && n >= 1 && n <= 9) {
-      const id = goalIdAt(n);
-      if (id) { focusGoal(id); trace("focus.goal", { via: "address", address: seq, id }); }
-      else trace("focus.miss", { address: seq });
-    } else if (p === "b" && n >= 1 && n <= 9) {
-      // Task priorities off → flat b[1-9] over the Backlog's rendered order.
-      if (!taskPrioritiesEnabled) {
-        const item = renderItems.backlog[n - 1];
-        if (item) { focusItem(item.id); trace("focus.task", { via: "address", address: seq, id: item.id }); }
-        else trace("focus.miss", { address: seq });
-        return;
-      }
-      const idx = Number(b);
-      if (!(idx >= 1 && idx <= 9)) {
-        // Tier digit in, index still coming — hold the sequence open.
-        pendingAddr.current = seq;
-        return;
-      }
-      const tier = n === 4 ? null : (n as 1 | 2 | 3);
-      const item = renderItems.backlog.filter((i) => (i.priority ?? null) === tier)[idx - 1];
-      if (item) { focusItem(item.id); trace("focus.task", { via: "address", address: seq, id: item.id }); }
-      else trace("focus.miss", { address: seq });
-    }
-  };
-
-  // The mouse follows the same one-focused-thing rule as the grammar:
-  // clicking a row, note, or goal makes it the digits' target, exactly as
-  // addressing it would. Clicks elsewhere leave focus alone — Esc is the
-  // explicit way down the ladder.
-  useEffect(() => {
-    const onDown = (e: PointerEvent) => {
-      const el = e.target instanceof Element ? e.target : null;
-      const noteId = el?.closest("[data-note-id]")?.getAttribute("data-note-id");
-      if (noteId) {
-        setSelectedId(null); setFocusGoalId(null); setFocusNoteId(noteId);
-        trace("focus.note", { via: "click", id: noteId });
-        return;
-      }
-      const goalId = el?.closest("[data-goal-id]")?.getAttribute("data-goal-id");
-      if (goalId) {
-        setSelectedId(null); setFocusNoteId(null); setFocusGoalId(goalId);
-        trace("focus.goal", { via: "click", id: goalId });
-        return;
-      }
-      const itemId = el?.closest("[data-item-id]")?.getAttribute("data-item-id");
-      if (itemId) {
-        setFocusNoteId(null); setFocusGoalId(null); setSelectedId(itemId);
-        trace("focus.task", { via: "click", id: itemId });
-      }
-    };
-    window.addEventListener("pointerdown", onDown);
-    return () => window.removeEventListener("pointerdown", onDown);
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // A floating surface owns the keys while it's open. Its focused input
-      // already covered typing; this also catches a blurred input behind a
-      // backdrop and freezes the page under the update overlay's swap.
-      if (helpOpen || syncSettingsOpen || paletteOpen || searchOpen || updateStatus) {
-        pendingAddr.current = "";
-        return;
-      }
-      // The quote modal owns the keys while it's open — it has no inputs, so
-      // any key means "done thinking" and dismisses (see the grace notes
-      // inside).
-      if (quoteOpen) {
-        pendingAddr.current = "";
-        // Bare modifier chords are prefixes (⌘P/⌘F still work via their own
-        // listener) and don't dismiss. Every other key does.
-        const chordPrefix = e.metaKey || e.ctrlKey || e.altKey || e.key === "Shift";
-        if (!chordPrefix) {
-          e.preventDefault();
-          setQuoteOpen(false);
-        }
-        return;
-      }
-      if (e.metaKey || e.ctrlKey || e.altKey) {
-        pendingAddr.current = "";
-        return;
-      }
-      const target = e.target as HTMLElement;
-      const typing = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
-
-      if (typing) return;
-
-      // An open row popover (project / reminder / hide) owns the keyboard:
-      // focus lives inside its menu (usePopoverKeys drives ↑/↓/Enter there),
-      // so this grammar must not act on the row underneath it. One Esc on
-      // that surface closes the menu — each popover's own document listener —
-      // and the row's focus survives, because nothing here runs to clear it.
-      if (popoverOpen()) {
-        pendingAddr.current = "";
-        return;
-      }
-
-      // A pending address consumes exactly the next key — the first key of
-      // the sequence already cleared focus, so a digit here can never fire a
-      // button on the thing that had it.
-      const addr = pendingAddr.current;
-      if (addr) {
-        e.preventDefault();
-        pendingAddr.current = "";
-        resolveAddress(addr + e.key);
-        return;
-      }
-
-      // j/k + ↑/↓: with something focused they walk the rows (clamped at
-      // the ends — Esc or a new address is the only way out of focus mode).
-      // With nothing focused — the Esc ladder's bottom rung — they scroll
-      // the page instead: a view-only verb, so free mode gains a use
-      // without anything being able to happen unseen. Works in every view
-      // (the analytics page has no focusable rows).
-      const down = e.key === "j" || e.key === "ArrowDown";
-      const up = e.key === "k" || e.key === "ArrowUp";
-      if (down || up) {
-        e.preventDefault();
-        if (selectedId === null && focusNoteId === null && focusGoalId === null) {
-          // Held keys auto-repeat; one scrolled page isn't N interactions.
-          if (!e.repeat) trace("scroll", { key: e.key });
-          document.querySelector(".scroll")?.scrollBy({
-            top: down ? SCROLL_STEP : -SCROLL_STEP,
-            behavior: "smooth",
-          });
-        } else {
-          moveSelection(down ? 1 : -1);
-        }
-        return;
-      }
-
-      // The settings page's back door: Esc is "done here" (nothing on the
-      // page is ever focused — the grammar below never runs on it).
-      if (e.key === "Escape" && view === "settings") {
-        trace("view.switch", { view: "list" });
-        setView("list");
-        return;
-      }
-
-      if (view !== "list") {
-        pendingAddr.current = "";
-        return;
-      }
-
-      if (e.key === "Enter" && selectedId) {
-        const item = allVisible.find((i) => i.id === selectedId);
-        // Archived rows aren't actionable — completing one would silently
-        // vanish it (done + hidden, invisible in every mode). Unhide first.
-        if (item && !item.hidden) {
-          e.preventDefault();
-          // A done Daily carries status "active" — its done-state is today's
-          // completion record, same test handleComplete toggles on.
-          const unchecking =
-            item.status === "done" ||
-            (item.section === "daily" && item.lastCompletedDate === todayStr());
-          trace(unchecking ? "uncomplete" : "complete", { via: "enter", text: clip(item.text), section: item.section });
-          handleComplete(item.id, item.section);
-        }
-      } else if (e.key === "e") {
-        // The one edit verb, on whichever thing is focused.
-        if (selectedId) { e.preventDefault(); trace("edit.start", { via: "e", subject: "task" }); setEditingId(selectedId); }
-        else if (focusNoteId) { e.preventDefault(); trace("edit.start", { via: "e", subject: "note" }); focusNoteEditor(focusNoteId); }
-        else if (focusGoalId) { e.preventDefault(); trace("edit.start", { via: "e", subject: "goal" }); focusGoalEditor(focusGoalId); }
-      } else if (e.key === "Escape") {
-        // Ladder rung focused → nothing. (editing → focused is each edit
-        // surface's own Escape — cancel/flush and blur, landing on the thing
-        // still focused here. An open popover is a higher rung, handled by
-        // the gate above.)
-        trace("focus.clear");
-        clearFocus();
-      } else if (/^[1-9]$/.test(e.key)) {
-        // Fire the focused thing's Nth button (data-kb markers, visual
-        // order). Nothing focused → nothing happens, by design.
-        const scope = selectedId
-          ? document.querySelector(`[data-item-id="${selectedId}"]`)
-          : focusNoteId
-            ? document.querySelector(`[data-note-id="${focusNoteId}"]`)
-            : focusGoalId
-              ? document.querySelector(`[data-goal-id="${focusGoalId}"]`)
-              : null;
-        if (scope) { e.preventDefault(); clickKbButton(scope, Number(e.key)); }
-      } else if (ADDRESS_KEYS.has(e.key)) {
-        // Address prefix. Clears focus first — the user's safety rule — then
-        // waits for the one or two keys that complete it.
-        e.preventDefault();
-        clearFocus();
-        pendingAddr.current = e.key;
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allVisible, selectedId, focusNoteId, focusGoalId, view, helpOpen, syncSettingsOpen, paletteOpen, searchOpen, quoteOpen, updateStatus, renderItems, activeTimer]);
-
-  // The j/k walk spans the page's addressable rows in visual order — goal
-  // rows (DOM order; Goals owns the list), then notes, then the task rows.
-  // A focused goal, note, and row are one walk: focus crosses the surfaces
-  // and clamps at the page's ends, never dropping.
-  const moveSelection = (delta: number) => {
-    const attrs = (attr: string) => Array.from(document.querySelectorAll(`[${attr}]`))
-      .map((el) => el.getAttribute(attr) ?? "")
-      .filter(Boolean);
-    const noteIds = attrs("data-note-id");
-    const goalIds = attrs("data-goal-id");
-    const walk = [...goalIds, ...noteIds, ...allVisible.map((i) => i.id)];
-    const cur = focusGoalId ?? focusNoteId ?? selectedId;
-    const idx = walk.indexOf(cur ?? "");
-    const next = idx === -1
-      ? (delta > 0 ? 0 : walk.length - 1)
-      : Math.min(walk.length - 1, Math.max(0, idx + delta));
-    const id = walk[next] ?? null;
-    // Only real moves act — a held key clamped at an end is one position,
-    // not a stream of no-ops.
-    if (!id || id === cur) return;
-    trace("focus.step", { to: id, dir: delta > 0 ? "next" : "prev" });
-    if (goalIds.includes(id)) focusGoal(id);
-    else if (noteIds.includes(id)) focusNote(id);
-    else focusItem(id);
-  };
 
   // ---- Render ----------------------------------------------------------
 
@@ -2474,201 +2008,35 @@ function DayAppBody() {
       {/* data-tauri-drag-region makes the bar draggable on every platform —
           Linux WebKitGTK doesn't honor the -webkit-app-region CSS that macOS
           rides on. Buttons carry no attribute, so they stay clickable. */}
-      <header className="header" data-tauri-drag-region>
-        {/* The list view carries the brand — "Live @ Faraz" is home, and every
-            2 minutes it steps out to a random MASTHEAD_THEMES word and back
-            (keyed so each swap fades in; see title-in in index.css). The
-            analytics view carries its own title. Always rendered — the timer
-            chip carries no task-name text (tooltip only), so the two coexist
-            on the 480px window. Below ~455px the media query in index.css
-            hides the masthead.
-
-            Demo mode outranks both: the masthead reads "Live @ Demo" in every
-            view while the disposable demo db is active — the one unmissable
-            (but calm) signal of which data is on screen. */}
-        <span className="title" data-tauri-drag-region key={demoMode ? "demo" : view === "list" ? liveAt : view}>
-          {demoMode ? "Live @ Demo" : view === "analytics" ? "Analytics" : view === "journal" ? "Journal" : view === "quotes" ? "Quotes" : view === "settings" ? "Settings" : `Live @ ${liveAt}`}
-        </span>
-        <div className="header-right">
-          {/* Demo mode's standing exit — the labeled door beside the ⌘P
-              entry, first in the cluster so it sits left of the icon
-              buttons. It IS the first-run tour's on-ramp (a brand-new
-              install launches straight into the demo), so it reads as text,
-              not an icon. The demo.enter/exit trace rides the demoMode
-              transition effect; the click only fires the swap. */}
-          {demoMode && (
-            <button
-              className="demo-exit"
-              onClick={() => demoApi.exit().catch((e) => log.error("demo exit failed", e))}
-              title="Leave the sample data — back to your real list"
-            >
-              Exit Demo
-            </button>
-          )}
-          {/* The running timer is always visible here — survives scrolling away
-              from the timed row, and doubles as a "current focus" display.
-              Pulse + elapsed only; the task name rides in the tooltip so the
-              centered masthead never has to hide. Click to stop (keep the
-              session); × discards it entirely. */}
-          {activeTimer && (
-            <div className="timer-chip" title="Timer running">
-              <button
-                className="timer-chip-main"
-                onClick={() => handleToggleTimer(activeTimer.itemId)}
-                title={`Stop timer (keep session) — ${activeTimer.itemText || "Timer"}`}
-              >
-                <span className="timer-chip-pulse" />
-                <span className="timer-chip-elapsed">{formatLiveDuration(liveElapsed)}</span>
-              </button>
-              <button
-                className="timer-chip-discard"
-                onClick={handleDiscardTimer}
-                title="Discard session (don't save)"
-                aria-label="Discard timer"
-              ><IconX /></button>
-            </div>
-          )}
-          {/* The command palette's mouse door — opens what ⌘P opens. First in
-              the icon cluster: the palette is the primary door, and this is
-              the way in for people who never learn the chord. The glyph
-              mirrors the platform's real modifier: ⌘ on macOS, the prompt
-              field where Ctrl rules (no Ctrl pictograph exists to draw). */}
-          {headerBtns.palette && (
-            <button
-              className="icon-btn"
-              onClick={() => setPaletteOpen(true)}
-              title={isMac ? "Open command palette (⌘P)" : "Open command palette (Ctrl+P)"}
-              aria-label="Open command palette"
-            >
-              <IconCommandPalette />
-            </button>
-          )}
-          {/* ◐ toggles the hidden surfaces that exist (each archive axis has
-              its Settings switch — a switched-off axis never flips): all
-              enabled surfaces together. Settings → Header picks whether the
-              button mounts at all. */}
-          {headerBtns.hidden &&
-            (taskHideEnabled || dailyPauseEnabled || noteHideEnabled || goalArchive) && (
-            <button
-              className={`icon-btn ${hiddenShown ? "active" : ""}`}
-              onClick={() => {
-                const next = !hiddenShown;
-                trace("toggle.hidden", { show: next });
-                if (taskHideEnabled) setShowHiddenItems(next);
-                if (dailyPauseEnabled) setShowPausedDaily(next);
-                if (noteHideEnabled) setShowHiddenNotes(next);
-                if (goalArchive) setShowHiddenGoals(next);
-              }}
-              title={hiddenShown ? "Hide hidden entries" : "Show hidden entries inline"}
-              aria-label="Toggle hidden entries"
-            >
-              {/* The ◐ mark, drawn at the set's size — the text glyph rode
-                  the font's metrics and rendered oversized. */}
-              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-                <circle cx="8" cy="8" r="5.9" fill="none" stroke="currentColor" strokeWidth="1.7" />
-                <path d="M8 2.1a5.9 5.9 0 0 1 0 11.8Z" fill="currentColor" stroke="none" />
-              </svg>
-            </button>
-          )}
-          {headerBtns.analytics && (
-            <button
-              className={`icon-btn ${view === "analytics" ? "active" : ""}`}
-              onClick={() => {
-                const next = view === "analytics" ? "list" : "analytics";
-                trace("view.switch", { view: next });
-                setView(next);
-              }}
-              title={view === "analytics" ? "Back to list" : "View analytics"}
-              aria-label="Toggle analytics"
-            >
-              {view === "analytics" ? <CloseIcon /> : <AnalyticsIcon />}
-            </button>
-          )}
-          {/* The Journal view's door (the written word; Analytics keeps the
-              numbers). Same per-button toggle as the analytics door: the
-              active view's button reads the close X and returns to the list. */}
-          {journalEnabled && headerBtns.journal && (
-            <button
-              className={`icon-btn ${view === "journal" ? "active" : ""}`}
-              onClick={() => {
-                const next = view === "journal" ? "list" : "journal";
-                trace("view.switch", { view: next });
-                setView(next);
-              }}
-              title={view === "journal" ? "Back to list" : "View journal"}
-              aria-label="Toggle journal"
-            >
-              {view === "journal" ? <CloseIcon /> : <JournalIcon />}
-            </button>
-          )}
-          {/* The Quotes view's door (the ##q pool, browsed and edited; the
-              modal keeps the summoned moment). Same per-button toggle: the
-              active view's button reads the close X and returns to the list. */}
-          {quotesEnabled && headerBtns.quotes && (
-            <button
-              className={`icon-btn ${view === "quotes" ? "active" : ""}`}
-              onClick={() => {
-                const next = view === "quotes" ? "list" : "quotes";
-                trace("view.switch", { view: next });
-                setView(next);
-              }}
-              title={view === "quotes" ? "Back to list" : "View quotes"}
-              aria-label="Toggle quotes"
-            >
-              {view === "quotes" ? <CloseIcon /> : <QuotesIcon />}
-            </button>
-          )}
-          {/* The theme cycle — one click to the next theme in the ladder. The
-              glyph is the active theme's mode: night the moon, day the sun,
-              subscripted by the slot within the mode while the mode has more
-              than one theme. */}
-          {headerBtns.theme && (
-          <button
-            className="icon-btn theme-cycle"
-            onClick={cycleTheme}
-            title={`Theme: ${activeTheme.name}`}
-            aria-label="Cycle theme"
-          >
-            {themeIsLight(activeTheme) ? <IconSun /> : <IconMoon />}
-            {themeSlot.count > 1 && (
-              <span className="theme-idx" aria-hidden="true">{themeSlot.index}</span>
-            )}
-          </button>
-          )}
-          {/* The Settings door (the gear) — same per-button toggle as the
-              other view doors: active reads the close X and returns. */}
-          {headerBtns.settings && (
-            <button
-              className={`icon-btn ${view === "settings" ? "active" : ""}`}
-              onClick={() => {
-                const next = view === "settings" ? "list" : "settings";
-                trace("view.switch", { view: next });
-                setView(next);
-              }}
-              title={view === "settings" ? "Back to list" : "Open settings"}
-              aria-label="Toggle settings"
-            >
-              {view === "settings" ? <CloseIcon /> : <SettingsIcon />}
-            </button>
-          )}
-          {/* The release-update door (release installs only — source
-              checkouts use ⌘P → Update App Locally instead): mounts only
-              while a newer release exists on the channel; one click
-              downloads, signature-verifies, and swaps the app in place.
-              Hidden in demo mode — a relaunch would end the demo session
-              (and a first-run tour has no update to take anyway). */}
-          {releaseUpdate && !demoMode && (
-            <button
-              className="icon-btn update-ready"
-              onClick={startReleaseUpdate}
-              title={`Update available: v${releaseUpdate} — download & install`}
-              aria-label="Install available update"
-            >
-              <UpdateIcon />
-            </button>
-          )}
-        </div>
-      </header>
+      <Header
+        view={view}
+        onSwitchView={setView}
+        liveAt={liveAt}
+        demoMode={demoMode}
+        activeTimer={activeTimer}
+        liveElapsed={liveElapsed}
+        onStopTimer={handleToggleTimer}
+        onDiscardTimer={handleDiscardTimer}
+        headerBtns={headerBtns}
+        onOpenPalette={() => setPaletteOpen(true)}
+        archiveShown={hiddenShown}
+        archiveAnyAxis={taskHideEnabled || dailyPauseEnabled || noteHideEnabled || goalArchive}
+        onToggleArchive={(next) => {
+          if (taskHideEnabled) setShowHiddenItems(next);
+          if (dailyPauseEnabled) setShowPausedDaily(next);
+          if (noteHideEnabled) setShowHiddenNotes(next);
+          if (goalArchive) setShowHiddenGoals(next);
+        }}
+        journalEnabled={journalEnabled}
+        quotesEnabled={quotesEnabled}
+        themeName={activeTheme.name}
+        themeLight={themeIsLight(activeTheme)}
+        themeSlotIndex={themeSlot.index}
+        themeSlotCount={themeSlot.count}
+        onCycleTheme={cycleTheme}
+        releaseUpdate={releaseUpdate}
+        onStartReleaseUpdate={startReleaseUpdate}
+      />
 
       {/* Single scroll container — the whole body (notes + sections, or the
           analytics page) scrolls as one page. See AGENTS.md. */}
