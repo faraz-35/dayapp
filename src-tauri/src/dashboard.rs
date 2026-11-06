@@ -217,6 +217,11 @@ pub struct TierCount {
 #[serde(rename_all = "camelCase")]
 pub struct Totals {
     pub count: i64,
+    /// The Done lens's section split of the range's completions: daily
+    /// habits vs today tasks (backlog completions ride `count` only). Zero
+    /// under Created and Missed.
+    pub daily_done: i64,
+    pub today_done: i64,
     pub daily_missed: i64,
     pub today_missed: i64,
 }
@@ -302,10 +307,14 @@ pub struct DayDetail {
 
 /// An item's standing on one day, folded from that day's completed/
 /// uncompleted events in id order: `done` is true only when the last such
-/// event is a completion (and was admitted by the scope).
+/// event is a completion (and was admitted by the scope). The snapshot
+/// fields ride that completion.
 #[derive(Default)]
 struct Effective {
     done: bool,
+    /// The section the completion came from — the Daily done / Today done
+    /// hero split (backlog completions ride the total only).
+    from_section: Option<String>,
     project: Option<String>,
     priority: Option<i64>,
     /// Current-axis read (assignments are unlogged) — the Agent vs Mine split.
@@ -816,7 +825,7 @@ impl Db {
                 ))
             })?;
             for row in rows {
-                let (ts, item, action, _from_section, project, priority, agent) = row?;
+                let (ts, item, action, from_section, project, priority, agent) = row?;
                 let Some(day) = day_key_of_ts(&ts) else { continue };
                 // Only completions whose snapshot axes — and whose item's
                 // current delegation flag — match enter; uncompletions always
@@ -828,6 +837,7 @@ impl Db {
                 let slot = done_by_day.entry(day).or_default().entry(item).or_default();
                 slot.done = admit;
                 if admit {
+                    slot.from_section = from_section;
                     slot.project = project;
                     slot.priority = priority;
                     slot.agent = agent != 0;
@@ -877,7 +887,7 @@ impl Db {
         // ---- Heatmap window ----------------------------------------------------
         let heatmap = heat_days(&per_day, &heat_start, &today);
 
-        // ---- Project / priority splits (range days only) -----------------------
+        // ---- Project / priority splits + the section totals (range days only) ---
         let range_start = start_d.format("%Y-%m-%d").to_string();
         let range_end = end_d.format("%Y-%m-%d").to_string();
         let mut proj_counts: HashMap<Option<String>, i64> = HashMap::new();
@@ -890,6 +900,11 @@ impl Db {
             for e in m.values() {
                 if !e.done {
                     continue;
+                }
+                match e.from_section.as_deref() {
+                    Some("daily") => totals.daily_done += 1,
+                    Some("today") => totals.today_done += 1,
+                    _ => {}
                 }
                 *proj_counts.entry(e.project.clone()).or_insert(0) += 1;
                 *tier_counts.entry(e.priority).or_insert(0) += 1;
@@ -1474,6 +1489,9 @@ mod tests {
         assert_eq!(by["2026-01-04"].daily_missed, 0);
         assert_eq!(by["2026-01-05"].daily_missed, 1);
         assert_eq!(s.totals.count, 6);
+        // All six completions came from the daily section.
+        assert_eq!(s.totals.daily_done, 6);
+        assert_eq!(s.totals.today_done, 0);
         assert_eq!(s.totals.daily_missed, 2);
         assert_eq!(s.totals.today_missed, 1);
         let _ = std::fs::remove_dir_all(&dir);
@@ -1505,6 +1523,11 @@ mod tests {
         }
         let s = db.journal_dashboard(Some("2026-01-02"), Some("2026-01-03"), &ScopeFilter::default(), Subject::Done).unwrap();
         assert_eq!(s.days[0].count, 2); // D once + E; F's completion was undone
+        // The section split: D completed from Today; E came from Backlog and
+        // rides the total only; F's undone completion contributes nothing.
+        assert_eq!(s.totals.daily_done, 0);
+        assert_eq!(s.totals.today_done, 1);
+        assert_eq!(s.totals.count, 2);
         // Splits read the snapshot columns of the effective completions only
         // (F's undone completion contributes nothing, and no live projects
         // exist to zero-fill).

@@ -1611,7 +1611,8 @@ Journal / Quotes icons):**
   fold — no uncomplete inverse exists); Missed makes the two verdicts the subject
   itself — the heatmap counts misses per day, the splits read the miss rows, the
   hero shows Missed/Daily missed/Today missed (each lens shows its own numbers: Done →
-  done/avg, Created → creations/avg, Missed → the verdicts/avg; the miss stats never ride
+  done + its Daily done / Today done section split, Created → creations/avg, Missed →
+  the verdicts/avg; the miss stats never ride
   the Done tab). Same shapes, same scope filter
   (creations snapshot their axes at birth like every action); the day detail
   surfaces the subject's rows (creations with a `+`; under Missed, no ✓ rows at
@@ -1659,7 +1660,9 @@ Journal / Quotes icons):**
 - **Stats**: each lens shows its own numbers, centered in its hero column — Done →
   **Done** (effective
   completions — a complete→uncheck→never-again arc doesn't
-  count, a re-completed misclick counts once); Created → **Created**;
+  count, a re-completed misclick counts once) with its section split, **Daily done**
+  (completed from the Daily section) / **Today done** (completed from Today; backlog
+  completions ride the total only); Created → **Created**;
   Missed → **Missed**, **Daily missed** (habits the day ended without — replayed from the log
   itself, so deleted habits count for the days they existed; pauses fold in with the
   habit: a `paused`/`unpaused` window's days are never missed, the days before the

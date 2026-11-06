@@ -333,6 +333,11 @@ export interface DashboardStats {
   agents: { agent: number; mine: number };
   totals: {
     count: number;
+    /** The Done lens's section split of the range's completions: daily
+     *  habits vs today tasks (backlog completions ride `count` only). Zero
+     *  under Created and Missed. */
+    dailyDone: number;
+    todayDone: number;
     dailyMissed: number;
     todayMissed: number;
   };
