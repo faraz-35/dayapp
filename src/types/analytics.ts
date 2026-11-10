@@ -67,6 +67,11 @@ export interface DashboardStats {
      * under Created and Missed. */
     dailyDone: number;
     todayDone: number;
+    /** The Created lens's section split of the range's creations: which
+     * list each task entered at birth. Zero under Done and Missed. */
+    dailyCreated: number;
+    todayCreated: number;
+    backlogCreated: number;
     dailyMissed: number;
     todayMissed: number;
   };

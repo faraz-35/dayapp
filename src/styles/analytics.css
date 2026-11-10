@@ -166,22 +166,6 @@
 .cal-cell:not(.blank):not(.future):not(.today):hover {
   box-shadow: inset 0 0 0 1px var(--text-dim);
 }
-/* The intensity legend, GitHub-style. */
-.hm-legend {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  justify-content: flex-end;
-  margin-top: 6px;
-  font-size: 9px;
-  color: var(--text-faint);
-}
-.hm-legend i {
-  width: 10px;
-  height: 10px;
-  border-radius: 2.5px;
-  display: inline-block;
-}
 
 /* Distribution cards: project bars + the segmented priority bar. */
 .an-split-row {

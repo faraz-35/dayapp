@@ -222,6 +222,12 @@ pub struct Totals {
     /// under Created and Missed.
     pub daily_done: i64,
     pub today_done: i64,
+    /// The Created lens's section split of the range's creations: which
+    /// list each task entered at birth (`to_section`, snapshotted on the
+    /// `created` row). Zero under Done and Missed.
+    pub daily_created: i64,
+    pub today_created: i64,
+    pub backlog_created: i64,
     pub daily_missed: i64,
     pub today_missed: i64,
 }
@@ -918,11 +924,12 @@ impl Db {
     }
 
     /// The Created dashboard: one pass over `created` actions — each row is
-    /// a task that entered the list, carrying its axes at birth. No
-    /// effective-set folding (a creation is never undone), no replay, no
-    /// misses: the done-only verdicts stay zero and the frontend hides their
-    /// cards. Day keys follow the same 6am boundary, so a 1am capture
-    /// belongs to yesterday.
+    /// a task that entered the list, carrying its axes at birth, and its
+    /// `to_section` feeds the totals' section split (which list each task
+    /// entered). No effective-set folding (a creation is never undone), no
+    /// replay, no misses: the done-only verdicts stay zero and the frontend
+    /// hides their cards. Day keys follow the same 6am boundary, so a 1am
+    /// capture belongs to yesterday.
     fn created_dashboard(
         &self, since: Option<&str>, until: Option<&str>, filter: &ScopeFilter,
     ) -> anyhow::Result<DashboardStats> {
@@ -943,12 +950,13 @@ impl Db {
         // logical day shifts the wall-clock date back past 6am, which SQL
         // can't express over the text timestamps.
         let mut per_day: BTreeMap<String, i64> = BTreeMap::new();
+        let mut totals = Totals::default();
         let mut proj_counts: HashMap<Option<String>, i64> = HashMap::new();
         let mut tier_counts: HashMap<Option<i64>, i64> = HashMap::new();
         let mut agent_counts = AgentCounts { agent: 0, mine: 0 };
         {
             let mut sql = String::from(
-                "SELECT timestamp, project, priority, COALESCE(agent, 0)
+                "SELECT timestamp, to_section, project, priority, COALESCE(agent, 0)
                  FROM actions
                  WHERE item_id IS NOT NULL AND action = 'created'
                    AND timestamp >= ? AND timestamp < ?",
@@ -962,15 +970,22 @@ impl Db {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, Option<String>>(1)?,
-                    r.get::<_, Option<i64>>(2)?,
-                    r.get::<_, i64>(3)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<i64>>(3)?,
+                    r.get::<_, i64>(4)?,
                 ))
             })?;
             for row in rows {
-                let (ts, project, priority, agent) = row?;
+                let (ts, section, project, priority, agent) = row?;
                 let Some(day) = day_key_of_ts(&ts) else { continue };
                 *per_day.entry(day.clone()).or_insert(0) += 1;
                 if day.as_str() >= range_start.as_str() && day.as_str() <= range_end.as_str() {
+                    match section.as_deref() {
+                        Some("daily") => totals.daily_created += 1,
+                        Some("today") => totals.today_created += 1,
+                        Some("backlog") => totals.backlog_created += 1,
+                        _ => {}
+                    }
                     *proj_counts.entry(project).or_insert(0) += 1;
                     *tier_counts.entry(priority).or_insert(0) += 1;
                     if agent != 0 { agent_counts.agent += 1 } else { agent_counts.mine += 1 }
@@ -979,7 +994,6 @@ impl Db {
         }
 
         let mut days: Vec<DayStat> = Vec::new();
-        let mut totals = Totals::default();
         let mut d = start_d;
         while d <= end_d {
             let day = d.format("%Y-%m-%d").to_string();
@@ -1817,6 +1831,11 @@ mod tests {
         }
         let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-04"), &ScopeFilter::default(), Subject::Created).unwrap();
         assert_eq!(s.totals.count, 4);
+        // The section split reads `to_section` — three entered Today, one
+        // the Backlog, none as a habit.
+        assert_eq!(s.totals.today_created, 3);
+        assert_eq!(s.totals.daily_created, 0);
+        assert_eq!(s.totals.backlog_created, 1);
         assert_eq!(s.days.iter().find(|d| d.date == "2026-01-01").map(|d| d.count), Some(1));
         assert_eq!(s.days.iter().find(|d| d.date == "2026-01-02").map(|d| d.count), Some(3));
         assert_eq!(s.totals.daily_missed, 0);
@@ -1826,10 +1845,13 @@ mod tests {
             s.projects.iter().map(|p| (p.name.as_deref(), p.count)).collect();
         assert_eq!(names, [(Some("meridian"), 2), (Some("growth"), 1), (None, 1)]);
 
-        // Scope: meridian only — A and B's births, not C/D.
+        // Scope: meridian only — A and B's births, not C/D. The split
+        // follows the scope like every other number.
         let filter = ScopeFilter { projects: Some(vec![Some("meridian".into())]), priorities: None, agent: None };
         let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-04"), &filter, Subject::Created).unwrap();
         assert_eq!(s.totals.count, 2);
+        assert_eq!(s.totals.today_created, 2);
+        assert_eq!(s.totals.backlog_created, 0);
 
         // The day detail lists the creations; the Done lens still counts
         // the completion.

@@ -256,8 +256,9 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
             {/* Hero stats — one card, evenly spread, each metric centered in
                 its column. Each lens shows its own numbers: Done → done with
                 its section split (habits vs today tasks); Created →
-                creations; Missed → the two miss verdicts. The streak is
-                gone — the heatmap's lit cells already say it. */}
+                creations with the section split of which list they entered;
+                Missed → the two miss verdicts. The streak is gone — the
+                heatmap's lit cells already say it. */}
             <section className="an-card an-hero">
               <StatCard value={dash.totals.count} label={cap(noun)} accent />
               {avg != null && <StatCard value={avg} label="Avg / day" />}
@@ -265,6 +266,13 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
                 <>
                   <StatCard value={dash.totals.dailyDone} label="Daily done" />
                   <StatCard value={dash.totals.todayDone} label="Today done" />
+                </>
+              )}
+              {subject === "created" && (
+                <>
+                  <StatCard value={dash.totals.dailyCreated} label="Daily created" />
+                  <StatCard value={dash.totals.todayCreated} label="Today created" />
+                  <StatCard value={dash.totals.backlogCreated} label="Backlog created" />
                 </>
               )}
               {subject === "missed" && (

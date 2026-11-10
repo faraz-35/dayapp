@@ -28,10 +28,9 @@ export const shiftMonth = (view: ViewMonth, delta: number): ViewMonth => {
 };
 
 /** The viewed month as a Monday-first grid: `lead` blanks, then one cell
- *  per day (intensity = that day's count of the active subject). Anchored on
- *  the app's logical today (6am→6am), so a 1am session fills yesterday's
- *  cell. Trailing blanks aren't needed — the CSS grid just ends the last row
- *  short. */
+ *  per day (intensity = that day's count of the active subject), padded to
+ *  six week rows so every month renders the same height. Anchored on the
+ *  app's logical today (6am→6am), so a 1am session fills yesterday's cell. */
 export function monthCalendar(map: Map<string, number>, view: ViewMonth): (HeatCell | null)[] {
   const today = todayStr();
   const lead = (new Date(view.y, view.m, 1).getDay() + 6) % 7; // days before Monday
@@ -48,6 +47,7 @@ export function monthCalendar(map: Map<string, number>, view: ViewMonth): (HeatC
       isToday: date === today,
     });
   }
+  while (cells.length < 42) cells.push(null); // six rows — the tallest month
   return cells;
 }
 

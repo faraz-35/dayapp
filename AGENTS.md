@@ -485,8 +485,9 @@ the CLI renders as text — so a remote session can access any information in an
 `--search` is ⌘F (a plain substring over item text; a leading `#` flips to the project
 axis — bare `#` lists projects, `#name` lists that project's rows — and `@agent`/`@my`
 flip to the delegation axis), `--analytics [today|week|month|all|YYYY-MM-DD]` is the
-Analytics view's data plus the raw action log (the dashboard summary block — done/missed
-totals, project/priority splits — then actions grouped newest-first by day with
+Analytics view's data plus the raw action log (the dashboard summary block — the subject's
+total with its section split (done: daily/today · created: daily/today/backlog · missed:
+daily/today), project/priority splits — then actions grouped newest-first by day with
 the per-day done/missed verdict, the per-task ⏱ breakdown and day total; the log's
 textual home is here, the GUI renders aggregates plus the paginated task list;
 default `today`; further scoped

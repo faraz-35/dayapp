@@ -879,6 +879,12 @@ fn analytics(db: &Db, rest: &[String]) -> anyhow::Result<()> {
             dash.totals.daily_done, dash.totals.today_done
         ));
     }
+    if subject == crate::dashboard::Subject::Created {
+        stats.push_str(&format!(
+            " · daily created {} · today created {} · backlog created {}",
+            dash.totals.daily_created, dash.totals.today_created, dash.totals.backlog_created
+        ));
+    }
     if subject != crate::dashboard::Subject::Created {
         stats.push_str(&format!(
             " · daily missed {} · today missed {}",

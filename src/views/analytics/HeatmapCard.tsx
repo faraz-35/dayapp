@@ -12,7 +12,7 @@ import { useEffect, useMemo } from "react";
 import { PriorityBars } from "../../components/PriorityBars";
 import { useFeatures } from "../../features";
 import Chevron from "./Chevron";
-import { LEVEL_BG, currentMonth, fmtDay, level, monthCalendar, type ViewMonth } from "./calendar";
+import { currentMonth, fmtDay, level, monthCalendar, type ViewMonth } from "./calendar";
 import { formatDuration, formatReminder } from "../../lib/format";
 import { todayStr } from "../../lib/dates";
 import { DashboardSubject, DayDetail } from "../../types/analytics";
@@ -158,13 +158,6 @@ export default function HeatmapCard({
                 </button>
               ),
             )}
-          </div>
-          <div className="hm-legend">
-            Less
-            {[0, 1, 2, 3, 4].map((l) => (
-              <i key={l} style={{ background: LEVEL_BG[l] }} />
-            ))}
-            More
           </div>
         </div>
       )}
