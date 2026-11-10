@@ -856,6 +856,15 @@ separately" bug.
 inside `.scroll`. If you ever need a region to scroll independently, you are
 changing the architecture: update this section and justify why.
 
+**The one sanctioned inner scroll (2026-11-11):** the analytics Activity card's
+day detail (`.an-daycard .an-day-detail`). The card's height is FIXED — the
+calendar stays mounted (hidden) as its sizer so picking a day never resizes
+the card — and a day with more rows than the frame holds scrolls inside it
+(`overflow-y: auto`, scrollbar globally hidden). Justified by Faraz's direct
+call: the fixed frame matters more than the one-scroll purity there, and the
+frame is small enough that page scroll never competes with it. Do not cite it
+as precedent for other surfaces.
+
 ### 2. Floating surfaces vs inline chrome
 
 There are two kinds of UI elements, and they must not be mixed:
@@ -1638,21 +1647,28 @@ Journal / Quotes icons):**
   neither expected nor missed (population = the habit's current axes — the one
   remaining "currently" call; the done-check
   reads the unfiltered completion set, so a reassigned habit never reads as a phantom
-  miss). A split card whose axis is filtered hides (the filtered view already answers
-  it — a card scoped to the selection would restate the filter while disagreeing with
-  the Done stat). **Tracked time deliberately does not follow the filter** (Faraz's
-  call, 2026-08-25 — the timer is barely used, not worth snapshot columns on `sessions`):
-  time has no per-day surface at all — per-task time renders only inside the day
-  detail, on the (filtered) task rows. The Activity card is React-keyed on the
-  rendered-sibling state because WKWebView
-  doesn't re-resolve its aspect-ratio cells when the grid track re-widens on unfilter
-  (the "heatmap didn't shrink back" bug, 2026-08-25).
+  miss). A split card whose axis is filtered STAYS MOUNTED as that axis's pick surface
+  (2026-11-11): its entries are the filter — a click toggles the axis value through the
+  same handlers the FilterBar's menus use, selected entries read active (accent) while a
+  selection stands, the rest dim to faint (still clickable — multi-select, the FilterBar's
+  own semantics). The card's counts are FACET counts: each split drops its OWN axis from
+  its scope (Scope::without_* — the fold/fetches run unscoped and every consumer applies
+  its scope at read), so selecting a project never zeroes its peers on the Projects card;
+  the hero, heatmap, verdicts, day detail, and task list keep the full
+  (project OR…) AND (priority OR…) AND (agent…) scope. **Tracked time deliberately does not follow the filter**
+  (Faraz's call, 2026-08-25 — the timer is barely used, not worth snapshot columns on
+  `sessions`): time has no per-day surface at all — per-task time renders only inside the
+  day detail, on the (filtered) task rows. (The Activity card's old React-key remount —
+  a WKWebView aspect-ratio quirk that fired when split cards unmounted on filter — retired
+  with the unmounting: nothing changes the calendar's siblings anymore.)
 - **Stats**: each lens shows its own numbers, centered in its hero column — Done →
   **Done** (effective
   completions — a complete→uncheck→never-again arc doesn't
   count, a re-completed misclick counts once) with its section split, **Daily done**
   (completed from the Daily section) / **Today done** (completed from Today; backlog
-  completions ride the total only); Created → **Created**;
+  completions ride the total only); Created → **Created** with its own section split —
+  **Daily created / Today created / Backlog created**, read off each `created` row's
+  `to_section` (2026-11-11);
   Missed → **Missed**, **Daily missed** (habits the day ended without — replayed from the log
   itself, so deleted habits count for the days they existed; pauses fold in with the
   habit: a `paused`/`unpaused` window's days are never missed, the days before the

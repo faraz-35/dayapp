@@ -22,10 +22,11 @@
 // for that day's detail (HeatmapCard); picking never re-scopes the stats.
 //
 // All derivation lives in src-tauri/src/dashboard.rs; a filter whose axis is
-// selected scopes every card (a split card whose axis is filtered hides —
-// the filtered view already answers it), and tracked time deliberately
-// doesn't follow (sessions carry no axes; the day detail's per-task seconds
-// ride the filtered rows).
+// selected scopes every card — and that card stays mounted as the pick
+// surface (selected entries active, the rest dimmed, both still clickable),
+// mirroring the top-right FilterBar's menus over the same state. Tracked
+// time deliberately doesn't follow (sessions carry no axes; the day
+// detail's per-task seconds ride the filtered rows).
 
 import { useEffect, useMemo, useState } from "react";
 import { useFeatures } from "../../features";
@@ -219,15 +220,6 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
     () => new Map((dash?.heatmap ?? []).map((h) => [h.date, h.count])),
     [dash],
   );
-  // Keyed on the rendered-sibling state: the split cards unmount under their
-  // filtered axis, which re-widens the calendar's grid track — and WKWebView
-  // doesn't re-resolve aspect-ratio cells when their track changes size (the
-  // heatmap stayed big after clearing a filter). Remounting re-resolves the
-  // squares against the current width, in both directions.
-  const trackKey = `act-${filter.projects ? 1 : 0}${filter.priorities ? 1 : 0}${
-    dash?.projects.length != null && dash.projects.length > 0 ? 1 : 0
-  }`;
-
   return (
     <div className="analytics-view">
       <FilterBar
@@ -298,22 +290,35 @@ export default function AnalyticsView({ ownerName }: { ownerName?: string | null
                 filtered={hasFilter}
                 onPick={pickDay}
                 onBack={backToCalendar}
-                trackKey={trackKey}
               />
-              {/* A split card whose axis is filtered hides — the filtered
-                  view already answers it, and a card scoped to the selection
-                  would just restate the filter (100% X) while disagreeing
-                  with the hero stat. */}
-              {features.taskProjects && !filter.projects && dash.projects.length > 0 && (
-                <ProjectsCard projects={dash.projects} />
+              {/* The split cards stay mounted under their own filter — the
+                  card becomes the pick surface: selected entries active,
+                  the rest dimmed, every click toggling membership through
+                  the same handlers the FilterBar's menus use. Their counts
+                  are FACET counts (backend rule): each card drops its own
+                  axis from its split, so the others keep their real numbers
+                  while the hero/heatmap/task list carry the full
+                  (proj OR…) AND (prio OR…) AND (agent…) scope. */}
+              {features.taskProjects && dash.projects.length > 0 && (
+                <ProjectsCard projects={dash.projects} onToggle={toggleProject} selected={selProjects} />
               )}
-              {(features.taskPriorities || features.agent) && (!filter.priorities || !filter.agent) && (
+              {(features.taskPriorities || features.agent) && (
                 <div className="an-stack">
-                  {features.taskPriorities && !filter.priorities && (
-                    <PriorityCard tiers={dash.priorities} max={maxTier} />
+                  {features.taskPriorities && (
+                    <PriorityCard
+                      tiers={dash.priorities}
+                      max={maxTier}
+                      onToggle={toggleTier}
+                      selected={selTiers}
+                    />
                   )}
-                  {features.agent && !filter.agent && (
-                    <DelegationCard agents={dash.agents} ownerLabel={ownerLabel} />
+                  {features.agent && (
+                    <DelegationCard
+                      agents={dash.agents}
+                      ownerLabel={ownerLabel}
+                      onToggle={toggleAgent}
+                      selected={selAgent}
+                    />
                   )}
                 </div>
               )}

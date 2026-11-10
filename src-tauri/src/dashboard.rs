@@ -45,16 +45,18 @@ const HEATMAP_LOOKBACK_DAYS: i64 = 380;
 
 // ---- The scope filter -------------------------------------------------------
 //
-// The analytics page's axis filters: which projects / priority tiers the whole
-// dashboard derives over — stats, heatmap, splits, ledger, and day detail.
-// OR within an axis, AND across the two. Everything reads the write-time
-// snapshots (project / priority / agent on `actions`), so filtered history
-// stays deletion-proof. Two deliberate edges: tracked time does NOT follow
-// the filter (sessions carry no axes — Faraz's call, 2026-08-25, the timer is
-// barely used), and the daily-miss replay keys habits' population off their
-// CURRENT axes (the population is who the habit is now) while their done-
-// check reads the unfiltered completion set, so a habit reassigned mid-
-// history never reads as a phantom miss.
+// The analytics page's axis filters: which projects / priority tiers /
+// delegation sides the whole dashboard derives over — stats, heatmap,
+// verdicts, and day detail. OR within an axis, AND across axes. Everything
+// reads the write-time snapshots (project / priority / agent on `actions`),
+// so filtered history stays deletion-proof. Three deliberate edges: the
+// SPLIT CARDS are facets (each drops its own axis — Scope::without_* — so a
+// selected project never zeroes its peers; 2026-11-11); tracked time does
+// NOT follow the filter (sessions carry no axes — Faraz's call, 2026-08-25,
+// the timer is barely used); and the daily-miss replay's population is
+// UNSCOPED with every caller scoping at read, while its done-check reads
+// the unfiltered completion set — a habit reassigned mid-history never
+// reads as a phantom miss.
 /// The IPC shape: each axis is None (unfiltered) or a selection of values,
 /// where a None *inside* the selection is the "no project" / "unmarked"
 /// bucket. The empty selection (Some(vec![])) matches nothing.
@@ -92,6 +94,31 @@ impl Scope {
         self.allows_project(project) && self.allows_priority(priority)
     }
 
+    /// The full three-axis row test — what every count/verdict reads.
+    fn allows_row(&self, project: &Option<String>, priority: &Option<i64>, agent: bool) -> bool {
+        self.allows(project, priority) && self.allows_agent(agent)
+    }
+
+    /// The three facet views: a split card's own axis drops out of its
+    /// split's scope, so the card shows the whole distribution the OTHER
+    /// axes allow — a selected project never zeroes its peers; the card is
+    /// the pick surface, not a restatement of the filter (2026-11-11).
+    fn without_projects(&self) -> Scope {
+        let mut s = self.clone();
+        s.projects = None;
+        s
+    }
+    fn without_priorities(&self) -> Scope {
+        let mut s = self.clone();
+        s.priorities = None;
+        s
+    }
+    fn without_agent(&self) -> Scope {
+        let mut s = self.clone();
+        s.agent = None;
+        s
+    }
+
     fn allows_project(&self, p: &Option<String>) -> bool {
         self.projects.as_ref().map_or(true, |s| s.contains(p))
     }
@@ -102,10 +129,6 @@ impl Scope {
 
     fn allows_agent(&self, agent: bool) -> bool {
         self.agent.map_or(true, |a| a == agent)
-    }
-
-    fn is_empty(&self) -> bool {
-        self.projects.is_none() && self.priorities.is_none() && self.agent.is_none()
     }
 
     /// The SQL half of the filter: predicates over the `project`/`priority`/
@@ -240,9 +263,9 @@ pub struct DashboardStats {
     pub projects: Vec<ProjectCount>,
     pub priorities: Vec<TierCount>,
     /// The delegation split of the range's rows (Agent vs Mine card). Rows
-    /// passing the project/priority axes, spanning BOTH agent values — the
-    /// card hides while the agent axis itself is filtered, so the split is
-    /// always the full two-side picture.
+    /// passing the project/priority axes and spanning BOTH agent values —
+    /// the delegation axis drops out of its own card's split (the facet
+    /// rule), so the card always shows the full two-side picture.
     pub agents: AgentCounts,
     pub totals: Totals,
 }
@@ -451,19 +474,17 @@ fn apply_life_event(live: &mut HashMap<String, LiveItem>, ev: &LifeEv) {
 }
 
 /// The day's missed habits: alive daily items not inside a logged pause
-/// whose day ended without a daily completion, each with the axes the scope
-/// filter saw. Under a scope filter, only habits whose axes match are in the
-/// population — a habit outside the filter is neither expected nor missed.
-/// Axes come from the live row when it still exists, else the folded
-/// life-event snapshot. `agent_flags` is the current delegation read (the
-/// one axis the replay always carries — the Missed dashboard's split and the
-/// agent scope test both read it).
+/// whose day ended without a daily completion. The population is UNSCOPED —
+/// every caller applies its own scope at read (the counts fully; the split
+/// cards with their own axis dropped — see Scope::without_*), so one walk
+/// serves them all. Axes come from the live row when it still exists, else
+/// the folded life-event snapshot; `agent_flags` is the current delegation
+/// read (the one axis the replay always carries).
 fn missed_habits(
     live: &HashMap<String, LiveItem>,
     done_daily: &HashSet<String>,
     axes: &HashMap<String, (Option<String>, Option<i64>)>,
     agent_flags: &HashMap<String, bool>,
-    scope: &Scope,
 ) -> Vec<MissedHabit> {
     live.iter()
         .filter_map(|(id, it)| {
@@ -471,14 +492,16 @@ fn missed_habits(
                 .get(id.as_str())
                 .cloned()
                 .unwrap_or_else(|| (it.project.clone(), it.priority));
-            let agent = *agent_flags.get(id.as_str()).unwrap_or(&false);
             (it.alive
                 && it.section.as_deref() == Some("daily")
                 && !it.paused
-                && !done_daily.contains(id.as_str())
-                && scope.allows(&project, &priority)
-                && scope.allows_agent(agent))
-                .then(|| MissedHabit { text: it.text.clone(), project, priority, agent })
+                && !done_daily.contains(id.as_str()))
+                .then(|| MissedHabit {
+                    text: it.text.clone(),
+                    project,
+                    priority,
+                    agent: *agent_flags.get(id.as_str()).unwrap_or(&false),
+                })
         })
         .collect()
 }
@@ -546,26 +569,21 @@ fn daily_done_by_day(
 /// The daily-miss replay across a day span — the ONE walk every miss number
 /// reads (the Done dashboard's verdicts, the Missed dashboard's rows, the
 /// day detail's single-day freeze). For each day in `[start_d, end_d]`: the
-/// habits the day ended without. The live today gets an empty verdict —
-/// misses are a day-end verdict. Section membership folds from the log
-/// itself, so habits deleted long ago still count for the days they existed.
+/// habits the day ended without, UNSCOPED (callers apply their own scope at
+/// read — see missed_habits). The live today gets an empty verdict — misses
+/// are a day-end verdict. Section membership folds from the log itself, so
+/// habits deleted long ago still count for the days they existed.
 fn replay_daily_misses(
     conn: &rusqlite::Connection,
     start_d: chrono::NaiveDate,
     end_d: chrono::NaiveDate,
     today: &str,
-    scope: &Scope,
     done_daily_by_day: &HashMap<String, HashSet<String>>,
 ) -> anyhow::Result<BTreeMap<String, Vec<MissedHabit>>> {
     let events = fetch_life_events(conn)?;
-    // The scope's project/priority test reads the habits' current axes (the
-    // population is who the habit IS now); the delegation flag is fetched
-    // always — the rows carry it.
-    let axes = if scope.is_empty() {
-        HashMap::new()
-    } else {
-        fetch_item_axes(conn)?
-    };
+    // The habits' current axes (the live rows', falling back to the folded
+    // life-event snapshots) — what every caller's scope test reads.
+    let axes = fetch_item_axes(conn)?;
     let agent_flags = fetch_agent_flags(conn)?;
 
     let mut out = BTreeMap::new();
@@ -592,7 +610,6 @@ fn replay_daily_misses(
                 done_daily_by_day.get(&day).unwrap_or(&empty),
                 &axes,
                 &agent_flags,
-                scope,
             )
         };
         out.insert(day, missed);
@@ -615,25 +632,22 @@ struct FellRow {
     agent: bool,
 }
 
-/// The fell rows in a wall-clock window, scoped by the snapshot axes. One
-/// fetch projected by every consumer (the day detail's fell list, the Missed
-/// dashboard, the range task list).
-fn fell_rows(
-    conn: &rusqlite::Connection, lo: &str, hi: &str, scope: &Scope,
-) -> anyhow::Result<Vec<FellRow>> {
-    let mut sql = String::from(
+/// The fell rows in a wall-clock window, UNSCOPED — every caller applies
+/// its own scope at read (the counts fully; the split cards with their own
+/// axis dropped). One fetch projected by every consumer (the day detail's
+/// fell list, the Missed dashboard, the range task list).
+fn fell_rows(conn: &rusqlite::Connection, lo: &str, hi: &str) -> anyhow::Result<Vec<FellRow>> {
+    let mut stmt = conn.prepare(
         "SELECT timestamp, substr(timestamp,12,5), item_text, project, priority,
                 COALESCE(agent, 0)
          FROM actions
          WHERE item_id IS NOT NULL AND action = 'fell_to_backlog'
-           AND timestamp >= ? AND timestamp < ?",
-    );
-    let mut pv: Vec<Box<dyn rusqlite::ToSql>> =
+           AND timestamp >= ?1 AND timestamp < ?2
+         ORDER BY id",
+    )?;
+    let pv: Vec<Box<dyn rusqlite::ToSql>> =
         vec![Box::new(lo.to_string()), Box::new(hi.to_string())];
-    scope.push_sql(&mut sql, &mut pv);
-    sql.push_str(" ORDER BY id");
     let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
-    let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(refs.as_slice(), |r| {
         Ok((
             r.get::<_, String>(0)?,
@@ -833,16 +847,14 @@ impl Db {
             for row in rows {
                 let (ts, item, action, from_section, project, priority, agent) = row?;
                 let Some(day) = day_key_of_ts(&ts) else { continue };
-                // Only completions whose snapshot axes — and whose item's
-                // current delegation flag — match enter; uncompletions always
-                // flip any existing entry false, so the effective
-                // (last-event-wins) semantics survive.
-                let admit = action == "completed"
-                    && scope.allows(&project, &priority)
-                    && scope.allows_agent(agent != 0);
+                // The fold itself is UNSCOPED — last-event-wins, the entry
+                // carrying its last completion's snapshots. Every consumer
+                // applies its own scope at read (equivalent to admitting at
+                // fold time, and what lets each axis's split drop its own
+                // test — see Scope::without_*).
                 let slot = done_by_day.entry(day).or_default().entry(item).or_default();
-                slot.done = admit;
-                if admit {
+                slot.done = action == "completed";
+                if slot.done {
                     slot.from_section = from_section;
                     slot.project = project;
                     slot.priority = priority;
@@ -853,36 +865,47 @@ impl Db {
 
         // ---- Today misses -----------------------------------------------------
         // fell_to_backlog is the sweep's own record of a today task the day
-        // ended without — nothing to derive. Scoped by the snapshot axes;
-        // the counts fold from the shared row fetch (the scan window keeps
-        // the day rows range-bounded).
-        let fell_by_day: HashMap<String, i64> = fell_rows(&conn, &scan_lo, &scan_end, &scope)?
-        .into_iter()
-        .fold(HashMap::new(), |mut m, f| {
-            *m.entry(f.day).or_insert(0) += 1;
-            m
-        });
+        // ended without — nothing to derive. The shared fetch is unscoped;
+        // the counts admit by the full scope (the scan window keeps the day
+        // rows range-bounded).
+        let fell_by_day: HashMap<String, i64> = fell_rows(&conn, &scan_lo, &scan_end)?
+            .into_iter()
+            .filter(|f| scope.allows_row(&f.project, &f.priority, f.agent))
+            .fold(HashMap::new(), |mut m, f| {
+                *m.entry(f.day).or_insert(0) += 1;
+                m
+            });
 
         // ---- Daily-miss replay ------------------------------------------------
-        // The shared walk (see replay_daily_misses); its per-day lists feed
-        // the verdicts here.
+        // The shared walk (see replay_daily_misses); its unscoped per-day
+        // lists feed the verdicts here, admitted by the full scope.
         let (start_d, end_d) = day_span(&conn, since, until, today_d)?;
         let done_daily_by_day = daily_done_by_day(&conn, &scan_lo, &scan_end)?;
         let missed_by_day =
-            replay_daily_misses(&conn, start_d, end_d, &today, &scope, &done_daily_by_day)?;
+            replay_daily_misses(&conn, start_d, end_d, &today, &done_daily_by_day)?;
 
         // The subject's per-day counts — the day rows and the heatmap both
         // read these.
         let per_day: BTreeMap<String, i64> = done_by_day
             .iter()
-            .map(|(day, m)| (day.clone(), m.values().filter(|e| e.done).count() as i64))
+            .map(|(day, m)| {
+                (
+                    day.clone(),
+                    m.values()
+                        .filter(|e| e.done && scope.allows_row(&e.project, &e.priority, e.agent))
+                        .count() as i64,
+                )
+            })
             .collect();
 
         let mut days: Vec<DayStat> = Vec::new();
         let mut totals = Totals::default();
         for (day, missed) in &missed_by_day {
             let count = per_day.get(day).copied().unwrap_or(0);
-            let daily_missed = missed.len() as i64;
+            let daily_missed = missed
+                .iter()
+                .filter(|h| scope.allows_row(&h.project, &h.priority, h.agent))
+                .count() as i64;
             let today_missed = fell_by_day.get(day).copied().unwrap_or(0);
             totals.count += count;
             totals.daily_missed += daily_missed;
@@ -894,8 +917,14 @@ impl Db {
         let heatmap = heat_days(&per_day, &heat_start, &today);
 
         // ---- Project / priority splits + the section totals (range days only) ---
+        // The section split is a hero number — fully scoped. Each card's
+        // split drops its own axis (the facet rule), so the card keeps the
+        // whole distribution the other axes allow.
         let range_start = start_d.format("%Y-%m-%d").to_string();
         let range_end = end_d.format("%Y-%m-%d").to_string();
+        let scope_proj = scope.without_projects();
+        let scope_tier = scope.without_priorities();
+        let scope_agent = scope.without_agent();
         let mut proj_counts: HashMap<Option<String>, i64> = HashMap::new();
         let mut tier_counts: HashMap<Option<i64>, i64> = HashMap::new();
         let mut agent_counts = AgentCounts { agent: 0, mine: 0 };
@@ -907,14 +936,22 @@ impl Db {
                 if !e.done {
                     continue;
                 }
-                match e.from_section.as_deref() {
-                    Some("daily") => totals.daily_done += 1,
-                    Some("today") => totals.today_done += 1,
-                    _ => {}
+                if scope.allows_row(&e.project, &e.priority, e.agent) {
+                    match e.from_section.as_deref() {
+                        Some("daily") => totals.daily_done += 1,
+                        Some("today") => totals.today_done += 1,
+                        _ => {}
+                    }
                 }
-                *proj_counts.entry(e.project.clone()).or_insert(0) += 1;
-                *tier_counts.entry(e.priority).or_insert(0) += 1;
-                if e.agent { agent_counts.agent += 1 } else { agent_counts.mine += 1 }
+                if scope_proj.allows_row(&e.project, &e.priority, e.agent) {
+                    *proj_counts.entry(e.project.clone()).or_insert(0) += 1;
+                }
+                if scope_tier.allows_row(&e.project, &e.priority, e.agent) {
+                    *tier_counts.entry(e.priority).or_insert(0) += 1;
+                }
+                if scope_agent.allows_row(&e.project, &e.priority, e.agent) {
+                    if e.agent { agent_counts.agent += 1 } else { agent_counts.mine += 1 }
+                }
             }
         }
         let projects = finish_projects(&conn, proj_counts)?;
@@ -948,25 +985,26 @@ impl Db {
 
         // Counted in Rust for the same reason as every day-keyed fold — the
         // logical day shifts the wall-clock date back past 6am, which SQL
-        // can't express over the text timestamps.
+        // can't express over the text timestamps. The fetch is UNSCOPED;
+        // every consumer applies its own scope at read: the day counts and
+        // the section split by the full scope, each card's split with its
+        // own axis dropped (the facet rule — Scope::without_*).
         let mut per_day: BTreeMap<String, i64> = BTreeMap::new();
         let mut totals = Totals::default();
         let mut proj_counts: HashMap<Option<String>, i64> = HashMap::new();
         let mut tier_counts: HashMap<Option<i64>, i64> = HashMap::new();
         let mut agent_counts = AgentCounts { agent: 0, mine: 0 };
         {
-            let mut sql = String::from(
+            let scope_proj = scope.without_projects();
+            let scope_tier = scope.without_priorities();
+            let scope_agent = scope.without_agent();
+            let mut stmt = conn.prepare(
                 "SELECT timestamp, to_section, project, priority, COALESCE(agent, 0)
                  FROM actions
                  WHERE item_id IS NOT NULL AND action = 'created'
-                   AND timestamp >= ? AND timestamp < ?",
-            );
-            let mut pv: Vec<Box<dyn rusqlite::ToSql>> =
-                vec![Box::new(scan_lo), Box::new(scan_end)];
-            scope.push_sql(&mut sql, &mut pv);
-            let refs: Vec<&dyn rusqlite::ToSql> = pv.iter().map(|p| p.as_ref()).collect();
-            let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt.query_map(refs.as_slice(), |r| {
+                   AND timestamp >= ?1 AND timestamp < ?2",
+            )?;
+            let rows = stmt.query_map(params![scan_lo, scan_end], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, Option<String>>(1)?,
@@ -978,17 +1016,35 @@ impl Db {
             for row in rows {
                 let (ts, section, project, priority, agent) = row?;
                 let Some(day) = day_key_of_ts(&ts) else { continue };
-                *per_day.entry(day.clone()).or_insert(0) += 1;
-                if day.as_str() >= range_start.as_str() && day.as_str() <= range_end.as_str() {
-                    match section.as_deref() {
-                        Some("daily") => totals.daily_created += 1,
-                        Some("today") => totals.today_created += 1,
-                        Some("backlog") => totals.backlog_created += 1,
-                        _ => {}
+                let agent = agent != 0;
+                let in_range =
+                    day.as_str() >= range_start.as_str() && day.as_str() <= range_end.as_str();
+                // The counts and the section split are hero numbers — fully
+                // scoped. The facet splits run independently below: a row
+                // the project axis rejects still reaches the projects split
+                // (its own axis dropped), so the card never collapses to
+                // the selection.
+                if scope.allows_row(&project, &priority, agent) {
+                    *per_day.entry(day.clone()).or_insert(0) += 1;
+                    if in_range {
+                        match section.as_deref() {
+                            Some("daily") => totals.daily_created += 1,
+                            Some("today") => totals.today_created += 1,
+                            Some("backlog") => totals.backlog_created += 1,
+                            _ => {}
+                        }
                     }
-                    *proj_counts.entry(project).or_insert(0) += 1;
-                    *tier_counts.entry(priority).or_insert(0) += 1;
-                    if agent != 0 { agent_counts.agent += 1 } else { agent_counts.mine += 1 }
+                }
+                if in_range {
+                    if scope_proj.allows_row(&project, &priority, agent) {
+                        *proj_counts.entry(project.clone()).or_insert(0) += 1;
+                    }
+                    if scope_tier.allows_row(&project, &priority, agent) {
+                        *tier_counts.entry(priority).or_insert(0) += 1;
+                    }
+                    if scope_agent.allows_row(&project, &priority, agent) {
+                        if agent { agent_counts.agent += 1 } else { agent_counts.mine += 1 }
+                    }
                 }
             }
         }
@@ -1031,7 +1087,9 @@ impl Db {
 
         // The replay walks the heatmap's whole window (the calendar's misses
         // must exist outside the range too), so its done-check fold covers
-        // the same span.
+        // the same span. Both fetches are UNSCOPED; every consumer applies
+        // its own scope at read — counts by the full scope, the split cards
+        // with their own axis dropped (the facet rule).
         let heat_start_d = NaiveDate::parse_from_str(&heat_start, "%Y-%m-%d")?;
         let done_daily_by_day = daily_done_by_day(&conn, &scan_lo, &scan_end)?;
         let missed_by_day = replay_daily_misses(
@@ -1039,11 +1097,14 @@ impl Db {
             start_d.min(heat_start_d),
             today_d.max(end_d),
             &today,
-            &scope,
             &done_daily_by_day,
         )?;
-        let fell = fell_rows(&conn, &scan_lo, &scan_end, &scope)?;
-        let fell_by_day: HashMap<String, i64> = fell.iter().fold(HashMap::new(), |mut m, f| {
+        let fell = fell_rows(&conn, &scan_lo, &scan_end)?;
+        let fell_scoped: Vec<&FellRow> = fell
+            .iter()
+            .filter(|f| scope.allows_row(&f.project, &f.priority, f.agent))
+            .collect();
+        let fell_by_day: HashMap<String, i64> = fell_scoped.iter().fold(HashMap::new(), |mut m, f| {
             *m.entry(f.day.clone()).or_insert(0) += 1;
             m
         });
@@ -1051,14 +1112,22 @@ impl Db {
         // Per-day counts over the whole walk — the heatmap reads it all.
         let mut per_day: BTreeMap<String, i64> = BTreeMap::new();
         for (day, habits) in &missed_by_day {
-            *per_day.entry(day.clone()).or_insert(0) += habits.len() as i64;
+            let n = habits
+                .iter()
+                .filter(|h| scope.allows_row(&h.project, &h.priority, h.agent))
+                .count() as i64;
+            *per_day.entry(day.clone()).or_insert(0) += n;
         }
-        for f in &fell {
+        for f in &fell_scoped {
             *per_day.entry(f.day.clone()).or_insert(0) += 1;
         }
 
-        // The splits read the range's miss rows only: fell rows carry their
-        // at-the-fall snapshots, missed habits the axes the replay saw.
+        // The splits read the range's miss rows only — each card's split
+        // with its own axis dropped: fell rows carry their at-the-fall
+        // snapshots, missed habits the axes the replay saw.
+        let scope_proj = scope.without_projects();
+        let scope_tier = scope.without_priorities();
+        let scope_agent = scope.without_agent();
         let mut proj_counts: HashMap<Option<String>, i64> = HashMap::new();
         let mut tier_counts: HashMap<Option<i64>, i64> = HashMap::new();
         let mut agent_counts = AgentCounts { agent: 0, mine: 0 };
@@ -1067,12 +1136,18 @@ impl Db {
                 if day < range_start.as_str() || day > range_end.as_str() {
                     return;
                 }
-                *proj_counts.entry(project.clone()).or_insert(0) += 1;
-                *tier_counts.entry(*priority).or_insert(0) += 1;
-                if agent {
-                    agent_counts.agent += 1;
-                } else {
-                    agent_counts.mine += 1;
+                if scope_proj.allows_row(project, priority, agent) {
+                    *proj_counts.entry(project.clone()).or_insert(0) += 1;
+                }
+                if scope_tier.allows_row(project, priority, agent) {
+                    *tier_counts.entry(*priority).or_insert(0) += 1;
+                }
+                if scope_agent.allows_row(project, priority, agent) {
+                    if agent {
+                        agent_counts.agent += 1;
+                    } else {
+                        agent_counts.mine += 1;
+                    }
                 }
             };
         for f in &fell {
@@ -1084,14 +1159,20 @@ impl Db {
             }
         }
 
-        // The day rows and the totals: the range slice of the walk.
+        // The day rows and the totals: the range slice of the walk, fully
+        // scoped.
         let mut days: Vec<DayStat> = Vec::new();
         let mut totals = Totals::default();
         let mut d = start_d;
         while d <= end_d {
             let day = d.format("%Y-%m-%d").to_string();
-            let daily_missed =
-                missed_by_day.get(&day).map_or(0, |h| h.len() as i64);
+            let daily_missed = missed_by_day
+                .get(&day)
+                .map_or(0, |hs| {
+                    hs.iter()
+                        .filter(|h| scope.allows_row(&h.project, &h.priority, h.agent))
+                        .count() as i64
+                });
             let today_missed = fell_by_day.get(&day).copied().unwrap_or(0);
             let count = daily_missed + today_missed;
             totals.count += count;
@@ -1179,24 +1260,28 @@ impl Db {
         let mut tasks: Vec<TaskDetail> = slots.into_values().collect();
         tasks.sort_by(|a, b| a.time.cmp(&b.time)); // zero-padded HH:MM sorts chronologically
 
-        // The sweep's record of today tasks the day ended without, scoped by
-        // the snapshot axes like everything else.
-        let fell: Vec<FellTaskDetail> = fell_rows(&conn, &day_start_prefix(date), &day_start_prefix(&next), &scope)?
+        // The sweep's record of today tasks the day ended without — the
+        // unscoped shared fetch, admitted here by the full scope.
+        let fell: Vec<FellTaskDetail> = fell_rows(&conn, &day_start_prefix(date), &day_start_prefix(&next))?
             .into_iter()
+            .filter(|f| scope.allows_row(&f.project, &f.priority, f.agent))
             .map(|f| FellTaskDetail { time: f.time, text: f.text, project: f.project, priority: f.priority })
             .collect();
 
-        // Missed habits: the shared replay frozen at this day's end. The
-        // live today has no verdict yet.
+        // Missed habits: the shared replay frozen at this day's end, scoped
+        // at read. The live today has no verdict yet.
         let daily_missed = if date == today_iso() {
             Vec::new()
         } else {
             let day = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")?;
             let done_daily =
                 daily_done_by_day(&conn, &day_start_prefix(date), &day_start_prefix(&next))?;
-            replay_daily_misses(&conn, day, day, &today_iso(), &scope, &done_daily)?
+            replay_daily_misses(&conn, day, day, &today_iso(), &done_daily)?
                 .remove(date)
                 .unwrap_or_default()
+                .into_iter()
+                .filter(|h| scope.allows_row(&h.project, &h.priority, h.agent))
+                .collect()
         };
 
         Ok(DayDetail { date: date.to_string(), tasks, fell, daily_missed })
@@ -1237,15 +1322,17 @@ impl Db {
     }
 
     /// The Missed lens: the day's fell rows and its frozen slice of the
-    /// shared replay — no completions, so `tasks` stays empty. The live
+    /// shared replay — no completions, so `tasks` stays empty. Both are the
+    /// unscoped shared fetches, admitted here by the full scope. The live
     /// today has no daily verdict yet; its fell rows are real.
     fn missed_day_detail(&self, date: &str, filter: &ScopeFilter) -> anyhow::Result<DayDetail> {
         let scope = filter.scope();
         let conn = self.conn.lock().unwrap();
         let next = next_day(date)?;
         let fell: Vec<FellTaskDetail> =
-            fell_rows(&conn, &day_start_prefix(date), &day_start_prefix(&next), &scope)?
+            fell_rows(&conn, &day_start_prefix(date), &day_start_prefix(&next))?
                 .into_iter()
+                .filter(|f| scope.allows_row(&f.project, &f.priority, f.agent))
                 .map(|f| FellTaskDetail {
                     time: f.time,
                     text: f.text,
@@ -1259,9 +1346,12 @@ impl Db {
             let day = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")?;
             let done_daily =
                 daily_done_by_day(&conn, &day_start_prefix(date), &day_start_prefix(&next))?;
-            replay_daily_misses(&conn, day, day, &today_iso(), &scope, &done_daily)?
+            replay_daily_misses(&conn, day, day, &today_iso(), &done_daily)?
                 .remove(date)
                 .unwrap_or_default()
+                .into_iter()
+                .filter(|h| scope.allows_row(&h.project, &h.priority, h.agent))
+                .collect()
         };
         Ok(DayDetail { date: date.to_string(), tasks: Vec::new(), fell, daily_missed })
     }
@@ -1408,11 +1498,12 @@ impl Db {
 
         let done_daily = daily_done_by_day(&conn, &lo, &hi)?;
         let missed_by_day =
-            replay_daily_misses(&conn, start_d, end_d, &today, &scope, &done_daily)?;
-        let fell = fell_rows(&conn, &lo, &hi, &scope)?;
+            replay_daily_misses(&conn, start_d, end_d, &today, &done_daily)?;
+        let fell = fell_rows(&conn, &lo, &hi)?;
 
         let mut out: Vec<RangeTask> = fell
             .into_iter()
+            .filter(|f| scope.allows_row(&f.project, &f.priority, f.agent))
             .map(|f| RangeTask {
                 date: f.day,
                 time: f.time,
@@ -1425,6 +1516,9 @@ impl Db {
             .collect();
         for (day, habits) in missed_by_day {
             for h in habits {
+                if !scope.allows_row(&h.project, &h.priority, h.agent) {
+                    continue;
+                }
                 out.push(RangeTask {
                     date: day.clone(),
                     time: String::new(),
@@ -1698,11 +1792,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A scope filter narrows the whole dashboard: done counts and splits read
-    /// the completion snapshots; fell counts read theirs; the miss replay's
+    /// A scope filter narrows the whole dashboard: done counts, verdicts,
+    /// and every row list read the completion snapshots; the miss replay's
     /// population reads the habits' current axes (a habit outside the filter
     /// is neither expected nor missed); the unscoped done-check keeps a
-    /// completed habit from ever reading as a phantom miss.
+    /// completed habit from ever reading as a phantom miss. The split cards
+    /// are the exception BY DESIGN (the facet rule): each drops its own
+    /// axis, so the card keeps the whole distribution the other axes allow.
     #[test]
     fn scope_filter_narrows_every_derivation() {
         let (db, dir) = tmp_db();
@@ -1732,10 +1828,13 @@ mod tests {
         assert_eq!(s.days[0].daily_missed, 0); // H2 is outside the filter
         assert_eq!(s.days[0].today_missed, 0); // T3 fell, but it's growth
         assert_eq!(s.totals.count, 2);
-        // Splits derive over the scoped set only.
+        // The projects split drops its own axis (the facet rule): meridian
+        // 2 AND T2's none-bucket completion stay visible — the card never
+        // collapses to the selection. The priority split keeps the project
+        // scope (its own axis is not the one filtered).
         let names: Vec<(Option<&str>, i64)> =
             s.projects.iter().map(|p| (p.name.as_deref(), p.count)).collect();
-        assert_eq!(names, [(Some("meridian"), 2)]);
+        assert_eq!(names, [(Some("meridian"), 2), (None, 1)]);
         let tiers: Vec<(Option<i64>, i64)> =
             s.priorities.iter().map(|t| (t.tier, t.count)).collect();
         assert_eq!(tiers, [(Some(1), 1), (Some(2), 0), (Some(3), 0), (None, 1)]); // H1 unmarked + T1
@@ -1814,6 +1913,70 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// THE facet rule (2026-11-11): a split card's own axis drops out of its
+    /// split's scope — selecting a project must NOT zero its peers in the
+    /// Projects card (the card is the pick surface, not a restatement of the
+    /// filter), and the same for tiers and the delegation sides. The hero
+    /// count, verdicts, and row lists stay fully scoped: OR within an axis,
+    /// AND across axes.
+    #[test]
+    fn facet_splits_ignore_their_own_axis() {
+        let (db, dir) = tmp_db();
+        {
+            let conn = db.conn.lock().unwrap();
+            // Three completions on Jan 2: A meridian P1, B growth P2,
+            // C meridian unmarked by an agent-delegated row.
+            act(&conn, "A", "created", None, Some("today"), Some("meridian"), Some(1), "2026-01-01T09:00:00");
+            act(&conn, "B", "created", None, Some("today"), Some("growth"), Some(2), "2026-01-01T09:00:00");
+            act(&conn, "C", "created", None, Some("today"), Some("meridian"), None, "2026-01-01T09:00:00");
+            act(&conn, "A", "completed", Some("today"), Some("today"), Some("meridian"), Some(1), "2026-01-02T09:00:00");
+            act(&conn, "B", "completed", Some("today"), Some("today"), Some("growth"), Some(2), "2026-01-02T10:00:00");
+            act(&conn, "C", "completed", Some("today"), Some("today"), Some("meridian"), None, "2026-01-02T11:00:00");
+            conn.execute("UPDATE actions SET agent = 1 WHERE item_id = 'C'", []).unwrap();
+        }
+        let day = Some("2026-01-02");
+        let after = Some("2026-01-03");
+
+        // Projects filtered to meridian: the count narrows (A + C), the
+        // Projects card keeps growth (its own axis dropped) — and the
+        // Priority card still carries the meridian scope (P2 = B excluded).
+        let filter = ScopeFilter { projects: Some(vec![Some("meridian".into())]), priorities: None, agent: None };
+        let s = db.journal_dashboard(day, after, &filter, Subject::Done).unwrap();
+        assert_eq!(s.totals.count, 2);
+        let names: Vec<(Option<&str>, i64)> =
+            s.projects.iter().map(|p| (p.name.as_deref(), p.count)).collect();
+        assert_eq!(names, [(Some("meridian"), 2), (Some("growth"), 1)]);
+        let tiers: Vec<(Option<i64>, i64)> =
+            s.priorities.iter().map(|t| (t.tier, t.count)).collect();
+        assert_eq!(tiers, [(Some(1), 1), (Some(2), 0), (Some(3), 0), (None, 1)]);
+
+        // Priorities filtered to P1: the count narrows to A, the Priority
+        // card keeps P2 and unmarked; the Projects card carries the P1
+        // scope (growth = B excluded).
+        let filter = ScopeFilter { projects: None, priorities: Some(vec![Some(1)]), agent: None };
+        let s = db.journal_dashboard(day, after, &filter, Subject::Done).unwrap();
+        assert_eq!(s.totals.count, 1);
+        let tiers: Vec<(Option<i64>, i64)> =
+            s.priorities.iter().map(|t| (t.tier, t.count)).collect();
+        assert_eq!(tiers, [(Some(1), 1), (Some(2), 1), (Some(3), 0), (None, 1)]);
+        let names: Vec<(Option<&str>, i64)> =
+            s.projects.iter().map(|p| (p.name.as_deref(), p.count)).collect();
+        assert_eq!(names, [(Some("meridian"), 1)]);
+
+        // Delegation filtered to agent: the Delegation card keeps both
+        // sides; the Projects card carries the agent scope (C only).
+        let filter = ScopeFilter { projects: None, priorities: None, agent: Some(true) };
+        let s = db.journal_dashboard(day, after, &filter, Subject::Done).unwrap();
+        assert_eq!(s.totals.count, 1);
+        assert_eq!(s.agents.agent, 1);
+        assert_eq!(s.agents.mine, 2); // A + B stay visible on the card
+        let names: Vec<(Option<&str>, i64)> =
+            s.projects.iter().map(|p| (p.name.as_deref(), p.count)).collect();
+        assert_eq!(names, [(Some("meridian"), 1)]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The Created subject: each `created` action is one count (a completion
     /// of the same task adds nothing), scoped by the birth-time snapshots;
     /// the done-only verdicts stay zero; the day detail lists the creations.
@@ -1845,13 +2008,17 @@ mod tests {
             s.projects.iter().map(|p| (p.name.as_deref(), p.count)).collect();
         assert_eq!(names, [(Some("meridian"), 2), (Some("growth"), 1), (None, 1)]);
 
-        // Scope: meridian only — A and B's births, not C/D. The split
-        // follows the scope like every other number.
+        // Scope: meridian only — A and B's births, not C/D. The totals
+        // follow the full scope; the card's own split drops its axis (the
+        // facet rule) — growth and the none bucket keep their counts.
         let filter = ScopeFilter { projects: Some(vec![Some("meridian".into())]), priorities: None, agent: None };
         let s = db.journal_dashboard(Some("2026-01-01"), Some("2026-01-04"), &filter, Subject::Created).unwrap();
         assert_eq!(s.totals.count, 2);
         assert_eq!(s.totals.today_created, 2);
         assert_eq!(s.totals.backlog_created, 0);
+        let names: Vec<(Option<&str>, i64)> =
+            s.projects.iter().map(|p| (p.name.as_deref(), p.count)).collect();
+        assert_eq!(names, [(Some("meridian"), 2), (Some("growth"), 1), (None, 1)]);
 
         // The day detail lists the creations; the Done lens still counts
         // the completion.

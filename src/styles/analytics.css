@@ -64,19 +64,19 @@
 /* Hero stats — one card, evenly spread. The numbers carry the page. */
 .an-hero {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
-  gap: 16px 20px;
-  padding: 18px 20px;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 12px 20px;
+  padding: 12px 20px;
 }
 .an-stat {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   align-items: center;
   text-align: center;
 }
 .an-stat .v {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -240,6 +240,28 @@
 }
 .an-seg-legend .leg.zero { color: var(--text-faint); }
 
+/* The split entries are filter picks: a click applies that axis value to
+   the top-right scope. While the axis carries a selection, selected
+   entries read active (accent — the app's selected color) and the rest
+   dim to faint; the hover rules come last so hovering a dimmed entry
+   still shows its click affordance (it joins the selection). */
+button.an-row,
+.an-seg-legend button.leg {
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+button.an-row { width: 100%; text-align: left; }
+.an-seg-legend button.leg { padding: 0; }
+.an-row.on .name { color: var(--accent); }
+.an-row.off .name, .an-row.off .count { color: var(--text-faint); }
+.an-row.off .fill { background: var(--text-faint); }
+.an-seg-legend .leg.on { color: var(--accent); }
+.an-seg-legend .leg.off { color: var(--text-faint); }
+.an-row:hover .name { color: var(--accent); }
+.an-seg-legend button.leg:hover { color: var(--accent); }
+
 /* The projects card's bottom reveal: the roster continues past the fold —
    the tenth row sinks under a fade + blur with a chip riding it; expanding
    unfolds the rest (a quiet chevron-up row folds it back). */
@@ -298,6 +320,22 @@
    the day label in the title row, the counts read in the hint, and the rows
    sit flush with the card's padding. */
 .an-daycard .an-card-title { align-items: center; }
+/* Both of the Activity card's states ride one title line: the day card's
+   back button (20px) must not make its title taller than the month's. */
+.an-activity .an-card-title { min-height: 20px; }
+/* The card's body: the hidden calendar sizes it (the frame is exactly the
+   heatmap's height in both states), the day detail overlays it. */
+.an-activity-body { position: relative; }
+.cal-hidden { visibility: hidden; pointer-events: none; }
+/* The one deliberate inner scroll in the app (see AGENTS.md's layout
+   section): a day longer than the fixed frame scrolls inside it — the frame
+   never resizes. Scrollbars are globally hidden, so it stays quiet. */
+.an-daycard .an-day-detail {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  overflow-y: auto;
+}
 .an-daycard-head {
   display: inline-flex;
   align-items: center;
@@ -309,7 +347,8 @@
   gap: 8px;
   font-variant-numeric: tabular-nums;
 }
-.an-daycard .an-day-detail { padding: 0; }
+/* Picking a day never resizes the card — see the .an-activity-body block
+   above: the hidden calendar IS the sizer. */
 .an-tasks .an-day-detail { padding: 0; }
 .an-day-detail {
   display: flex;
@@ -662,7 +701,7 @@
     gap: 16px;
   }
   .an-row3 { gap: 16px; }
-  .an-stat .v { font-size: 30px; }
+  .an-stat .v { font-size: 26px; }
   .analytics-view .filter-bar {
     display: grid;
     grid-template-columns: 1fr auto 1fr;

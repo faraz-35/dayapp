@@ -4,9 +4,7 @@
 // day's task-level detail under a back arrow. The month itself is the
 // shell's (it drives the range bounds under the Month preset); the picked
 // day follows its own month here, so back lands on a calendar that contains
-// the day. Keyed on `trackKey` (the shell's rendered-sibling state): WKWebView
-// doesn't re-resolve the aspect-ratio cells when their grid track re-widens
-// on filter changes, and remounting the card re-resolves the squares.
+// the day.
 
 import { useEffect, useMemo } from "react";
 import { PriorityBars } from "../../components/PriorityBars";
@@ -28,7 +26,6 @@ export default function HeatmapCard({
   filtered,
   onPick,
   onBack,
-  trackKey,
 }: {
   /** Per-day counts of the active subject (absent day = 0). */
   heat: Map<string, number>;
@@ -44,7 +41,6 @@ export default function HeatmapCard({
   filtered: boolean;
   onPick: (date: string) => void;
   onBack: () => void;
-  trackKey: string;
 }) {
   const features = useFeatures();
   const today = todayStr();
@@ -80,10 +76,7 @@ export default function HeatmapCard({
       : 0;
 
   return (
-    <section
-      className={`an-card an-activity${pickedDay ? " an-daycard" : ""}`}
-      key={trackKey}
-    >
+    <section className={`an-card an-activity${pickedDay ? " an-daycard" : ""}`}>
       {pickedDay ? (
         <div className="an-card-title">
           <span className="an-daycard-head">
@@ -125,10 +118,12 @@ export default function HeatmapCard({
           </span>
         </div>
       )}
-      {pickedDay ? (
-        <DayDetailBody detail={detail} subject={subject} features={features} />
-      ) : (
-        <div className="cal">
+      {/* The calendar stays mounted even while a day is open — hidden, not
+          unmounted — because it IS the card's sizer: the frame stays exactly
+          the heatmap's height in both states, and the day detail overlays it
+          (scrolling inside when the day is longer than the frame). */}
+      <div className="an-activity-body">
+        <div className={`cal${pickedDay ? " cal-hidden" : ""}`} aria-hidden={pickedDay != null}>
           <div className="cal-head">
             {["M", "T", "W", "T", "F", "S", "S"].map((l, i) => (
               <span key={i}>{l}</span>
@@ -160,7 +155,8 @@ export default function HeatmapCard({
             )}
           </div>
         </div>
-      )}
+        {pickedDay && <DayDetailBody detail={detail} subject={subject} features={features} />}
+      </div>
     </section>
   );
 }

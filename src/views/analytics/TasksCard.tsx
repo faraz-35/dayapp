@@ -66,7 +66,6 @@ export default function TasksCard({
     <section className="an-card an-tasks">
       <div className="an-card-title">
         Tasks
-        <span className="hint">{tasks != null && tasks.length > 0 && tasks.length}</span>
       </div>
       {tasks != null && tasks.length === 0 && <div className="dash-empty">{EMPTY_TEXT[subject]}</div>}
       <div className="an-day-detail">
@@ -74,7 +73,6 @@ export default function TasksCard({
           <div key={`${i}-${t.kind}-${t.date}-${t.time}-${t.text}`} className={`dd-row rt-${t.kind}`}>
             <span className="dd-mark">{KIND_MARK[t.kind]}</span>
             <span className="dd-day">{t.date === today ? "Today" : fmtDay(t.date)}</span>
-            <span className="dd-time">{t.time}</span>
             <span className="dd-text">{t.text}</span>
             {features.taskProjects && <span className="dd-proj">{t.project ?? ""}</span>}
             {features.taskPriorities && (

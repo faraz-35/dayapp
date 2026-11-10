@@ -1,8 +1,21 @@
 // cards.tsx — the analytics page's small distribution cards: the hero stat,
 // one roster card (Projects), and the two segmented-bar cards (Priority,
-// Delegation). Each is present-only: the numbers arrive via props from the
-// shell's dashboard fetch, the scope-filter hide rules stay in the shell
-// (they read the filter, which cards never see).
+// Delegation). The numbers arrive via props from the shell's dashboard
+// fetch. The split entries double as filter picks: each card receives the
+// shell's axis selection and toggle (the same state and handlers the
+// FilterBar's menus use — "" is the no-project bucket, 0 the unmarked
+// tier), so a click applies that axis to the whole page, the top-right
+// pills light up with it, and while a selection stands the card shows it —
+// selected entries active, the rest dimmed. Counts are FACET counts (the
+// backend drops each card's own axis from its split): selecting a project
+// never zeroes its peers — the distribution stays whole, only the other
+// axes' scope applies.
+
+/** The pick state one entry renders: selected ("on"), or dimmed ("off")
+ * while its axis carries a selection the entry isn't part of. */
+function pickState<T>(selected: Set<T>, key: T): "on" | "off" | "" {
+  return selected.has(key) ? "on" : selected.size > 0 ? "off" : "";
+}
 
 import { useState } from "react";
 import { PriorityBars } from "../../components/PriorityBars";
@@ -34,33 +47,52 @@ export function StatCard({ value, label, accent }: { value: string | number; lab
 }
 
 /** One label/bar/count row of the projects card — the bar is relative to
- *  `max`, so the group reads as proportions at a glance. */
+ * `max`, so the group reads as proportions at a glance. The row is the
+ * project's filter pick (`state` — see pickState). */
 function BarRow({
   label,
   title,
   count,
   max,
+  state,
+  onToggle,
 }: {
   label: string;
   title?: string;
   count: number;
   max: number;
+  state: "on" | "off" | "";
+  onToggle: () => void;
 }) {
   const pct = max > 0 ? Math.round((count / max) * 100) : 0;
   return (
-    <div className={`an-row${count === 0 ? " zero" : ""}`} title={title}>
+    <button
+      className={`an-row${state ? ` ${state}` : ""}${count === 0 ? " zero" : ""}`}
+      title={title}
+      onClick={onToggle}
+    >
       <span className="name">{label}</span>
       <span className="track">
         <span className="fill" style={{ width: `${pct}%` }} />
       </span>
       <span className="count">{count}</span>
-    </div>
+    </button>
   );
 }
 
 /** The projects roster: the backend returns it zero-filled and sorted by
  *  count — the card shows the top ten until the head chevron opens it all. */
-export function ProjectsCard({ projects }: { projects: ProjectCount[] }) {
+export function ProjectsCard({
+  projects,
+  onToggle,
+  selected,
+}: {
+  projects: ProjectCount[];
+  /** Applies one project to the top-right scope ("" = the none bucket). */
+  onToggle: (name: string) => void;
+  /** The shell's project selection ("" = the none bucket). */
+  selected: Set<string>;
+}) {
   const [expanded, setExpanded] = useState(false);
   const max = Math.max(1, ...projects.map((p) => p.count));
   const rows = expanded ? projects : projects.slice(0, MAX_PROJECT_ROWS);
@@ -73,9 +105,11 @@ export function ProjectsCard({ projects }: { projects: ProjectCount[] }) {
           <BarRow
             key={p.name ?? "__none"}
             label={p.name ?? "none"}
-            title={p.name ?? "no project"}
+            title={`Filter by ${p.name ?? "no project"}`}
             count={p.count}
             max={max}
+            state={pickState(selected, p.name ?? "")}
+            onToggle={() => onToggle(p.name ?? "")}
           />
         ))}
         {expandable && !expanded && (
@@ -110,8 +144,20 @@ export function ProjectsCard({ projects }: { projects: ProjectCount[] }) {
 }
 
 /** The priority card's shape: one segmented bar (tier proportions) plus a
- *  glyph legend. Says "which tier you usually clear" in one glance. */
-export function PriorityCard({ tiers, max }: { tiers: TierCount[]; max: number }) {
+ * glyph legend. Says "which tier you usually clear" in one glance. */
+export function PriorityCard({
+  tiers,
+  max,
+  onToggle,
+  selected,
+}: {
+  tiers: TierCount[];
+  max: number;
+  /** Applies one tier to the top-right scope (0 = the unmarked bucket). */
+  onToggle: (tier: number) => void;
+  /** The shell's tier selection (0 = the unmarked bucket). */
+  selected: Set<number>;
+}) {
   const total = tiers.reduce((s, t) => s + t.count, 0);
   return (
     <section className="an-card an-priority">
@@ -129,21 +175,42 @@ export function PriorityCard({ tiers, max }: { tiers: TierCount[]; max: number }
         ))}
       </div>
       <div className="an-seg-legend">
-        {tiers.map((t) => (
-          <span key={t.tier ?? 0} className={`leg${max > 0 && t.count === 0 ? " zero" : ""}`}>
-            <PriorityBars priority={t.tier} />
-            {t.count}
-          </span>
-        ))}
+        {tiers.map((t) => {
+          const state = pickState(selected, t.tier ?? 0);
+          return (
+            <button
+              key={t.tier ?? 0}
+              className={`leg${state ? ` ${state}` : ""}${max > 0 && t.count === 0 ? " zero" : ""}`}
+              title={`Filter by ${t.tier == null ? "unmarked" : `P${t.tier}`}`}
+              onClick={() => onToggle(t.tier ?? 0)}
+            >
+              <PriorityBars priority={t.tier} />
+              {t.count}
+            </button>
+          );
+        })}
       </div>
     </section>
   );
 }
 
 /** The Agent vs <owner> card: one segmented bar over the delegation axis.
- *  Hides while the agent axis itself is filtered (a filtered view can't
- *  compare against itself — the shell's split-card rule). */
-export function DelegationCard({ agents, ownerLabel }: { agents: AgentCountsLike; ownerLabel: string }) {
+ *  Under a delegation filter the selected side reads active, the other
+ *  dimmed — both stay clickable (one side selected = that scope; both =
+ *  everyone). */
+export function DelegationCard({
+  agents,
+  ownerLabel,
+  onToggle,
+  selected,
+}: {
+  agents: AgentCountsLike;
+  ownerLabel: string;
+  /** Applies one side to the top-right scope. */
+  onToggle: (side: "agent" | "mine") => void;
+  /** The shell's delegation selection. */
+  selected: Set<"agent" | "mine">;
+}) {
   const total = agents.agent + agents.mine;
   return (
     <section className="an-card">
@@ -159,8 +226,19 @@ export function DelegationCard({ agents, ownerLabel }: { agents: AgentCountsLike
         />
       </div>
       <div className="an-seg-legend">
-        <span className="leg">Agent {agents.agent}</span>
-        <span className="leg">{ownerLabel} {agents.mine}</span>
+        {(["agent", "mine"] as const).map((side) => {
+          const state = pickState(selected, side);
+          return (
+            <button
+              key={side}
+              className={`leg${state ? ` ${state}` : ""}`}
+              title={`Filter by ${side === "agent" ? "Agent" : ownerLabel}`}
+              onClick={() => onToggle(side)}
+            >
+              {side === "agent" ? "Agent" : ownerLabel} {side === "agent" ? agents.agent : agents.mine}
+            </button>
+          );
+        })}
       </div>
     </section>
   );
