@@ -371,12 +371,6 @@ button.an-row { width: 100%; text-align: left; }
 }
 .dd-row.fell .dd-mark,
 .dd-row.missed .dd-mark { color: var(--text-faint); }
-.dd-time {
-  width: 36px;
-  flex-shrink: 0;
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
 /* The task list's day chip — which day the row belongs to (the paginated
    list crosses days; "Today" reads as the word). Same metadata language as
    the time column beside it. */

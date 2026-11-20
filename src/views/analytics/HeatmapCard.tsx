@@ -89,7 +89,12 @@ export default function HeatmapCard({
             {detail != null && detail.tasks.length > 0 && (
               <span>{detail.tasks.length} {subject}</span>
             )}
-            {detail != null && pickedMissed > 0 && <span>{pickedMissed} missed</span>}
+            {/* The verdict count rides the Missed lens — under Done the body
+                shows only completions, so a missed number would point at
+                rows that aren't there. */}
+            {detail != null && subject === "missed" && pickedMissed > 0 && (
+              <span>{pickedMissed} missed</span>
+            )}
             {pickedSecs > 0 && <span>{formatDuration(pickedSecs)}</span>}
           </span>
         </div>
@@ -161,9 +166,10 @@ export default function HeatmapCard({
   );
 }
 
-/** The picked day's task-level body. Done tasks (✓, HH:MM, tracked time),
- *  what fell to Backlog (↓), missed habits (○); every row carries its axes
- *  at the right edge, gated on the Settings switches like the list itself. */
+/** The picked day's task-level body: plain rows — text plus the right-edge
+ *  axes, gated on the Settings switches like the list itself. The Done lens
+ *  shows only its completions; the Missed lens adds the fell/missed verdicts
+ *  (Created never carries them — the backend leaves them empty). */
 function DayDetailBody({
   detail,
   subject,
@@ -173,13 +179,16 @@ function DayDetailBody({
   subject: DashboardSubject;
   features: ReturnType<typeof useFeatures>;
 }) {
+  const empty =
+    detail != null &&
+    detail.tasks.length === 0 &&
+    (subject !== "missed" ||
+      (detail.fell.length === 0 && detail.dailyMissed.length === 0));
   return (
     <div className="an-day-detail">
       {detail == null && <div className="dd-empty">…</div>}
       {detail?.tasks.map((t) => (
         <div key={t.itemId} className={`dd-row ${subject}`}>
-          <span className="dd-mark">{subject === "created" ? "+" : "✓"}</span>
-          <span className="dd-time">{t.time}</span>
           <span className="dd-text">{t.text}</span>
           {subject === "done" && features.timer && t.secs > 0 && (
             <span className="dd-secs">{formatDuration(t.secs)}</span>
@@ -192,37 +201,31 @@ function DayDetailBody({
           )}
         </div>
       ))}
-      {detail?.fell.map((f) => (
-        <div key={`f-${f.time}-${f.text}`} className="dd-row fell">
-          <span className="dd-mark">↓</span>
-          <span className="dd-time">{f.time}</span>
-          <span className="dd-text">{f.text}</span>
-          {features.taskProjects && <span className="dd-proj">{f.project ?? ""}</span>}
-          {features.taskPriorities && (
-            <span className="dd-axis">
-              {f.priority != null && <PriorityBars priority={f.priority} />}
-            </span>
-          )}
-        </div>
-      ))}
-      {detail?.dailyMissed.map((m) => (
-        <div key={`m-${m.text}-${m.project ?? ""}`} className="dd-row missed">
-          <span className="dd-mark">○</span>
-          <span className="dd-text">{m.text}</span>
-          {features.taskProjects && <span className="dd-proj">{m.project ?? ""}</span>}
-          {features.taskPriorities && (
-            <span className="dd-axis">
-              {m.priority != null && <PriorityBars priority={m.priority} />}
-            </span>
-          )}
-        </div>
-      ))}
-      {detail != null &&
-        detail.tasks.length === 0 &&
-        detail.fell.length === 0 &&
-        detail.dailyMissed.length === 0 && (
-          <div className="dd-empty">Nothing that day.</div>
-        )}
+      {subject === "missed" &&
+        detail?.fell.map((f) => (
+          <div key={`f-${f.time}-${f.text}`} className="dd-row fell">
+            <span className="dd-text">{f.text}</span>
+            {features.taskProjects && <span className="dd-proj">{f.project ?? ""}</span>}
+            {features.taskPriorities && (
+              <span className="dd-axis">
+                {f.priority != null && <PriorityBars priority={f.priority} />}
+              </span>
+            )}
+          </div>
+        ))}
+      {subject === "missed" &&
+        detail?.dailyMissed.map((m) => (
+          <div key={`m-${m.text}-${m.project ?? ""}`} className="dd-row missed">
+            <span className="dd-text">{m.text}</span>
+            {features.taskProjects && <span className="dd-proj">{m.project ?? ""}</span>}
+            {features.taskPriorities && (
+              <span className="dd-axis">
+                {m.priority != null && <PriorityBars priority={m.priority} />}
+              </span>
+            )}
+          </div>
+        ))}
+      {empty && <div className="dd-empty">Nothing that day.</div>}
     </div>
   );
 }
